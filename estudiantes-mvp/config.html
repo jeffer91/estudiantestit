@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<!--
+  Archivo: config.html
+  Ruta: estudiantes-mvp/config.html
+  Funciones principales:
+  - Mostrar pantalla temporal de configuración y diagnóstico.
+  - Probar Firebase, IA y Google Sheets.
+  - Agregar o actualizar proveedores IA en Firebase.
+  - Guardar endpoint de Apps Script para respaldar envíos en Google Sheets.
+  - Servir como pantalla de pruebas que luego podrá eliminarse.
+-->
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <title>Configuración MVP Titulación</title>
+
+  <meta
+    name="description"
+    content="Pantalla temporal para configurar y probar Firebase, IA y Google Sheets."
+  />
+
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+
+<body>
+  <header class="app-header app-header--config">
+    <div class="app-header__content">
+      <p class="app-badge">Panel temporal</p>
+      <h1>Configuración y Diagnóstico</h1>
+      <p>Desde aquí puedes probar Firebase, proveedores IA y Google Sheets.</p>
+
+      <div class="header-actions">
+        <a class="btn btn--secondary" href="estudiante.html">Abrir pantalla estudiante</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="app-container">
+    <div id="loadingConfig" class="loading-box" hidden>Cargando...</div>
+    <div id="estadoConfig" class="status-message is-info"></div>
+
+    <section class="card">
+      <div class="section-heading">
+        <p class="section-kicker">Prueba 1</p>
+        <h2>Firebase</h2>
+        <p>Verifica que la app pueda conectarse a Firebase y Firestore.</p>
+      </div>
+
+      <div class="form-actions">
+        <button id="btnProbarFirebase" type="button" class="btn btn--primary">
+          Probar Firebase
+        </button>
+      </div>
+
+      <pre id="firebaseResultado" class="result-box">{}</pre>
+    </section>
+
+    <section class="card">
+      <div class="section-heading">
+        <p class="section-kicker">Prueba 2</p>
+        <h2>Proveedores IA</h2>
+        <p>Lee, agrega o actualiza proveedores IA dentro de la colección IA de Firebase.</p>
+      </div>
+
+      <div id="estadoIA" class="status-message"></div>
+
+      <div class="form-actions">
+        <button id="btnListarIA" type="button" class="btn btn--primary">
+          Listar proveedores IA
+        </button>
+
+        <button id="btnProbarIA" type="button" class="btn btn--ai">
+          Probar IA de Titulación
+        </button>
+      </div>
+
+      <div id="proveedoresIALista" class="providers-list">
+        <p class="muted">Presiona “Listar proveedores IA”.</p>
+      </div>
+
+      <div class="subsection">
+        <h3>Agregar o actualizar proveedor IA</h3>
+        <p class="muted">
+          Esta pantalla es temporal. Sirve para pruebas. No muestres esta página a estudiantes.
+        </p>
+
+        <div class="form-grid">
+          <div class="field">
+            <label for="iaProviderId">ID proveedor</label>
+            <select id="iaProviderId">
+              <option value="">Selecciona...</option>
+              <option value="gemini">gemini</option>
+              <option value="groq">groq</option>
+              <option value="cloudflare">cloudflare</option>
+              <option value="openrouter">openrouter</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="iaNombre">Nombre visible</label>
+            <input id="iaNombre" type="text" placeholder="Ejemplo: Gemini" />
+          </div>
+
+          <div class="field field--full">
+            <label for="iaEndpoint">Endpoint</label>
+            <input
+              id="iaEndpoint"
+              type="text"
+              placeholder="Opcional para Gemini y Groq. Obligatorio si usas Cloudflare."
+            />
+          </div>
+
+          <div class="field">
+            <label for="iaModelo">Modelo</label>
+            <input id="iaModelo" type="text" placeholder="Ejemplo: gemini-1.5-flash" />
+          </div>
+
+          <div class="field">
+            <label for="iaApiKey">API Key / Token</label>
+            <input id="iaApiKey" type="password" placeholder="Se guarda en Firebase" />
+            <small>Si actualizas un proveedor y dejas este campo vacío, se conserva la clave anterior.</small>
+          </div>
+
+          <label class="check-card field--full" for="iaActivo">
+            <input id="iaActivo" type="checkbox" checked />
+            <span>Proveedor activo</span>
+          </label>
+        </div>
+
+        <div class="form-actions">
+          <button id="btnGuardarProveedorIA" type="button" class="btn btn--primary">
+            Guardar proveedor IA
+          </button>
+
+          <button id="btnLimpiarProveedorIA" type="button" class="btn btn--ghost">
+            Limpiar formulario
+          </button>
+        </div>
+      </div>
+
+      <pre id="iaResultado" class="result-box">{}</pre>
+    </section>
+
+    <section class="card">
+      <div class="section-heading">
+        <p class="section-kicker">Prueba 3</p>
+        <h2>Google Sheets / Apps Script</h2>
+        <p>Guarda y prueba el endpoint que enviará los registros a Google Sheets.</p>
+      </div>
+
+      <div id="estadoSheets" class="status-message"></div>
+
+      <div class="form-grid">
+        <div class="field field--full">
+          <label for="sheetsEndpoint">Endpoint Apps Script</label>
+          <input
+            id="sheetsEndpoint"
+            type="text"
+            placeholder="https://script.google.com/macros/s/..."
+          />
+        </div>
+
+        <label class="check-card field--full" for="sheetsActivo">
+          <input id="sheetsActivo" type="checkbox" checked />
+          <span>Google Sheets activo</span>
+        </label>
+      </div>
+
+      <div class="form-actions">
+        <button id="btnLeerSheets" type="button" class="btn btn--secondary">
+          Leer configuración
+        </button>
+
+        <button id="btnGuardarSheets" type="button" class="btn btn--primary">
+          Guardar endpoint
+        </button>
+
+        <button id="btnProbarSheets" type="button" class="btn btn--ai">
+          Probar Sheets
+        </button>
+      </div>
+
+      <pre id="sheetsResultado" class="result-box">{}</pre>
+    </section>
+
+    <section class="card">
+      <div class="section-heading">
+        <p class="section-kicker">Prueba 4</p>
+        <h2>Diagnóstico general</h2>
+        <p>Revisa si los módulos principales están cargando correctamente.</p>
+      </div>
+
+      <div id="estadoDiagnostico" class="status-message"></div>
+
+      <div class="form-actions">
+        <button id="btnDiagnosticoGeneral" type="button" class="btn btn--primary">
+          Diagnóstico general
+        </button>
+      </div>
+
+      <pre id="diagnosticoResultado" class="result-box">{}</pre>
+    </section>
+  </main>
+
+  <script src="js/app.config.js"></script>
+  <script src="js/app.utils.js"></script>
+
+  <script src="js/firebase.core.service.js"></script>
+  <script src="js/firebase.estudiantes.service.js"></script>
+  <script src="js/firebase.ia.service.js"></script>
+  <script src="js/firebase.envios.service.js"></script>
+
+  <script src="js/sheets.service.js"></script>
+
+  <script src="js/ia.prompt.service.js"></script>
+  <script src="js/ia.providers.service.js"></script>
+  <script src="js/ia.titulacion.service.js"></script>
+
+  <script src="js/config.app.js"></script>
+</body>
+</html>

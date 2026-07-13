@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Administrador - Integración final</title>
+  <link rel="stylesheet" href="./ad-css/ad-admin.css" />
+</head>
+<body>
+  <main class="ad-main">
+    <header class="ad-header">
+      <div>
+        <p class="ad-eyebrow">Bloque 9</p>
+        <h2>Administrador integrado</h2>
+        <p class="ad-muted">Panel de entrada para probar los módulos creados sin tocar estudiantes-mvp ni coordinadores-mvp.</p>
+      </div>
+      <div class="ad-header-actions">
+        <span class="ad-badge ad-badge-success">Firebase configurado</span>
+        <span class="ad-badge ad-badge-info">v1.0.0</span>
+      </div>
+    </header>
+
+    <section class="ad-grid ad-grid-4">
+      <article class="ad-card ad-kpi-card">
+        <span class="ad-kpi-label">Panel principal</span>
+        <strong>AD</strong>
+        <small>Diagnóstico, períodos y estructura general</small>
+        <p><a class="ad-btn ad-btn-primary" href="./ad-index.html">Abrir panel</a></p>
+      </article>
+
+      <article class="ad-card ad-kpi-card">
+        <span class="ad-kpi-label">Bloque 6</span>
+        <strong>Títulos</strong>
+        <small>Buscar títulos enviados por cédula</small>
+        <p><a class="ad-btn ad-btn-secondary" href="./ad-index-b6.html">Abrir títulos</a></p>
+      </article>
+
+      <article class="ad-card ad-kpi-card">
+        <span class="ad-kpi-label">Bloque 7</span>
+        <strong>Devolver</strong>
+        <small>Respaldar, registrar log y eliminar de titulos</small>
+        <p><a class="ad-btn ad-btn-danger" href="./ad-index-b7.html">Abrir devolución</a></p>
+      </article>
+
+      <article class="ad-card ad-kpi-card">
+        <span class="ad-kpi-label">Bloque 8</span>
+        <strong>Reparar</strong>
+        <small>Normalizar documentos mal guardados</small>
+        <p><a class="ad-btn ad-btn-danger" href="./ad-index-b8.html">Abrir reparación</a></p>
+      </article>
+    </section>
+
+    <section class="ad-section">
+      <div class="ad-card">
+        <div class="ad-section-head">
+          <div>
+            <p class="ad-eyebrow">Checklist de prueba</p>
+            <h3>Orden recomendado</h3>
+            <p class="ad-muted">Prueba primero lectura y diagnóstico. Después usa acciones directas solo con cédulas de prueba.</p>
+          </div>
+        </div>
+        <div class="ad-result-box">1. Abrir Panel principal y comprobar Firebase conectado.
+2. Probar Períodos: agregar período y definir principal.
+3. Abrir Títulos y buscar una cédula real.
+4. Abrir Devolver solo con un registro de prueba.
+5. Abrir Reparar solo con un ID incorrecto confirmado.
+6. Revisar titulos_historial y titulos_logs después de cada acción directa.</div>
+      </div>
+    </section>
+
+    <section class="ad-section">
+      <div class="ad-card">
+        <div class="ad-section-head">
+          <div>
+            <p class="ad-eyebrow">Archivos creados</p>
+            <h3>Estructura actual</h3>
+          </div>
+        </div>
+        <div class="ad-diagnostic-box">administrador/ad-index.html
+administrador/ad-index-final.html
+administrador/ad-index-b6.html
+administrador/ad-index-b7.html
+administrador/ad-index-b8.html
+administrador/ad-css/ad-admin.css
+administrador/ad-js/ad-config.js
+administrador/ad-js/ad-firebase.service.js
+administrador/ad-js/ad-diagnostico.service.js
+administrador/ad-js/ad-periodos.service.js
+administrador/ad-js/ad-titulos.service.js
+administrador/ad-js/ad-coordinadores.service.js
+administrador/ad-js/ad-coordinadores.app.js
+administrador/ad-js/ad-titulos.app.js
+administrador/ad-js/ad-devolver.app.js
+administrador/ad-js/ad-reparar.app.js
+administrador/ad-js/ad-app.js</div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

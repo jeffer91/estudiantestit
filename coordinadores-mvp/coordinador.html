@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <title>Coordinadores | Revisión de Títulos</title>
+
+  <link rel="stylesheet" href="css/coordinador.css" />
+</head>
+
+<body>
+  <header class="app-header">
+    <div class="app-header__content">
+      <div class="brand">
+        <div class="brand__mark" aria-hidden="true">
+          <span>CT</span>
+        </div>
+
+        <div class="brand__text">
+          <p class="app-badge">Coordinadores</p>
+          <h1>Revisión de Títulos Académicos</h1>
+          <p>
+            Panel independiente para revisar, aprobar, reemplazar o devolver títulos enviados por estudiantes.
+          </p>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="app-container">
+    <section class="card selector-card" aria-labelledby="tituloSelectorCoordinador">
+      <div class="section-heading section-heading--compact">
+        <p class="section-kicker">Acceso</p>
+        <h2 id="tituloSelectorCoordinador">Selecciona el coordinador</h2>
+        <p>
+          La lista se carga desde Google Sheets. Al seleccionar un coordinador se mostrarán los estudiantes correspondientes.
+        </p>
+      </div>
+
+      <div class="selector-row">
+        <div class="field field--selector">
+          <label for="coordinadorSelect">Coordinador</label>
+          <select id="coordinadorSelect">
+            <option value="">Cargando coordinadores...</option>
+          </select>
+        </div>
+
+        <div class="coordinator-summary" id="coordinadorResumen" hidden>
+          <span class="coordinator-summary__label">Coordinador seleccionado</span>
+          <strong id="coordinadorNombre">-</strong>
+          <small id="coordinadorCarreras">Carreras: -</small>
+        </div>
+      </div>
+
+      <div id="estadoPrincipal" class="status-message is-info">
+        Inicializando app de coordinadores...
+      </div>
+    </section>
+
+    <section class="card app-menu-card" aria-label="Menú principal">
+      <nav class="app-menu">
+        <button type="button" class="menu-btn is-active" data-accion="cambiar-vista" data-vista="pendientes">
+          Pendientes
+        </button>
+
+        <button type="button" class="menu-btn" data-accion="cambiar-vista" data-vista="aprobados">
+          Aprobados
+        </button>
+
+        <button type="button" class="menu-btn" data-accion="cambiar-vista" data-vista="devueltos">
+          Devueltos
+        </button>
+
+        <button type="button" class="menu-btn menu-btn--accent" data-accion="actualizar-datos">
+          Actualizar datos
+        </button>
+
+        <button type="button" class="menu-btn menu-btn--ghost" data-accion="mostrar-diagnostico">
+          Diagnóstico
+        </button>
+      </nav>
+    </section>
+
+    <section class="card" aria-labelledby="tituloTablaEstudiantes">
+      <div class="table-head">
+        <div>
+          <p class="section-kicker" id="vistaActualKicker">Pendientes</p>
+          <h2 id="tituloTablaEstudiantes">Estudiantes para revisión</h2>
+          <p id="descripcionTabla">
+            Selecciona un coordinador para cargar los estudiantes.
+          </p>
+        </div>
+
+        <div class="counter-box">
+          <span>Total</span>
+          <strong id="contadorRegistros">0</strong>
+        </div>
+      </div>
+
+      <div class="table-tools">
+        <div class="field field--search">
+          <label for="buscadorInput">Buscar</label>
+          <input
+            type="search"
+            id="buscadorInput"
+            placeholder="Buscar por cédula o nombre"
+            autocomplete="off"
+          />
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Cédula</th>
+              <th scope="col">Nombre</th>
+              <th scope="col" class="table-action-col">Ver más</th>
+            </tr>
+          </thead>
+
+          <tbody id="tablaEstudiantesBody">
+            <tr>
+              <td colspan="3" class="empty-cell">
+                Selecciona un coordinador para cargar los datos.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card diagnostico-card is-hidden" id="diagnosticoPanel" aria-labelledby="tituloDiagnostico">
+      <div class="section-heading section-heading--compact">
+        <p class="section-kicker">Diagnóstico</p>
+        <h2 id="tituloDiagnostico">Pruebas de conexión</h2>
+        <p>
+          Usa este bloque para comprobar si la app puede comunicarse correctamente con Google Sheets.
+        </p>
+      </div>
+
+      <div class="diagnostic-actions">
+        <button type="button" class="btn btn--secondary" data-accion="probar-conexion">
+          Probar conexión
+        </button>
+
+        <button type="button" class="btn btn--secondary" data-accion="recargar-coordinadores">
+          Recargar coordinadores
+        </button>
+
+        <button type="button" class="btn btn--ghost" data-accion="ocultar-diagnostico">
+          Ocultar diagnóstico
+        </button>
+      </div>
+
+      <pre id="diagnosticoResultado" class="result-box">Diagnóstico pendiente.</pre>
+    </section>
+  </main>
+
+  <div class="loading-overlay" id="loadingOverlay" hidden>
+    <div class="loading-card">
+      <div class="loading-spinner" aria-hidden="true"></div>
+      <strong id="loadingTexto">Cargando...</strong>
+    </div>
+  </div>
+
+  <section class="modal" id="detalleModal" hidden aria-modal="true" role="dialog" aria-labelledby="modalTitulo">
+    <div class="modal__backdrop" data-accion="cerrar-modal"></div>
+
+    <div class="modal__card modal__card--large">
+      <header class="modal__header">
+        <div>
+          <p class="section-kicker">Detalle del estudiante</p>
+          <h2 id="modalTitulo">Revisión de títulos</h2>
+          <p id="modalSubtitulo">Selecciona un título para revisar.</p>
+        </div>
+
+        <button type="button" class="icon-btn" data-accion="cerrar-modal" aria-label="Cerrar modal">
+          ×
+        </button>
+      </header>
+
+      <div class="modal__body">
+        <div class="student-info-grid" id="detalleEstudianteDatos">
+          <div>
+            <span>Cédula</span>
+            <strong id="detalleCedula">-</strong>
+          </div>
+
+          <div>
+            <span>Nombre</span>
+            <strong id="detalleNombre">-</strong>
+          </div>
+
+          <div>
+            <span>Carrera</span>
+            <strong id="detalleCarrera">-</strong>
+          </div>
+
+          <div>
+            <span>Período</span>
+            <strong id="detallePeriodo">-</strong>
+          </div>
+
+          <div>
+            <span>Telegram</span>
+            <strong id="detalleTelegram">-</strong>
+          </div>
+
+          <div>
+            <span>Estado</span>
+            <strong id="detalleEstado">-</strong>
+          </div>
+        </div>
+
+        <div class="proposal-list" id="detalleTitulos">
+          <article class="proposal-card" data-propuesta="1">
+            <div class="proposal-card__head">
+              <h3>Título 1</h3>
+              <label class="radio-pill">
+                <input type="radio" name="tituloSeleccionado" value="1" />
+                Seleccionar
+              </label>
+            </div>
+            <p id="detalleTitulo1">-</p>
+          </article>
+
+          <article class="proposal-card" data-propuesta="2">
+            <div class="proposal-card__head">
+              <h3>Título 2</h3>
+              <label class="radio-pill">
+                <input type="radio" name="tituloSeleccionado" value="2" />
+                Seleccionar
+              </label>
+            </div>
+            <p id="detalleTitulo2">-</p>
+          </article>
+
+          <article class="proposal-card" data-propuesta="3">
+            <div class="proposal-card__head">
+              <h3>Título 3</h3>
+              <label class="radio-pill">
+                <input type="radio" name="tituloSeleccionado" value="3" />
+                Seleccionar
+              </label>
+            </div>
+            <p id="detalleTitulo3">-</p>
+          </article>
+        </div>
+
+        <div class="resolution-box">
+          <div class="field field--full">
+            <label for="tituloFinalInput">Título final aprobado o reemplazado</label>
+            <textarea
+              id="tituloFinalInput"
+              rows="3"
+              placeholder="Selecciona un título o escribe el título final corregido"
+            ></textarea>
+            <small>
+              Puedes corregir redacción, ortografía o reemplazar el título antes de aprobar.
+            </small>
+          </div>
+
+          <div class="field field--full">
+            <label for="comentarioCoordinadorInput">Comentario del coordinador</label>
+            <textarea
+              id="comentarioCoordinadorInput"
+              rows="3"
+              placeholder="Escribe una observación corta para aprobar o devolver"
+            ></textarea>
+            <small>
+              Para devolver, el comentario será obligatorio.
+            </small>
+          </div>
+
+          <div id="estadoModal" class="status-message"></div>
+        </div>
+      </div>
+
+      <footer class="modal__footer">
+        <button type="button" class="btn btn--ghost" data-accion="cerrar-modal">
+          Cancelar
+        </button>
+
+        <button type="button" class="btn btn--danger" data-accion="devolver-envio">
+          Devolver
+        </button>
+
+        <button type="button" class="btn btn--primary" data-accion="aprobar-envio">
+          Aprobar título
+        </button>
+      </footer>
+    </div>
+  </section>
+
+  <script src="js/coordinador.config.js"></script>
+  <script src="js/coordinador.utils.js"></script>
+  <script src="js/coordinador.state.js"></script>
+  <script src="js/coordinador.sheets.service.js"></script>
+  <script src="js/coordinador.ui.js"></script>
+  <script src="js/coordinador.modal.js"></script>
+  <script src="js/coordinador.diagnostico.js"></script>
+  <script src="js/coordinador.app.js"></script>
+</body>
+</html>
