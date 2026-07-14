@@ -1,42 +1,276 @@
-/* Pantalla Estudiantes del administrador */
+/* =========================================================
+Archivo: ad-estudiantes.css
+Ruta: /administrador/ad-css/ad-estudiantes.css
+Función:
+- Estilos de la pantalla Estudiantes.
+- Filtros por período, carrera y estado.
+- Tabla, botón WhatsApp y modal de detalle.
+========================================================= */
 body.ad-modal-open{overflow:hidden}
-.ad-estudiantes-toolbar{display:flex;justify-content:space-between;align-items:end;gap:18px;margin-bottom:16px}
-.ad-periodo-selector{width:min(430px,100%)}
-.ad-estudiantes-resumen{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}
-.ad-estudiantes-resumen span{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:8px 10px;border-radius:10px;background:var(--ad-surface-soft);color:var(--ad-muted);font-size:13px}
+
+.ad-estudiantes-filtros{
+  display:grid;
+  grid-template-columns:minmax(230px,1.1fr) minmax(230px,1.2fr) minmax(180px,.7fr);
+  gap:14px;
+  align-items:end;
+  margin-bottom:14px
+}
+
+.ad-estudiantes-resumen{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+  gap:8px;
+  margin-bottom:14px
+}
+
+.ad-estudiantes-resumen span{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  min-height:36px;
+  padding:8px 10px;
+  border-radius:10px;
+  background:var(--ad-surface-soft);
+  color:var(--ad-muted);
+  font-size:13px
+}
+
 .ad-estudiantes-resumen strong{color:var(--ad-text)}
-.ad-status-box{min-height:60px;margin:12px 0 16px;padding:14px;border:1px dashed var(--ad-border);border-radius:var(--ad-radius-sm);background:var(--ad-surface-soft);color:var(--ad-muted);line-height:1.55;white-space:pre-wrap}
-.ad-status-box.is-loading{border-style:solid;border-color:#cfe0fb;background:#eef5ff;color:var(--ad-info)}
-.ad-status-box.is-success{border-style:solid;border-color:#ccebd7;background:#e8f7ee;color:var(--ad-success)}
-.ad-status-box.is-error{border-style:solid;border-color:#f0cbc7;background:#fff1f0;color:var(--ad-danger)}
+
+.ad-status-box{
+  min-height:60px;
+  margin:12px 0 16px;
+  padding:14px;
+  border:1px dashed var(--ad-border);
+  border-radius:var(--ad-radius-sm);
+  background:var(--ad-surface-soft);
+  color:var(--ad-muted);
+  line-height:1.55;
+  white-space:pre-wrap
+}
+
+.ad-status-box.is-loading{
+  border-style:solid;
+  border-color:#cfe0fb;
+  background:#eef5ff;
+  color:var(--ad-info)
+}
+
+.ad-status-box.is-success{
+  border-style:solid;
+  border-color:#ccebd7;
+  background:#e8f7ee;
+  color:var(--ad-success)
+}
+
+.ad-status-box.is-error{
+  border-style:solid;
+  border-color:#f0cbc7;
+  background:#fff1f0;
+  color:var(--ad-danger)
+}
+
 .ad-badge-neutral{background:#eef2f6;color:#526579}
-.ad-tabla-estudiantes{min-width:850px}
-.ad-tabla-estudiantes th:nth-child(1){width:15%}
-.ad-tabla-estudiantes th:nth-child(2){width:30%}
-.ad-tabla-estudiantes th:nth-child(3){width:30%}
-.ad-tabla-estudiantes th:nth-child(4){width:14%}
-.ad-tabla-estudiantes th:nth-child(5){width:11%}
+
+.ad-tabla-estudiantes{min-width:1030px}
+.ad-tabla-estudiantes th:nth-child(1){width:13%}
+.ad-tabla-estudiantes th:nth-child(2){width:25%}
+.ad-tabla-estudiantes th:nth-child(3){width:25%}
+.ad-tabla-estudiantes th:nth-child(4){width:11%}
+.ad-tabla-estudiantes th:nth-child(5){width:14%}
+.ad-tabla-estudiantes th:nth-child(6){width:12%}
 .ad-estudiante-nombre{font-weight:700}
-.ad-btn-ver-mas{min-height:34px;padding:7px 11px}
-.ad-modal{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:20px}
+.ad-btn-ver-mas{min-height:36px;padding:8px 12px}
+
+.ad-whatsapp-cell{vertical-align:middle!important}
+
+.ad-btn-whatsapp{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:36px;
+  padding:8px 12px;
+  border-radius:12px;
+  background:#168c4b;
+  color:#fff;
+  font-size:13px;
+  font-weight:800;
+  text-decoration:none;
+  white-space:nowrap;
+  box-shadow:0 8px 16px rgba(22,140,75,.18)
+}
+
+.ad-btn-whatsapp:hover{
+  color:#fff;
+  filter:brightness(.96);
+  transform:translateY(-1px)
+}
+
+.ad-whatsapp-disabled{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:32px;
+  padding:6px 9px;
+  border-radius:10px;
+  background:#f1f4f8;
+  color:var(--ad-muted);
+  font-size:12px;
+  font-weight:700;
+  white-space:nowrap
+}
+
+.ad-whatsapp-sin-numero{background:#fff5e6;color:var(--ad-warning)}
+.ad-modal-whatsapp{margin-top:4px}
+
+.ad-modal{
+  position:fixed;
+  inset:0;
+  z-index:1000;
+  display:grid;
+  place-items:center;
+  padding:20px
+}
+
 .ad-modal[hidden]{display:none!important}
-.ad-modal-backdrop{position:absolute;inset:0;background:rgba(9,24,41,.62);backdrop-filter:blur(3px)}
-.ad-modal-card{position:relative;width:min(920px,100%);max-height:calc(100vh - 40px);overflow:hidden;border-radius:20px;background:#fff;box-shadow:0 30px 80px rgba(9,24,41,.28)}
-.ad-modal-header{display:flex;justify-content:space-between;align-items:flex-start;gap:18px;padding:20px 22px;border-bottom:1px solid var(--ad-border)}
+
+.ad-modal-backdrop{
+  position:absolute;
+  inset:0;
+  background:rgba(9,24,41,.62);
+  backdrop-filter:blur(3px)
+}
+
+.ad-modal-card{
+  position:relative;
+  width:min(920px,100%);
+  max-height:calc(100vh - 40px);
+  overflow:hidden;
+  border-radius:20px;
+  background:#fff;
+  box-shadow:0 30px 80px rgba(9,24,41,.28)
+}
+
+.ad-modal-header{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:18px;
+  padding:20px 22px;
+  border-bottom:1px solid var(--ad-border)
+}
+
 .ad-modal-header h3{margin:0;font-size:24px}
-.ad-modal-body{max-height:calc(100vh - 210px);overflow-y:auto;padding:22px}
-.ad-modal-footer{display:flex;justify-content:flex-end;padding:14px 22px;border-top:1px solid var(--ad-border);background:var(--ad-surface-soft)}
-.ad-icon-btn{display:grid;place-items:center;width:40px;height:40px;border:0;border-radius:12px;cursor:pointer;background:var(--ad-primary-soft);color:var(--ad-primary);font-size:28px;line-height:1}
-.ad-detail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:20px}
-.ad-detail-item{padding:13px;border:1px solid var(--ad-border);border-radius:12px;background:var(--ad-surface-soft)}
-.ad-detail-item span{display:block;margin-bottom:5px;color:var(--ad-muted);font-size:12px;font-weight:700;text-transform:uppercase}
-.ad-detail-item strong{display:block;line-height:1.4;overflow-wrap:anywhere}
+
+.ad-modal-body{
+  max-height:calc(100vh - 210px);
+  overflow-y:auto;
+  padding:22px
+}
+
+.ad-modal-footer{
+  display:flex;
+  justify-content:flex-end;
+  padding:14px 22px;
+  border-top:1px solid var(--ad-border);
+  background:var(--ad-surface-soft)
+}
+
+.ad-icon-btn{
+  display:grid;
+  place-items:center;
+  width:40px;
+  height:40px;
+  border:0;
+  border-radius:12px;
+  cursor:pointer;
+  background:var(--ad-primary-soft);
+  color:var(--ad-primary);
+  font-size:28px;
+  line-height:1
+}
+
+.ad-detail-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:12px;
+  margin-bottom:20px
+}
+
+.ad-detail-item{
+  padding:13px;
+  border:1px solid var(--ad-border);
+  border-radius:12px;
+  background:var(--ad-surface-soft)
+}
+
+.ad-detail-item span{
+  display:block;
+  margin-bottom:5px;
+  color:var(--ad-muted);
+  font-size:12px;
+  font-weight:700;
+  text-transform:uppercase
+}
+
+.ad-detail-item strong{
+  display:block;
+  line-height:1.4;
+  overflow-wrap:anywhere
+}
+
 .ad-detail-section{margin-top:18px}
 .ad-detail-section h4{margin:0 0 10px;font-size:17px}
-.ad-title-card{margin-bottom:10px;padding:14px;border:1px solid var(--ad-border);border-radius:12px;background:#fff;line-height:1.5}
-.ad-title-card strong{display:block;margin-bottom:5px;color:var(--ad-primary)}
-.ad-observation{padding:14px;border-left:4px solid var(--ad-info);border-radius:0 12px 12px 0;background:#eef5ff;line-height:1.55;white-space:pre-wrap}
-.ad-no-data{padding:16px;border:1px dashed var(--ad-border);border-radius:12px;color:var(--ad-muted);text-align:center}
-@media(max-width:1180px){.ad-estudiantes-toolbar{align-items:stretch;flex-direction:column}.ad-estudiantes-resumen{justify-content:flex-start}}
-@media(max-width:840px){.ad-detail-grid{grid-template-columns:1fr}}
-@media(max-width:520px){.ad-estudiantes-resumen{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.ad-modal{padding:10px}.ad-modal-card{max-height:calc(100vh - 20px)}.ad-modal-body{max-height:calc(100vh - 185px);padding:16px}}
+
+.ad-title-card{
+  margin-bottom:10px;
+  padding:14px;
+  border:1px solid var(--ad-border);
+  border-radius:12px;
+  background:#fff;
+  line-height:1.5
+}
+
+.ad-title-card strong{
+  display:block;
+  margin-bottom:5px;
+  color:var(--ad-primary)
+}
+
+.ad-observation{
+  padding:14px;
+  border-left:4px solid var(--ad-info);
+  border-radius:0 12px 12px 0;
+  background:#eef5ff;
+  line-height:1.55;
+  white-space:pre-wrap
+}
+
+.ad-no-data{
+  padding:16px;
+  border:1px dashed var(--ad-border);
+  border-radius:12px;
+  color:var(--ad-muted);
+  text-align:center
+}
+
+@media(max-width:1180px){
+  .ad-estudiantes-filtros{grid-template-columns:1fr 1fr}
+  .ad-estudiantes-filtros label:first-child{grid-column:1/-1}
+  .ad-estudiantes-resumen{justify-content:flex-start}
+}
+
+@media(max-width:840px){
+  .ad-estudiantes-filtros{grid-template-columns:1fr}
+  .ad-estudiantes-filtros label:first-child{grid-column:auto}
+  .ad-detail-grid{grid-template-columns:1fr}
+}
+
+@media(max-width:520px){
+  .ad-estudiantes-resumen{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+  .ad-modal{padding:10px}
+  .ad-modal-card{max-height:calc(100vh - 20px)}
+  .ad-modal-body{max-height:calc(100vh - 185px);padding:16px}
+  .ad-btn-whatsapp{width:100%}
+}
