@@ -4,6 +4,7 @@ Ruta: /coordinadores-mvp/js/coordinador.modal.js
 Función:
 - Mostrar propuestas y datos del estudiante.
 - Preparar aprobación, corrección o devolución.
+- Impedir revisar registros sin las tres propuestas.
 - Mostrar aprobados y devueltos en modo lectura.
 ========================================================= */
 (function(window,document){
@@ -15,6 +16,7 @@ Función:
   function state(){ return window.CoordinadorMVPState || null; }
   function ui(){ return window.CoordinadorMVPUI || null; }
   function utils(){ return window.CoordinadorMVPUtils || null; }
+  function firebaseService(){ return window.CoordinadorMVPFirebase || null; }
   function $(id){ return document.getElementById(id); }
   function texto(valor){ return String(valor === null || valor === undefined ? '' : valor).trim(); }
   function setTexto(id,valor){ var el=$(id); if(el) el.textContent=texto(valor)||'-'; }
@@ -34,6 +36,18 @@ Función:
 
   function esPendiente(envio){
     return ['PENDIENTE_REVISION','PENDIENTE_SYNC','ENVIADO','PENDIENTE'].indexOf(estadoNormal(envio && envio.estado)) >= 0;
+  }
+
+  function tieneTitulosCompletos(envio){
+    if(firebaseService() && typeof firebaseService().tieneTitulosEnviados === 'function'){
+      return firebaseService().tieneTitulosEnviados(envio);
+    }
+    return Boolean(
+      envio &&
+      texto(envio.titulo1) &&
+      texto(envio.titulo2) &&
+      texto(envio.titulo3)
+    );
   }
 
   function abrir(envio){
@@ -83,7 +97,8 @@ Función:
   }
 
   function configurarModo(envio){
-    var pendiente = esPendiente(envio);
+    var completos = tieneTitulosCompletos(envio);
+    var pendiente = esPendiente(envio) && completos;
     var finalInput = $('tituloFinalInput');
     var comentario = $('comentarioCoordinadorInput');
     var aprobar = $('btnAprobarEnvio');
@@ -102,7 +117,9 @@ Función:
     if(devolver) devolver.hidden = !pendiente;
     radios.forEach(function(radio){ radio.disabled = !pendiente; });
 
-    if(pendiente){
+    if(!completos){
+      mostrarEstado('Este registro no contiene las tres propuestas y no puede ser revisado.','error');
+    }else if(pendiente){
       mostrarEstado('Selecciona una propuesta o escribe el título final.','info');
     }else{
       mostrarEstado('Registro revisado. Esta vista es solo de lectura.','success');
@@ -113,7 +130,7 @@ Función:
     document.querySelectorAll('.proposal-card').forEach(function(tarjeta){ tarjeta.classList.remove('is-selected'); });
     var tarjeta = document.querySelector('.proposal-card[data-propuesta="' + numero + '"]');
     if(tarjeta) tarjeta.classList.add('is-selected');
-    if(esPendiente(envioActual)){
+    if(esPendiente(envioActual) && tieneTitulosCompletos(envioActual)){
       var titulo = obtenerTituloPorNumero(numero);
       if(titulo) setValor('tituloFinalInput',titulo);
     }
@@ -140,6 +157,9 @@ Función:
     var comentario = texto($('comentarioCoordinadorInput') && $('comentarioCoordinadorInput').value);
 
     if(!envioActual) return { ok:false, mensaje:'No hay estudiante seleccionado.' };
+    if(!tieneTitulosCompletos(envioActual)) {
+      return { ok:false, mensaje:'El estudiante no tiene las tres propuestas registradas.' };
+    }
     if(!coordinador) return { ok:false, mensaje:'Selecciona un coordinador.' };
     if(tipo === 'aprobar' && final.length < 8){
       return { ok:false, mensaje:'Selecciona o escribe el título final.', selector:'#tituloFinalInput' };
@@ -164,18 +184,27 @@ Función:
 
   function obtenerResolucionAprobar(){
     var resultado = obtenerResolucion('aprobar');
-    if(!resultado.ok){ mostrarEstado(resultado.mensaje,'error'); if(ui() && resultado.selector) ui().enfocar(resultado.selector); }
+    if(!resultado.ok){
+      mostrarEstado(resultado.mensaje,'error');
+      if(ui() && resultado.selector) ui().enfocar(resultado.selector);
+    }
     return resultado;
   }
 
   function obtenerResolucionDevolver(){
     var resultado = obtenerResolucion('devolver');
-    if(!resultado.ok){ mostrarEstado(resultado.mensaje,'error'); if(ui() && resultado.selector) ui().enfocar(resultado.selector); }
+    if(!resultado.ok){
+      mostrarEstado(resultado.mensaje,'error');
+      if(ui() && resultado.selector) ui().enfocar(resultado.selector);
+    }
     return resultado;
   }
 
   function limpiarFormulario(){
-    document.querySelectorAll('input[name="tituloSeleccionado"]').forEach(function(radio){ radio.checked=false; radio.disabled=false; });
+    document.querySelectorAll('input[name="tituloSeleccionado"]').forEach(function(radio){
+      radio.checked=false;
+      radio.disabled=false;
+    });
     document.querySelectorAll('.proposal-card').forEach(function(tarjeta){ tarjeta.classList.remove('is-selected'); });
     setValor('tituloFinalInput','');
     setValor('comentarioCoordinadorInput','');
@@ -195,7 +224,9 @@ Función:
   }
 
   function obtenerEnvioActual(){
-    return envioActual ? (utils() && utils().clonar ? utils().clonar(envioActual) : Object.assign({},envioActual)) : null;
+    return envioActual
+      ? (utils() && utils().clonar ? utils().clonar(envioActual) : Object.assign({},envioActual))
+      : null;
   }
 
   window.CoordinadorMVPModal = Object.freeze({
