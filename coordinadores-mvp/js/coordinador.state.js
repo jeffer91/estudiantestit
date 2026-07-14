@@ -1,402 +1,280 @@
-/*
-  Archivo: coordinador.state.js
-  Ruta: coordinadores-mvp/js/coordinador.state.js
-
-  Funciones principales:
-  - Mantener el estado central de coordinadores-mvp.
-  - Guardar coordinador seleccionado, vista activa, envíos y búsqueda.
-  - Filtrar estudiantes por coordinador, carrera, estado y texto.
-  - Seleccionar estudiante para el modal.
-  - Notificar cambios a la UI.
-*/
-
-(function (window) {
+/* =========================================================
+Archivo: coordinador.state.js
+Ruta: /coordinadores-mvp/js/coordinador.state.js
+Función:
+- Mantener períodos, coordinadores, títulos, vista y búsqueda.
+- Filtrar por período, carreras asignadas, estado y texto.
+========================================================= */
+(function(window){
   'use strict';
 
   var listeners = [];
-
   var state = {
     iniciado: false,
     cargando: false,
-    vistaActual: 'pendientes',
-    busqueda: '',
+    periodos: [],
+    periodoActual: null,
     coordinadores: [],
     coordinadorActual: null,
     envios: [],
     registrosFiltrados: [],
+    vistaActual: 'pendientes',
+    busqueda: '',
     estudianteSeleccionado: null,
     ultimaCarga: null,
     ultimoError: null
   };
 
-  function obtenerConfig() {
-    return window.CoordinadorMVPConfig || null;
+  function utils(){ return window.CoordinadorMVPUtils || null; }
+  function texto(valor){ return String(valor === null || valor === undefined ? '' : valor).trim(); }
+  function normal(valor){
+    return texto(valor)
+      .toUpperCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^A-Z0-9]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+  function estadoNormal(valor){ return normal(valor).replace(/ /g, '_'); }
+
+  function clonar(valor){
+    if(utils() && utils().clonar) return utils().clonar(valor);
+    try{ return JSON.parse(JSON.stringify(valor)); }catch(error){ return valor; }
   }
 
-  function obtenerUtils() {
-    return window.CoordinadorMVPUtils || null;
+  function guardarLocal(clave, valor){
+    try{ window.localStorage.setItem(clave, JSON.stringify(valor)); }catch(error){}
   }
 
-  function iniciar() {
-    var config = obtenerConfig();
-    var utils = obtenerUtils();
-    var vistaGuardada;
+  function leerLocal(clave){
+    try{
+      var valor = window.localStorage.getItem(clave);
+      return valor ? JSON.parse(valor) : '';
+    }catch(error){ return ''; }
+  }
 
-    if (!config || !utils) {
-      return false;
-    }
-
-    vistaGuardada = utils.leerLocal(
-      config.obtener('almacenamiento.claveUltimaVista'),
-      config.obtener('ui.vistaInicial', 'pendientes')
-    );
-
-    if (config.obtenerVista(vistaGuardada)) {
-      state.vistaActual = vistaGuardada;
-    } else {
-      state.vistaActual = config.obtener('ui.vistaInicial', 'pendientes');
-    }
-
+  function iniciar(){
     state.iniciado = true;
+    state.vistaActual = leerLocal('coordinadores_mvp__ultima_vista') || 'pendientes';
     recalcularFiltros();
     emitir('iniciado');
-
     return true;
   }
 
-  function obtenerEstado() {
-    return obtenerUtils().clonar(state);
-  }
+  function obtenerEstado(){ return clonar(state); }
+  function estaCargando(){ return state.cargando === true; }
 
-  function estaCargando() {
-    return state.cargando === true;
-  }
-
-  function setCargando(valor) {
+  function setCargando(valor){
     state.cargando = valor === true;
     emitir('cargando');
   }
 
-  function setError(error) {
+  function setError(error){
     state.ultimoError = error || null;
     emitir('error');
   }
 
-  function limpiarError() {
+  function limpiarError(){
     state.ultimoError = null;
     emitir('error-limpiado');
   }
 
-  function setCoordinadores(coordinadores) {
-    state.coordinadores = Array.isArray(coordinadores) ? coordinadores.slice() : [];
+  function setPeriodos(lista, principal){
+    var ultimoId = leerLocal('coordinadores_mvp__ultimo_periodo');
+    var seleccionado = null;
+    state.periodos = Array.isArray(lista) ? lista.slice() : [];
 
-    restaurarUltimoCoordinadorSiExiste();
+    if(ultimoId){
+      seleccionado = state.periodos.find(function(item){ return item.id === ultimoId; }) || null;
+    }
+    if(!seleccionado && principal && principal.id){
+      seleccionado = state.periodos.find(function(item){ return item.id === principal.id; }) || null;
+    }
+    if(!seleccionado) seleccionado = state.periodos[0] || null;
+
+    state.periodoActual = seleccionado;
+    if(seleccionado) guardarLocal('coordinadores_mvp__ultimo_periodo', seleccionado.id);
+    recalcularFiltros();
+    emitir('periodos');
+  }
+
+  function setPeriodoActual(id){
+    id = texto(id);
+    state.periodoActual = state.periodos.find(function(item){ return item.id === id; }) || null;
+    if(state.periodoActual) guardarLocal('coordinadores_mvp__ultimo_periodo', state.periodoActual.id);
+    state.envios = [];
+    state.estudianteSeleccionado = null;
+    recalcularFiltros();
+    emitir('periodo');
+    return obtenerPeriodoActual();
+  }
+
+  function obtenerPeriodos(){ return clonar(state.periodos); }
+  function obtenerPeriodoActual(){ return state.periodoActual ? clonar(state.periodoActual) : null; }
+
+  function setCoordinadores(lista){
+    var ultimoId = leerLocal('coordinadores_mvp__ultimo_coordinador');
+    state.coordinadores = Array.isArray(lista) ? lista.slice() : [];
+    state.coordinadorActual = ultimoId
+      ? state.coordinadores.find(function(item){ return item.id === ultimoId; }) || null
+      : null;
     recalcularFiltros();
     emitir('coordinadores');
   }
 
-  function obtenerCoordinadores() {
-    return state.coordinadores.slice();
-  }
-
-  function setCoordinadorActual(coordinadorId) {
-    var config = obtenerConfig();
-    var utils = obtenerUtils();
-    var encontrado = null;
-
-    coordinadorId = utils.limpiarTexto(coordinadorId);
-
-    state.coordinadores.forEach(function (coordinador) {
-      if (coordinador && coordinador.id === coordinadorId) {
-        encontrado = coordinador;
-      }
-    });
-
-    state.coordinadorActual = encontrado;
-
-    if (encontrado) {
-      utils.guardarLocal(
-        config.obtener('almacenamiento.claveUltimoCoordinador'),
-        encontrado.id
-      );
-    }
-
+  function setCoordinadorActual(id){
+    id = texto(id);
+    state.coordinadorActual = state.coordinadores.find(function(item){ return item.id === id; }) || null;
+    if(state.coordinadorActual) guardarLocal('coordinadores_mvp__ultimo_coordinador', state.coordinadorActual.id);
     recalcularFiltros();
     emitir('coordinador');
+    return obtenerCoordinadorActual();
   }
 
-  function obtenerCoordinadorActual() {
-    return state.coordinadorActual ? obtenerUtils().clonar(state.coordinadorActual) : null;
-  }
+  function obtenerCoordinadores(){ return clonar(state.coordinadores); }
+  function obtenerCoordinadorActual(){ return state.coordinadorActual ? clonar(state.coordinadorActual) : null; }
 
-  function restaurarUltimoCoordinadorSiExiste() {
-    var config = obtenerConfig();
-    var utils = obtenerUtils();
-    var ultimoId;
-    var existe = false;
-
-    if (state.coordinadorActual || !state.coordinadores.length) {
-      return;
-    }
-
-    ultimoId = utils.leerLocal(config.obtener('almacenamiento.claveUltimoCoordinador'), '');
-
-    if (!ultimoId) {
-      return;
-    }
-
-    state.coordinadores.forEach(function (coordinador) {
-      if (coordinador.id === ultimoId) {
-        existe = true;
-      }
-    });
-
-    if (existe) {
-      setCoordinadorActual(ultimoId);
-    }
-  }
-
-  function setEnvios(envios) {
-    state.envios = Array.isArray(envios) ? envios.slice() : [];
+  function setEnvios(lista){
+    state.envios = Array.isArray(lista) ? lista.slice() : [];
     state.ultimaCarga = new Date().toISOString();
     recalcularFiltros();
     emitir('envios');
   }
 
-  function obtenerEnvios() {
-    return state.envios.slice();
-  }
+  function obtenerEnvios(){ return clonar(state.envios); }
 
-  function setVistaActual(vistaId) {
-    var config = obtenerConfig();
-    var utils = obtenerUtils();
-
-    vistaId = utils.limpiarTexto(vistaId);
-
-    if (!config.obtenerVista(vistaId)) {
-      return false;
-    }
-
-    state.vistaActual = vistaId;
-
-    utils.guardarLocal(
-      config.obtener('almacenamiento.claveUltimaVista'),
-      vistaId
-    );
-
+  function setVistaActual(vista){
+    if(['pendientes','aprobados','devueltos'].indexOf(vista) < 0) return false;
+    state.vistaActual = vista;
+    guardarLocal('coordinadores_mvp__ultima_vista', vista);
     recalcularFiltros();
     emitir('vista');
-
     return true;
   }
 
-  function obtenerVistaActual() {
-    return state.vistaActual;
-  }
+  function obtenerVistaActual(){ return state.vistaActual; }
 
-  function setBusqueda(texto) {
-    state.busqueda = obtenerUtils().limpiarTexto(texto);
+  function setBusqueda(valor){
+    state.busqueda = texto(valor);
     recalcularFiltros();
     emitir('busqueda');
   }
 
-  function obtenerBusqueda() {
-    return state.busqueda;
+  function obtenerBusqueda(){ return state.busqueda; }
+
+  function estadosVista(vista){
+    if(vista === 'aprobados') return ['APROBADO','REEMPLAZADO'];
+    if(vista === 'devueltos') return ['DEVUELTO'];
+    return ['PENDIENTE_REVISION','PENDIENTE_SYNC','ENVIADO','PENDIENTE'];
   }
 
-  function obtenerRegistrosFiltrados() {
-    return state.registrosFiltrados.slice();
+  function coincideCarrera(envio, coordinador){
+    var carreras = coordinador && Array.isArray(coordinador.carreras) ? coordinador.carreras : [];
+    var valoresEnvio = [envio && envio.carrera, envio && envio.codigoCarrera].map(normal).filter(Boolean);
+
+    if(!carreras.length || !valoresEnvio.length) return false;
+
+    return carreras.some(function(item){
+      var token = normal(item);
+      if(!token) return false;
+      return valoresEnvio.some(function(valor){
+        return valor === token || valor.indexOf(token) >= 0 || token.indexOf(valor) >= 0;
+      });
+    });
   }
 
-  function obtenerTotalFiltrado() {
-    return state.registrosFiltrados.length;
+  function coincidePeriodo(envio, periodo){
+    if(!periodo) return false;
+    var id = normal(periodo.id);
+    var label = normal(periodo.label);
+    return Boolean(
+      (id && normal(envio.periodoId) === id) ||
+      (label && normal(envio.periodoLabel) === label) ||
+      (label && normal(envio.periodo) === label)
+    );
   }
 
-  function recalcularFiltros() {
-    var config = obtenerConfig();
-    var utils = obtenerUtils();
-    var vista;
-    var estadoEsperado;
-    var coordinador;
-    var busqueda;
+  function recalcularFiltros(){
+    var permitidos = estadosVista(state.vistaActual);
+    var busqueda = normal(state.busqueda);
+    var periodo = state.periodoActual;
+    var coordinador = state.coordinadorActual;
 
-    if (!config || !utils) {
-      state.registrosFiltrados = [];
-      return [];
-    }
-
-    vista = config.obtenerVista(state.vistaActual);
-    estadoEsperado = vista ? utils.normalizarEstado(vista.estado) : '';
-    coordinador = state.coordinadorActual;
-    busqueda = utils.limpiarTexto(state.busqueda).toLowerCase();
-
-    state.registrosFiltrados = state.envios.filter(function (envio) {
-      var coincideEstado;
-      var coincideCarrera;
-      var coincideBusqueda;
-      var textoBusqueda;
-
-      envio = envio || {};
-
-      coincideEstado = estadoEsperado
-        ? utils.normalizarEstado(envio.estado) === estadoEsperado
-        : true;
-
-      coincideCarrera = coordinador
-        ? utils.carreraPermitida(envio.carrera, coordinador.carreras)
-        : false;
-
-      textoBusqueda = [
+    state.registrosFiltrados = state.envios.filter(function(envio){
+      var textoBusqueda = normal([
         envio.cedula,
         envio.nombres,
-        envio.nombre,
         envio.carrera,
-        envio.periodo
-      ].join(' ').toLowerCase();
+        envio.codigoCarrera,
+        envio.periodoLabel
+      ].join(' '));
 
-      coincideBusqueda = busqueda
-        ? textoBusqueda.indexOf(busqueda) !== -1
-        : true;
-
-      return coincideEstado && coincideCarrera && coincideBusqueda;
+      return Boolean(
+        coincidePeriodo(envio, periodo) &&
+        coincideCarrera(envio, coordinador) &&
+        permitidos.indexOf(estadoNormal(envio.estado)) >= 0 &&
+        (!busqueda || textoBusqueda.indexOf(busqueda) >= 0)
+      );
     });
 
     return state.registrosFiltrados;
   }
 
-  function seleccionarEstudiante(id) {
-    var utils = obtenerUtils();
-    var encontrado = null;
+  function obtenerRegistrosFiltrados(){ return clonar(state.registrosFiltrados); }
+  function obtenerTotalFiltrado(){ return state.registrosFiltrados.length; }
 
-    id = utils.limpiarTexto(id);
-
-    state.envios.forEach(function (envio) {
-      if (!envio || encontrado) {
-        return;
-      }
-
-      if (envio.id === id || envio._clave === id || envio.cedula === id) {
-        encontrado = envio;
-      }
-    });
-
-    state.estudianteSeleccionado = encontrado;
+  function seleccionarEstudiante(id){
+    id = texto(id);
+    state.estudianteSeleccionado = state.envios.find(function(item){
+      return item.id === id || item._docId === id || item._clave === id || item.cedula === id;
+    }) || null;
     emitir('estudiante');
-
-    return encontrado ? utils.clonar(encontrado) : null;
+    return obtenerEstudianteSeleccionado();
   }
 
-  function setEstudianteSeleccionado(envio) {
+  function setEstudianteSeleccionado(envio){
     state.estudianteSeleccionado = envio || null;
     emitir('estudiante');
   }
 
-  function obtenerEstudianteSeleccionado() {
-    return state.estudianteSeleccionado
-      ? obtenerUtils().clonar(state.estudianteSeleccionado)
-      : null;
+  function obtenerEstudianteSeleccionado(){
+    return state.estudianteSeleccionado ? clonar(state.estudianteSeleccionado) : null;
   }
 
-  function actualizarEnvioLocal(id, cambios) {
-    var utils = obtenerUtils();
+  function actualizarEnvioLocal(id, cambios){
+    id = texto(id);
     var actualizado = null;
-
-    id = utils.limpiarTexto(id);
-    cambios = cambios || {};
-
-    state.envios = state.envios.map(function (envio) {
-      var copia;
-
-      if (!envio) {
-        return envio;
-      }
-
-      if (envio.id !== id && envio._clave !== id && envio.cedula !== id) {
-        return envio;
-      }
-
-      copia = Object.assign({}, envio, cambios);
-      actualizado = copia;
-      return copia;
+    state.envios = state.envios.map(function(item){
+      if(item.id !== id && item._docId !== id && item._clave !== id && item.cedula !== id) return item;
+      actualizado = Object.assign({}, item, cambios || {});
+      return actualizado;
     });
-
-    if (state.estudianteSeleccionado) {
-      if (
-        state.estudianteSeleccionado.id === id ||
-        state.estudianteSeleccionado._clave === id ||
-        state.estudianteSeleccionado.cedula === id
-      ) {
-        state.estudianteSeleccionado = actualizado;
-      }
-    }
-
+    if(actualizado) state.estudianteSeleccionado = actualizado;
     recalcularFiltros();
     emitir('envio-actualizado');
-
-    return actualizado ? utils.clonar(actualizado) : null;
+    return actualizado ? clonar(actualizado) : null;
   }
 
-  function quitarEnvioLocal(id) {
-    var utils = obtenerUtils();
-
-    id = utils.limpiarTexto(id);
-
-    state.envios = state.envios.filter(function (envio) {
-      return envio && envio.id !== id && envio._clave !== id && envio.cedula !== id;
-    });
-
-    if (
-      state.estudianteSeleccionado &&
-      (
-        state.estudianteSeleccionado.id === id ||
-        state.estudianteSeleccionado._clave === id ||
-        state.estudianteSeleccionado.cedula === id
-      )
-    ) {
-      state.estudianteSeleccionado = null;
-    }
-
-    recalcularFiltros();
-    emitir('envio-removido');
-  }
-
-  function limpiar() {
-    state.cargando = false;
-    state.busqueda = '';
+  function limpiar(){
     state.envios = [];
     state.registrosFiltrados = [];
     state.estudianteSeleccionado = null;
     state.ultimoError = null;
-    state.ultimaCarga = null;
-
+    recalcularFiltros();
     emitir('limpio');
   }
 
-  function escuchar(callback) {
-    if (typeof callback !== 'function') {
-      return function () {};
-    }
-
+  function escuchar(callback){
+    if(typeof callback !== 'function') return function(){};
     listeners.push(callback);
-
-    return function () {
-      listeners = listeners.filter(function (listener) {
-        return listener !== callback;
-      });
-    };
+    return function(){ listeners = listeners.filter(function(item){ return item !== callback; }); };
   }
 
-  function emitir(tipo) {
-    var snapshot = obtenerUtils() ? obtenerEstado() : state;
-
-    listeners.forEach(function (listener) {
-      try {
-        listener(tipo, snapshot);
-      } catch (errorListener) {
-        if (window.console && typeof window.console.warn === 'function') {
-          window.console.warn('[Coordinador State] Error en listener:', errorListener);
-        }
-      }
+  function emitir(tipo){
+    var snapshot = obtenerEstado();
+    listeners.forEach(function(listener){
+      try{ listener(tipo, snapshot); }catch(error){ console.warn('[CoordinadorState]', error); }
     });
   }
 
@@ -407,9 +285,13 @@
     setCargando: setCargando,
     setError: setError,
     limpiarError: limpiarError,
+    setPeriodos: setPeriodos,
+    setPeriodoActual: setPeriodoActual,
+    obtenerPeriodos: obtenerPeriodos,
+    obtenerPeriodoActual: obtenerPeriodoActual,
     setCoordinadores: setCoordinadores,
-    obtenerCoordinadores: obtenerCoordinadores,
     setCoordinadorActual: setCoordinadorActual,
+    obtenerCoordinadores: obtenerCoordinadores,
     obtenerCoordinadorActual: obtenerCoordinadorActual,
     setEnvios: setEnvios,
     obtenerEnvios: obtenerEnvios,
@@ -417,14 +299,13 @@
     obtenerVistaActual: obtenerVistaActual,
     setBusqueda: setBusqueda,
     obtenerBusqueda: obtenerBusqueda,
+    recalcularFiltros: recalcularFiltros,
     obtenerRegistrosFiltrados: obtenerRegistrosFiltrados,
     obtenerTotalFiltrado: obtenerTotalFiltrado,
-    recalcularFiltros: recalcularFiltros,
     seleccionarEstudiante: seleccionarEstudiante,
     setEstudianteSeleccionado: setEstudianteSeleccionado,
     obtenerEstudianteSeleccionado: obtenerEstudianteSeleccionado,
     actualizarEnvioLocal: actualizarEnvioLocal,
-    quitarEnvioLocal: quitarEnvioLocal,
     limpiar: limpiar,
     escuchar: escuchar
   });
