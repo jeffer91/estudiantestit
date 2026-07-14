@@ -1,386 +1,220 @@
-/*
-  Archivo: coordinador.ui.js
-  Ruta: coordinadores-mvp/js/coordinador.ui.js
-
-  Funciones principales:
-  - Pintar selector de coordinadores.
-  - Pintar resumen del coordinador seleccionado.
-  - Pintar menú activo: Pendientes, Aprobados, Devueltos.
-  - Pintar tabla principal con cédula, nombre y Ver más.
-  - Mostrar estados, contador, loading y panel de diagnóstico.
-  - Mantener la UI separada de la lógica de datos.
-*/
-
-(function (window, document) {
+/* =========================================================
+Archivo: coordinador.ui.js
+Ruta: /coordinadores-mvp/js/coordinador.ui.js
+Función:
+- Renderizar períodos, coordinadores, pestañas y tabla.
+- Mostrar estados, carga y diagnóstico.
+========================================================= */
+(function(window,document){
   'use strict';
 
-  var uiIniciada = false;
+  var iniciada = false;
 
-  function obtenerConfig() {
-    return window.CoordinadorMVPConfig || null;
+  function state(){ return window.CoordinadorMVPState || null; }
+  function utils(){ return window.CoordinadorMVPUtils || null; }
+  function texto(valor){ return String(valor === null || valor === undefined ? '' : valor).trim(); }
+  function esc(valor){
+    if(utils() && utils().escaparHtml) return utils().escaparHtml(valor);
+    return texto(valor).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
   }
+  function $(id){ return document.getElementById(id); }
 
-  function obtenerUtils() {
-    return window.CoordinadorMVPUtils || null;
-  }
-
-  function obtenerState() {
-    return window.CoordinadorMVPState || null;
-  }
-
-  function validarDependencias() {
-    return !!(obtenerConfig() && obtenerUtils() && obtenerState());
-  }
-
-  function iniciar() {
-    var state;
-
-    if (!validarDependencias()) {
-      mostrarEstado('#estadoPrincipal', 'Faltan módulos internos para iniciar la interfaz.', 'error');
-      return false;
-    }
-
-    if (uiIniciada) {
-      return true;
-    }
-
-    uiIniciada = true;
-    state = obtenerState();
-
-    state.escuchar(function (tipo, snapshot) {
-      render(snapshot, tipo);
-    });
-
-    render(state.obtenerEstado(), 'inicial');
-
+  function iniciar(){
+    if(iniciada || !state()) return Boolean(iniciada);
+    iniciada = true;
+    state().escuchar(function(tipo,snapshot){ render(snapshot,tipo); });
+    render(state().obtenerEstado(),'inicial');
     return true;
   }
 
-  function render(snapshot, tipo) {
+  function render(snapshot){
     snapshot = snapshot || {};
-
-    pintarCoordinadores(snapshot.coordinadores || [], snapshot.coordinadorActual);
-    pintarResumenCoordinador(snapshot.coordinadorActual);
-    pintarMenu(snapshot.vistaActual);
-    pintarEncabezadoVista(snapshot.vistaActual);
+    pintarPeriodos(snapshot.periodos || [], snapshot.periodoActual);
+    pintarCoordinadores(snapshot.coordinadores || [], snapshot.coordinadorActual, snapshot.periodoActual);
+    pintarResumen(snapshot.coordinadorActual);
+    pintarTabs(snapshot.vistaActual);
+    pintarEncabezado(snapshot.vistaActual);
     pintarTabla(snapshot.registrosFiltrados || []);
-    pintarContador(snapshot.registrosFiltrados || []);
-    setCargando(snapshot.cargando, '');
-    pintarErrorSiExiste(snapshot.ultimoError);
-
-    if (tipo === 'envios' || tipo === 'vista' || tipo === 'busqueda' || tipo === 'coordinador') {
-      actualizarDescripcionEstado(snapshot);
-    }
+    setTexto('contadorRegistros', String((snapshot.registrosFiltrados || []).length));
+    actualizarEstado(snapshot);
+    setCargando(snapshot.cargando, 'Cargando...');
   }
 
-  function pintarCoordinadores(coordinadores, coordinadorActual) {
-    var select = document.getElementById('coordinadorSelect');
-    var utils = obtenerUtils();
-    var valorActual;
-    var html;
+  function pintarPeriodos(periodos, actual){
+    var select = $('periodoSelect');
+    var valor = actual && actual.id ? actual.id : (select && select.value);
+    if(!select) return;
 
-    if (!select || !utils) {
-      return;
-    }
-
-    valorActual = coordinadorActual && coordinadorActual.id
-      ? coordinadorActual.id
-      : select.value;
-
-    coordinadores = Array.isArray(coordinadores) ? coordinadores : [];
-
-    if (!coordinadores.length) {
-      select.innerHTML = '<option value="">No hay coordinadores cargados</option>';
+    if(!periodos.length){
+      select.innerHTML = '<option value="">No hay períodos activos</option>';
       select.value = '';
       return;
     }
 
-    html = ['<option value="">Selecciona un coordinador</option>'];
-
-    coordinadores.forEach(function (coordinador) {
-      html.push(
-        '<option value="' + utils.escaparHtml(coordinador.id) + '">' +
-          utils.escaparHtml(coordinador.nombre || coordinador.id) +
-        '</option>'
-      );
-    });
-
-    select.innerHTML = html.join('');
-
-    if (valorActual) {
-      select.value = valorActual;
-    }
+    select.innerHTML = periodos.map(function(item){
+      return '<option value="' + esc(item.id) + '">' + esc(item.label || item.id) + (item.principal ? ' · Principal' : '') + '</option>';
+    }).join('');
+    select.value = valor && periodos.some(function(item){ return item.id === valor; }) ? valor : periodos[0].id;
   }
 
-  function pintarResumenCoordinador(coordinador) {
-    var resumen = document.getElementById('coordinadorResumen');
-    var nombre = document.getElementById('coordinadorNombre');
-    var carreras = document.getElementById('coordinadorCarreras');
-    var utils = obtenerUtils();
+  function pintarCoordinadores(lista, actual, periodo){
+    var select = $('coordinadorSelect');
+    var valor = actual && actual.id ? actual.id : (select && select.value);
+    if(!select) return;
 
-    if (!resumen || !nombre || !carreras || !utils) {
+    select.disabled = !periodo || !lista.length;
+
+    if(!lista.length){
+      select.innerHTML = '<option value="">No hay coordinadores activos</option>';
+      select.value = '';
       return;
     }
 
-    if (!coordinador) {
+    select.innerHTML = '<option value="">Selecciona un coordinador</option>' + lista.map(function(item){
+      return '<option value="' + esc(item.id) + '">' + esc(item.nombre || item.id) + '</option>';
+    }).join('');
+    if(valor && lista.some(function(item){ return item.id === valor; })) select.value = valor;
+  }
+
+  function pintarResumen(coordinador){
+    var resumen = $('coordinadorResumen');
+    if(!resumen) return;
+    if(!coordinador){
       resumen.hidden = true;
-      nombre.textContent = '-';
-      carreras.textContent = 'Carreras: -';
       return;
     }
-
     resumen.hidden = false;
-    nombre.textContent = coordinador.nombre || '-';
-    carreras.textContent = 'Carreras: ' + utils.carrerasComoTexto(coordinador.carreras || []);
+    setTexto('coordinadorNombre', coordinador.nombre || '-');
+    setTexto('coordinadorCarreras', coordinador.carrerasTexto || ((coordinador.carreras || []).join(', ')) || 'Sin carreras asignadas');
   }
 
-  function pintarMenu(vistaActual) {
-    var botones = document.querySelectorAll('[data-accion="cambiar-vista"]');
-
-    Array.prototype.forEach.call(botones, function (boton) {
-      if (boton.getAttribute('data-vista') === vistaActual) {
-        boton.classList.add('is-active');
-      } else {
-        boton.classList.remove('is-active');
-      }
+  function pintarTabs(vista){
+    document.querySelectorAll('[data-accion="cambiar-vista"]').forEach(function(boton){
+      boton.classList.toggle('is-active', boton.getAttribute('data-vista') === vista);
     });
   }
 
-  function pintarEncabezadoVista(vistaId) {
-    var config = obtenerConfig();
-    var vista = config ? config.obtenerVista(vistaId) : null;
-
-    if (!vista) {
-      return;
-    }
-
-    setTexto('#vistaActualKicker', vista.label || 'Vista');
-    setTexto('#tituloTablaEstudiantes', vista.titulo || 'Estudiantes');
-    setTexto('#descripcionTabla', vista.descripcion || '');
+  function pintarEncabezado(vista){
+    var datos = {
+      pendientes:['Pendientes','Estudiantes pendientes'],
+      aprobados:['Aprobados','Títulos aprobados o corregidos'],
+      devueltos:['Devueltos','Títulos devueltos']
+    }[vista] || ['Estudiantes','Estudiantes'];
+    setTexto('vistaActualKicker', datos[0]);
+    setTexto('tituloTablaEstudiantes', datos[1]);
   }
 
-  function pintarTabla(registros) {
-    var tbody = document.getElementById('tablaEstudiantesBody');
-    var utils = obtenerUtils();
+  function claseEstado(valor){
+    var estado = texto(valor).toUpperCase();
+    if(estado === 'DEVUELTO') return 'state-returned';
+    if(estado === 'APROBADO' || estado === 'REEMPLAZADO') return 'state-approved';
+    return 'state-pending';
+  }
 
-    if (!tbody || !utils) {
+  function textoEstado(valor){
+    var estado = texto(valor).toUpperCase();
+    if(estado === 'PENDIENTE_REVISION' || estado === 'PENDIENTE_SYNC' || estado === 'ENVIADO') return 'Pendiente';
+    if(estado === 'REEMPLAZADO') return 'Aprobado corregido';
+    if(estado === 'APROBADO') return 'Aprobado';
+    if(estado === 'DEVUELTO') return 'Devuelto';
+    return estado || 'Pendiente';
+  }
+
+  function pintarTabla(registros){
+    var tbody = $('tablaEstudiantesBody');
+    if(!tbody) return;
+
+    if(!registros.length){
+      tbody.innerHTML = '<tr><td colspan="5" class="empty-cell">No hay estudiantes para mostrar.</td></tr>';
       return;
     }
 
-    registros = Array.isArray(registros) ? registros : [];
-
-    if (!registros.length) {
-      tbody.innerHTML = [
-        '<tr>',
-        '  <td colspan="3" class="empty-cell">No hay estudiantes para mostrar en esta vista.</td>',
-        '</tr>'
-      ].join('');
-      return;
-    }
-
-    tbody.innerHTML = registros.map(function (envio) {
-      var id = envio.id || envio._clave || envio.cedula || '';
-      var cedula = envio.cedula || '-';
-      var nombre = envio.nombres || envio.nombre || '-';
-
-      return [
-        '<tr data-envio-id="' + utils.escaparHtml(id) + '">',
-        '  <td>' + utils.escaparHtml(cedula) + '</td>',
-        '  <td>' + utils.escaparHtml(nombre) + '</td>',
-        '  <td>',
-        '    <button type="button" class="row-action" data-accion="ver-detalle" data-envio-id="' + utils.escaparHtml(id) + '">',
-        '      Ver más',
-        '    </button>',
-        '  </td>',
-        '</tr>'
-      ].join('');
+    tbody.innerHTML = registros.map(function(item){
+      var id = item._docId || item.id || item._clave || item.cedula;
+      return '<tr>' +
+        '<td>' + esc(item.cedula || '-') + '</td>' +
+        '<td><strong>' + esc(item.nombres || '-') + '</strong></td>' +
+        '<td>' + esc(item.carrera || '-') + '</td>' +
+        '<td><span class="state-pill ' + claseEstado(item.estado) + '">' + esc(textoEstado(item.estado)) + '</span></td>' +
+        '<td><button type="button" class="row-action" data-accion="ver-detalle" data-envio-id="' + esc(id) + '">Ver más</button></td>' +
+      '</tr>';
     }).join('');
   }
 
-  function pintarContador(registros) {
-    var total = Array.isArray(registros) ? registros.length : 0;
-
-    setTexto('#contadorRegistros', String(total));
-  }
-
-  function actualizarDescripcionEstado(snapshot) {
-    var config = obtenerConfig();
-    var coordinador = snapshot.coordinadorActual;
-    var total = Array.isArray(snapshot.registrosFiltrados)
-      ? snapshot.registrosFiltrados.length
-      : 0;
-    var vista = config ? config.obtenerVista(snapshot.vistaActual) : null;
-
-    if (!coordinador) {
-      mostrarEstado('#estadoPrincipal', 'Selecciona un coordinador para cargar los estudiantes.', 'info');
+  function actualizarEstado(snapshot){
+    if(snapshot.ultimoError){
+      mostrarEstado('estadoPrincipal', snapshot.ultimoError.message || String(snapshot.ultimoError), 'error');
       return;
     }
-
-    mostrarEstado(
-      '#estadoPrincipal',
-      'Mostrando ' + total + ' registro(s) en la vista ' + ((vista && vista.label) || snapshot.vistaActual) + '.',
-      total ? 'success' : 'warning'
-    );
-  }
-
-  function pintarErrorSiExiste(error) {
-    if (!error) {
+    if(!snapshot.periodoActual){
+      mostrarEstado('estadoPrincipal','No hay un período activo seleccionado.','warning');
       return;
     }
-
-    mostrarEstado('#estadoPrincipal', obtenerUtils().obtenerMensajeError(error), 'error');
-  }
-
-  function mostrarEstado(selector, mensaje, tipo) {
-    var utils = obtenerUtils();
-
-    if (utils && utils.mostrarEstado) {
-      return utils.mostrarEstado(selector, mensaje, tipo || 'info');
-    }
-
-    return false;
-  }
-
-  function setTexto(selector, texto) {
-    var utils = obtenerUtils();
-
-    if (utils && utils.setTexto) {
-      return utils.setTexto(selector, texto);
-    }
-
-    return false;
-  }
-
-  function setValor(selector, valor) {
-    var utils = obtenerUtils();
-
-    if (utils && utils.setValor) {
-      return utils.setValor(selector, valor);
-    }
-
-    return false;
-  }
-
-  function limpiarBuscador() {
-    setValor('#buscadorInput', '');
-  }
-
-  function setCargando(activo, mensaje) {
-    var overlay = document.getElementById('loadingOverlay');
-    var texto = document.getElementById('loadingTexto');
-    var botones;
-
-    if (overlay) {
-      overlay.hidden = !activo;
-    }
-
-    if (texto && mensaje) {
-      texto.textContent = mensaje;
-    }
-
-    botones = document.querySelectorAll('button, select, input, textarea');
-
-    Array.prototype.forEach.call(botones, function (elemento) {
-      if (elemento.id === 'loadingOverlay') {
-        return;
-      }
-
-      elemento.disabled = !!activo;
-    });
-  }
-
-  function mostrarCargando(mensaje) {
-    setCargando(true, mensaje || 'Cargando...');
-  }
-
-  function ocultarCargando() {
-    setCargando(false, '');
-  }
-
-  function mostrarDiagnostico() {
-    var panel = document.getElementById('diagnosticoPanel');
-
-    if (!panel) {
+    if(!snapshot.coordinadorActual){
+      mostrarEstado('estadoPrincipal','Selecciona un coordinador.','info');
       return;
     }
-
-    panel.classList.remove('is-hidden');
-    panel.hidden = false;
-    panel.scrollIntoView({
-      behavior: 'smooth',
-      block: 'start'
-    });
-  }
-
-  function ocultarDiagnostico() {
-    var panel = document.getElementById('diagnosticoPanel');
-
-    if (!panel) {
+    if(!snapshot.coordinadorActual.carreras || !snapshot.coordinadorActual.carreras.length){
+      mostrarEstado('estadoPrincipal','El coordinador no tiene carreras asignadas.','warning');
       return;
     }
-
-    panel.classList.add('is-hidden');
-    panel.hidden = true;
+    mostrarEstado('estadoPrincipal','Mostrando ' + (snapshot.registrosFiltrados || []).length + ' estudiante(s).','success');
   }
 
-  function escribirDiagnostico(data) {
-    var pre = document.getElementById('diagnosticoResultado');
-
-    if (!pre) {
-      return;
-    }
-
-    if (typeof data === 'string') {
-      pre.textContent = data;
-      return;
-    }
-
-    pre.textContent = JSON.stringify(data || {}, null, 2);
+  function mostrarEstado(id,mensaje,tipo){
+    var el = typeof id === 'string' ? $(id.replace(/^#/,'')) : id;
+    if(!el) return;
+    el.classList.remove('is-info','is-success','is-warning','is-error');
+    el.classList.add('is-' + (tipo || 'info'));
+    el.textContent = mensaje || '';
   }
 
-  function mostrarMensajeTabla(mensaje) {
-    var tbody = document.getElementById('tablaEstudiantesBody');
-
-    if (!tbody) {
-      return;
-    }
-
-    tbody.innerHTML = [
-      '<tr>',
-      '  <td colspan="3" class="empty-cell">' + obtenerUtils().escaparHtml(mensaje || '') + '</td>',
-      '</tr>'
-    ].join('');
+  function setTexto(id,valor){
+    var el = typeof id === 'string' ? $(id.replace(/^#/,'')) : id;
+    if(el) el.textContent = valor === null || valor === undefined ? '' : String(valor);
   }
 
-  function enfocar(selector) {
-    var elemento = document.querySelector(selector);
+  function setCargando(activo,mensaje){
+    var overlay = $('loadingOverlay');
+    var label = $('loadingTexto');
+    if(overlay) overlay.hidden = !activo;
+    if(label && mensaje) label.textContent = mensaje;
+  }
 
-    if (elemento && typeof elemento.focus === 'function') {
-      elemento.focus();
-    }
+  function mostrarCargando(mensaje){ setCargando(true,mensaje || 'Cargando...'); }
+  function ocultarCargando(){ setCargando(false,''); }
+
+  function mostrarDiagnostico(){
+    var panel = $('diagnosticoPanel');
+    if(panel){ panel.hidden = false; panel.classList.remove('is-hidden'); panel.scrollIntoView({ behavior:'smooth', block:'start' }); }
+  }
+
+  function ocultarDiagnostico(){
+    var panel = $('diagnosticoPanel');
+    if(panel){ panel.hidden = true; panel.classList.add('is-hidden'); }
+  }
+
+  function escribirDiagnostico(data){
+    var pre = $('diagnosticoResultado');
+    if(pre) pre.textContent = typeof data === 'string' ? data : JSON.stringify(data || {}, null, 2);
+  }
+
+  function enfocar(selector){
+    var el = document.querySelector(selector);
+    if(el && typeof el.focus === 'function') el.focus();
   }
 
   window.CoordinadorMVPUI = Object.freeze({
     iniciar: iniciar,
     render: render,
-    pintarCoordinadores: pintarCoordinadores,
-    pintarResumenCoordinador: pintarResumenCoordinador,
-    pintarMenu: pintarMenu,
-    pintarEncabezadoVista: pintarEncabezadoVista,
-    pintarTabla: pintarTabla,
-    pintarContador: pintarContador,
-    actualizarDescripcionEstado: actualizarDescripcionEstado,
     mostrarEstado: mostrarEstado,
-    setTexto: setTexto,
-    setValor: setValor,
-    limpiarBuscador: limpiarBuscador,
-    setCargando: setCargando,
     mostrarCargando: mostrarCargando,
     ocultarCargando: ocultarCargando,
+    setCargando: setCargando,
     mostrarDiagnostico: mostrarDiagnostico,
     ocultarDiagnostico: ocultarDiagnostico,
     escribirDiagnostico: escribirDiagnostico,
-    mostrarMensajeTabla: mostrarMensajeTabla,
-    enfocar: enfocar
+    enfocar: enfocar,
+    textoEstado: textoEstado
   });
-})(window, document);
+})(window,document);
