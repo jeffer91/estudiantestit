@@ -1,0 +1,44 @@
+/* Vista Estadísticas */
+.ad-stats-controls{
+  display:grid;
+  grid-template-columns:minmax(260px,460px) auto;
+  gap:14px;
+  align-items:end;
+  margin-bottom:16px
+}
+
+.ad-stats-controls label{
+  display:flex;
+  flex-direction:column;
+  gap:7px
+}
+
+.ad-stats-global{min-width:720px}
+.ad-stats-careers{min-width:760px}
+.ad-stats-global th:not(:first-child),
+.ad-stats-global td:not(:first-child),
+.ad-stats-careers th:not(:first-child),
+.ad-stats-careers td:not(:first-child){text-align:center}
+
+.ad-stats-percent{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:72px;
+  min-height:30px;
+  padding:5px 9px;
+  border-radius:999px;
+  background:#eaf2fb;
+  color:#123f70;
+  font-weight:800
+}
+
+.ad-section-head-compact{
+  align-items:center;
+  margin-bottom:12px
+}
+
+@media(max-width:720px){
+  .ad-stats-controls{grid-template-columns:1fr}
+  .ad-stats-controls .ad-btn{width:100%}
+}
