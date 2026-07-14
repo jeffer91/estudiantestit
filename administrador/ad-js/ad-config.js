@@ -12,7 +12,7 @@ Función:
 
   var AD_CONFIG = {
     nombreApp: "Administrador Titulación",
-    version: "1.0.0",
+    version: "1.2.1",
     entorno: "produccion",
     administrador: "administrador",
 
@@ -145,7 +145,9 @@ Función:
   function ocultarToken(valor){
     var texto = normalizarTexto(valor);
     if (!texto) return "";
-    if (texto.length <= AD_CONFIG.sheets.tokenVisibleMax) return texto.charAt(0) + "******";
+    if (texto.length <= AD_CONFIG.sheets.tokenVisibleMax) {
+      return texto.charAt(0) + "******";
+    }
     return texto.slice(0, AD_CONFIG.sheets.tokenVisibleMax) + "******";
   }
 
