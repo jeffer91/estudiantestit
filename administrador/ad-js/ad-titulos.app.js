@@ -2,119 +2,169 @@
 Archivo: ad-titulos.app.js
 Ruta: /administrador/ad-js/ad-titulos.app.js
 Función:
-- Complemento visual para búsqueda y listado de títulos.
+- Sustituir las pantallas antiguas Títulos y Devolver título.
+- Construir una única pantalla Estudiantes por período.
+- Cargar los módulos y estilos de la nueva pantalla.
 ========================================================= */
-(function(window, document){
+(function(window,document){
   "use strict";
 
-  var cacheTitulos = [];
+  function $(id){return document.getElementById(id)}
 
-  function cfg(){ return window.AD_CONFIG || {}; }
-  function fs(){ if (!window.ADFirebaseService) throw new Error("ADFirebaseService no está disponible."); return window.ADFirebaseService; }
-  function ts(){ if (!window.ADTitulosService) throw new Error("ADTitulosService no está disponible."); return window.ADTitulosService; }
-  function el(id){ return document.getElementById(id); }
-  function txt(v){ return String(v === null || v === undefined ? "" : v).trim(); }
-  function val(id){ var x = el(id); return x ? txt(x.value) : ""; }
-  function setText(id, v){ var x = el(id); if (x) x.textContent = v; }
-  function setHTML(id, v){ var x = el(id); if (x) x.innerHTML = v; }
-  function esc(v){ return txt(v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\"/g,"&quot;").replace(/'/g,"&#039;"); }
-  function diag(v){ setText("ad-panel-diagnostico", v); }
-  function colTitulos(){ return (cfg().colecciones || {}).titulos; }
-  function clean(v){ return ts().limpiarCedula ? ts().limpiarCedula(v) : txt(v).replace(/[^0-9A-Za-z]/g, ""); }
-
-  function detener(ev){
-    if (!ev) return;
-    ev.preventDefault();
-    ev.stopPropagation();
-    if (ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+  function agregarCss(){
+    if(document.getElementById("ad-estudiantes-css"))return;
+    var link=document.createElement("link");
+    link.id="ad-estudiantes-css";
+    link.rel="stylesheet";
+    link.href="./ad-css/ad-estudiantes.css?v=1.1.0";
+    document.head.appendChild(link);
   }
 
-  function buscarDoc(id){
-    var ced = clean(id);
-    if (!ced) return Promise.reject(new Error("Ingresa una identificación."));
-    return fs().leerDocumento(colTitulos(), ced).then(function(resp){
-      if (resp.existe) return resp.data;
-      return fs().consultarPorCampo(colTitulos(), "cedula", "==", ced, 1).then(function(q){ return q.datos && q.datos.length ? q.datos[0] : null; });
+  function cargarScript(src,id){
+    return new Promise(function(resolve,reject){
+      if(id&&document.getElementById(id)){resolve();return;}
+      var script=document.createElement("script");
+      script.src=src;
+      script.async=false;
+      if(id)script.id=id;
+      script.onload=function(){resolve()};
+      script.onerror=function(){reject(new Error("No se pudo cargar "+src))};
+      document.body.appendChild(script);
     });
   }
 
-  function cruzar(doc){
-    if (!doc) return Promise.resolve(null);
-    var ced = clean(doc.cedula || doc.numeroIdentificacion || doc._docId || "");
-    return ts().buscarEstudiantePorCedula(ced).then(function(est){
-      return {
-        doc: doc,
-        cedula: ced,
-        nombre: txt((est && (est.Nombres || est.nombres)) || doc.Nombres || doc.nombres || doc.estudiante || ""),
-        carrera: txt((est && (est.NombreCarrera || est.nombreCarrera)) || doc.NombreCarrera || doc.carrera || ""),
-        periodo: txt((est && est.periodoLabel) || doc.periodoLabel || doc.periodoId || ""),
-        estado: txt(doc.estado || ""),
-        fecha: txt(doc.fechaenviotitulos || doc.fechaEnvioTitulos || doc.creadoEn || doc.createdAt || "")
-      };
+  function htmlEstudiantes(){
+    return [
+      '<div class="ad-section-head">',
+      '  <div>',
+      '    <p class="ad-eyebrow">Seguimiento</p>',
+      '    <h3>Estudiantes</h3>',
+      '    <p class="ad-muted">Selecciona un período para consultar a todos sus estudiantes y el estado de sus propuestas.</p>',
+      '  </div>',
+      '</div>',
+      '<div class="ad-card">',
+      '  <div class="ad-estudiantes-toolbar">',
+      '    <label class="ad-periodo-selector">',
+      '      <span>Período</span>',
+      '      <select id="ad-estudiantes-periodo"><option value="">Cargando períodos...</option></select>',
+      '    </label>',
+      '    <div class="ad-estudiantes-resumen" aria-live="polite">',
+      '      <span>Total <strong id="ad-estudiantes-total">0</strong></span>',
+      '      <span>Enviaron <strong id="ad-estudiantes-enviaron">0</strong></span>',
+      '      <span>No enviaron <strong id="ad-estudiantes-no-enviaron">0</strong></span>',
+      '      <span>Devueltos <strong id="ad-estudiantes-devueltos">0</strong></span>',
+      '    </div>',
+      '  </div>',
+      '  <div id="ad-estado-estudiantes" class="ad-status-box">Selecciona un período para cargar estudiantes.</div>',
+      '  <div class="ad-table-wrap">',
+      '    <table class="ad-table ad-tabla-estudiantes">',
+      '      <thead><tr><th>Cédula</th><th>Nombre</th><th>Carrera</th><th>Estado</th><th>Ver más</th></tr></thead>',
+      '      <tbody id="ad-tabla-estudiantes"><tr><td colspan="5" class="ad-empty">Sin estudiantes cargados.</td></tr></tbody>',
+      '    </table>',
+      '  </div>',
+      '</div>'
+    ].join("");
+  }
+
+  function agregarModal(){
+    if($("ad-estudiante-modal"))return;
+    var modal=document.createElement("section");
+    modal.className="ad-modal";
+    modal.id="ad-estudiante-modal";
+    modal.hidden=true;
+    modal.setAttribute("role","dialog");
+    modal.setAttribute("aria-modal","true");
+    modal.setAttribute("aria-labelledby","ad-estudiante-modal-titulo");
+    modal.innerHTML=[
+      '<div class="ad-modal-backdrop" data-ad-modal-cerrar></div>',
+      '<div class="ad-modal-card">',
+      '  <header class="ad-modal-header">',
+      '    <div>',
+      '      <p class="ad-eyebrow">Detalle del estudiante</p>',
+      '      <h3 id="ad-estudiante-modal-titulo">Información</h3>',
+      '      <p id="ad-estudiante-modal-subtitulo" class="ad-muted"></p>',
+      '    </div>',
+      '    <button class="ad-icon-btn" type="button" data-ad-modal-cerrar aria-label="Cerrar">×</button>',
+      '  </header>',
+      '  <div class="ad-modal-body" id="ad-estudiante-modal-contenido"></div>',
+      '  <footer class="ad-modal-footer"><button class="ad-btn ad-btn-secondary" type="button" data-ad-modal-cerrar>Cerrar</button></footer>',
+      '</div>'
+    ].join("");
+    document.body.appendChild(modal);
+  }
+
+  function mostrarVista(id){
+    document.querySelectorAll("[data-ad-view]").forEach(function(vista){
+      var activa=vista.id===id;
+      vista.hidden=!activa;
+      vista.classList.toggle("is-active",activa);
     });
-  }
-
-  function renderDetalle(item){
-    if (!item) { setText("ad-resultado-titulo", "No se encontró registro enviado para esa identificación."); return; }
-    var d = item.doc || {};
-    setText("ad-resultado-titulo", [
-      "Identificación: " + item.cedula,
-      "Estudiante: " + (item.nombre || "Pendiente cruce Estudiantes"),
-      "Carrera: " + (item.carrera || "Pendiente cruce"),
-      "Período: " + (item.periodo || "sin dato"),
-      "Estado: " + (item.estado || "sin dato"),
-      "Fecha envío: " + (item.fecha || "sin dato"),
-      "",
-      "Título 1: " + (d.titulo1 || d.Titulo1 || "sin dato"),
-      "Título 2: " + (d.titulo2 || d.Titulo2 || "sin dato"),
-      "Título 3: " + (d.titulo3 || d.Titulo3 || "sin dato")
-    ].join("\n"));
-  }
-
-  function fila(item){
-    return "<tr><td>" + esc(item.cedula) + "</td><td>" + esc(item.nombre || "Pendiente cruce Estudiantes") + "</td><td>" + esc(item.carrera || "Pendiente cruce") + "</td><td>" + esc(item.estado) + "</td><td>" + esc(item.fecha) + "</td></tr>";
-  }
-
-  function renderTabla(items){
-    var filas = [];
-    (items || []).forEach(function(item){ if (item) filas.push(fila(item)); });
-    setHTML("ad-tabla-titulos", filas.length ? filas.join("") : '<tr><td colspan="5" class="ad-empty">No hay resultados.</td></tr>');
-  }
-
-  function buscar(ev){
-    detener(ev);
-    diag("Buscando registro...");
-    return buscarDoc(val("ad-buscar-cedula")).then(cruzar).then(function(item){
-      renderDetalle(item);
-      renderTabla(item ? [item] : []);
-      diag(item ? "Registro encontrado." : "No se encontró registro.");
-    }).catch(function(error){ diag("Error en búsqueda:\n" + (error.message || String(error))); });
-  }
-
-  function listar(ev){
-    detener(ev);
-    var limite = Number((cfg().titulos && cfg().titulos.paginaTamano) || 25);
-    if (!Number.isFinite(limite) || limite <= 0) limite = 25;
-    diag("Cargando registros enviados...");
-    return ts().listarTitulosBasico(limite).then(function(lista){
-      cacheTitulos = lista || [];
-      return Promise.all(cacheTitulos.map(cruzar));
-    }).then(function(items){
-      renderTabla(items.filter(Boolean));
-      setText("ad-resultado-titulo", "Listado cargado. Mostrando hasta " + limite + " registros.");
-      diag("Listado cargado: " + items.filter(Boolean).length + " registros visibles.");
-    }).catch(function(error){
-      diag("Error al listar registros:\n" + (error.message || String(error)));
+    document.querySelectorAll("[data-ad-view-target]").forEach(function(enlace){
+      var activo=enlace.getAttribute("data-ad-view-target")===id;
+      enlace.classList.toggle("is-active",activo);
+      if(activo)enlace.setAttribute("aria-current","page");
+      else enlace.removeAttribute("aria-current");
     });
+    window.dispatchEvent(new CustomEvent("ad:vista-cambiada",{detail:{id:id}}));
   }
 
-  function conectar(){
-    var b = el("ad-btn-buscar-titulo");
-    var l = el("ad-btn-listar-titulos");
-    if (b) b.addEventListener("click", buscar, true);
-    if (l) l.addEventListener("click", listar, true);
+  function instalarNavegacion(){
+    document.addEventListener("click",function(evento){
+      var enlace=evento.target&&evento.target.closest?evento.target.closest("[data-ad-view-target]"):null;
+      if(!enlace)return;
+      evento.preventDefault();
+      evento.stopImmediatePropagation();
+      mostrarVista(enlace.getAttribute("data-ad-view-target"));
+    },true);
   }
 
-  document.addEventListener("DOMContentLoaded", conectar);
-  window.ADTitulosApp = { buscarTitulo: buscar, listarTitulos: listar };
-})(window, document);
+  function transformar(){
+    var enlaceTitulos=document.querySelector('[data-ad-view-target="ad-seccion-titulos"]');
+    var seccionTitulos=$("ad-seccion-titulos");
+    var enlaceDevolver=document.querySelector('[data-ad-view-target="ad-seccion-devolver"]');
+    var seccionDevolver=$("ad-seccion-devolver");
+    var tituloPrincipal=document.querySelector(".ad-header h2");
+    var descripcionPrincipal=document.querySelector(".ad-header .ad-muted");
+
+    if(enlaceTitulos){
+      enlaceTitulos.textContent="Estudiantes";
+      enlaceTitulos.setAttribute("href","#ad-seccion-estudiantes");
+      enlaceTitulos.setAttribute("data-ad-view-target","ad-seccion-estudiantes");
+    }
+
+    if(seccionTitulos){
+      seccionTitulos.id="ad-seccion-estudiantes";
+      seccionTitulos.classList.remove("ad-danger-zone");
+      seccionTitulos.innerHTML=htmlEstudiantes();
+    }
+
+    if(enlaceDevolver)enlaceDevolver.remove();
+    if(seccionDevolver)seccionDevolver.remove();
+
+    if(tituloPrincipal)tituloPrincipal.textContent="Administrador de titulación";
+    if(descripcionPrincipal)descripcionPrincipal.textContent="Gestión de períodos, coordinadores, carreras, estudiantes y diagnóstico de conexiones.";
+
+    var badge=$("ad-badge-version");
+    var footer=$("ad-footer-version");
+    if(badge)badge.textContent="v1.1.0";
+    if(footer)footer.textContent="Versión 1.1.0";
+
+    agregarCss();
+    agregarModal();
+    instalarNavegacion();
+  }
+
+  transformar();
+
+  cargarScript("./ad-js/ad-estudiantes.service.js?v=1.1.0","ad-estudiantes-service-script")
+    .then(function(){return cargarScript("./ad-js/ad-estudiantes.runtime.js?v=1.1.0","ad-estudiantes-runtime-script")})
+    .catch(function(error){
+      var estado=$("ad-estado-estudiantes");
+      if(estado){
+        estado.classList.add("is-error");
+        estado.textContent=error.message||String(error);
+      }
+    });
+
+  window.ADTitulosApp={mostrarVista:mostrarVista,transformar:transformar};
+})(window,document);
