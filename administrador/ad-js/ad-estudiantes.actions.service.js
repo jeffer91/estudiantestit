@@ -3,27 +3,22 @@ Archivo: ad-estudiantes.actions.service.js
 Ruta: /administrador/ad-js/ad-estudiantes.actions.service.js
 Función:
 - Devolver propuestas desde el administrador.
-- Eliminar las propuestas activas sin perder trazabilidad.
+- Eliminar propuestas activas sin perder trazabilidad.
 - Respaldar cada operación en titulos_historial.
 - Registrar auditoría en titulos_logs.
+- Evitar que Sheets o historial restauren visualmente títulos eliminados.
 ========================================================= */
 (function(window){
   "use strict";
 
   function cfg(){ return window.AD_CONFIG || {}; }
   function fs(){
-    if (!window.ADFirebaseService) {
-      throw new Error("ADFirebaseService no está disponible.");
-    }
+    if (!window.ADFirebaseService) throw new Error("ADFirebaseService no está disponible.");
     return window.ADFirebaseService;
   }
   function cols(){ return cfg().colecciones || {}; }
-  function texto(valor){
-    return String(valor === null || valor === undefined ? "" : valor).trim();
-  }
-  function limpiarCedula(valor){
-    return texto(valor).replace(/[^0-9A-Za-z]/g, "");
-  }
+  function texto(valor){ return String(valor === null || valor === undefined ? "" : valor).trim(); }
+  function limpiarCedula(valor){ return texto(valor).replace(/[^0-9A-Za-z]/g, ""); }
 
   function obtenerRaw(item){
     if (item && item.detalle && item.detalle.raw) return item.detalle.raw;
@@ -34,13 +29,7 @@ Función:
 
   function obtenerDocumentoId(item){
     var raw = obtenerRaw(item);
-    return texto(
-      raw._docId ||
-      raw.documentoId ||
-      raw.idDocumento ||
-      raw.tituloId ||
-      (item && item.cedula)
-    );
+    return texto(raw._docId || raw.documentoId || raw.idDocumento || raw.tituloId || (item && item.cedula));
   }
 
   function tieneDocumentoActivo(item){
@@ -49,9 +38,7 @@ Función:
 
   function validarMotivo(motivo){
     var limpio = texto(motivo);
-    if (limpio.length < 5) {
-      throw new Error("Escribe un motivo de al menos 5 caracteres.");
-    }
+    if (limpio.length < 5) throw new Error("Escribe un motivo de al menos 5 caracteres.");
     return limpio;
   }
 
@@ -73,12 +60,8 @@ Función:
     var refTitulo;
     var FieldValue;
 
-    if (!documentoId) {
-      return Promise.reject(new Error("No se encontró el documento activo de títulos en Firebase."));
-    }
-    if (typeof patchFactory !== "function") {
-      return Promise.reject(new Error("La acción administrativa no está configurada correctamente."));
-    }
+    if (!documentoId) return Promise.reject(new Error("No se encontró el documento activo de títulos en Firebase."));
+    if (typeof patchFactory !== "function") return Promise.reject(new Error("La acción administrativa no está configurada correctamente."));
 
     return fs().inicializar().then(function(){
       db = fs().obtenerDb();
@@ -97,70 +80,58 @@ Función:
       var batch;
       var fechaLocal = new Date().toISOString();
 
-      if (!snapshot.exists) {
-        throw new Error("El documento activo ya no existe. Actualiza la pantalla e inténtalo nuevamente.");
-      }
+      if (!snapshot.exists) throw new Error("El documento activo ya no existe. Actualiza la pantalla e inténtalo nuevamente.");
 
       actual = snapshot.data() || {};
-      cedula = limpiarCedula(
-        actual.cedula || actual.numeroIdentificacion || (item && item.cedula)
-      );
-      periodo = texto(
-        actual.periodoId || actual.periodoLabel || (item && (item.periodoId || item.periodoLabel))
-      );
+      cedula = limpiarCedula(actual.cedula || actual.numeroIdentificacion || (item && item.cedula));
+      periodo = texto(actual.periodoId || actual.periodoLabel || (item && (item.periodoId || item.periodoLabel)));
       hid = historialId(item, accion);
       refHistorial = db.collection(cols().historial).doc(hid);
       refLog = db.collection(cols().logs).doc();
 
       respaldo = Object.assign({}, actual, {
-        _idOriginal: snapshot.id,
-        accionHistorial: accion,
-        motivoAdministrador: motivo,
-        archivadoPor: cfg().administrador || "administrador",
-        archivadoEn: FieldValue.serverTimestamp(),
-        archivadoEnLocal: fechaLocal
+        _idOriginal:snapshot.id,
+        accionHistorial:accion,
+        motivoAdministrador:motivo,
+        archivadoPor:cfg().administrador || "administrador",
+        archivadoEn:FieldValue.serverTimestamp(),
+        archivadoEnLocal:fechaLocal
       });
 
       patch = patchFactory({
-        actual: actual,
-        motivo: motivo,
-        fechaLocal: fechaLocal,
-        FieldValue: FieldValue,
-        administrador: cfg().administrador || "administrador"
+        actual:actual,
+        motivo:motivo,
+        fechaLocal:fechaLocal,
+        FieldValue:FieldValue,
+        administrador:cfg().administrador || "administrador"
       });
 
       batch = db.batch();
-      batch.set(refHistorial, respaldo, { merge:false });
-      batch.set(refTitulo, patch, { merge:true });
-      batch.set(refLog, {
-        accion: accion,
-        modulo: "estudiantes_administrador",
-        origen: "administrador",
-        estado: "OK",
-        documentoId: snapshot.id,
-        cedula: cedula,
-        periodo: periodo,
-        motivo: motivo,
-        historialId: hid,
-        administrador: cfg().administrador || "administrador",
-        fecha: fechaLocal,
-        creadoEn: FieldValue.serverTimestamp()
+      batch.set(refHistorial,respaldo,{ merge:false });
+      batch.set(refTitulo,patch,{ merge:true });
+      batch.set(refLog,{
+        accion:accion,
+        modulo:"estudiantes_administrador",
+        origen:"administrador",
+        estado:"OK",
+        documentoId:snapshot.id,
+        cedula:cedula,
+        periodo:periodo,
+        motivo:motivo,
+        historialId:hid,
+        administrador:cfg().administrador || "administrador",
+        fecha:fechaLocal,
+        creadoEn:FieldValue.serverTimestamp()
       });
 
       return batch.commit().then(function(){
-        return {
-          ok:true,
-          accion:accion,
-          documentoId:snapshot.id,
-          historialId:hid,
-          cedula:cedula
-        };
+        return { ok:true, accion:accion, documentoId:snapshot.id, historialId:hid, cedula:cedula };
       });
     });
   }
 
   function devolverTitulos(item, motivo){
-    return ejecutar(item, {
+    return ejecutar(item,{
       accion:"ADMIN_TITULOS_DEVUELTOS",
       motivo:motivo,
       patchFactory:function(ctx){
@@ -168,6 +139,7 @@ Función:
           estado:"DEVUELTO",
           estadoFinal:"DEVUELTO",
           permitirReenvio:true,
+          titulosEliminadosPorAdmin:false,
           motivoDevolucion:ctx.motivo,
           comentarioCoordinador:ctx.motivo,
           coordinador:{ id:"administrador", nombre:"Administrador" },
@@ -191,7 +163,7 @@ Función:
   }
 
   function eliminarTitulos(item, motivo){
-    return ejecutar(item, {
+    return ejecutar(item,{
       accion:"ADMIN_TITULOS_ELIMINADOS",
       motivo:motivo,
       patchFactory:function(ctx){
@@ -199,6 +171,7 @@ Función:
           estado:"NO_ENVIO",
           estadoFinal:"NO_ENVIO",
           permitirReenvio:true,
+          titulosEliminadosPorAdmin:true,
           eliminadoPor:ctx.administrador,
           motivoEliminacion:ctx.motivo,
           fechaEliminacion:ctx.FieldValue.serverTimestamp(),
@@ -232,10 +205,68 @@ Función:
     });
   }
 
+  function limpiarDetalleEliminado(item){
+    var raw = obtenerRaw(item);
+    var eliminado = raw.titulosEliminadosPorAdmin === true || (
+      String(raw.estado || "").toUpperCase() === "NO_ENVIO" &&
+      raw.permitirReenvio === true &&
+      Boolean(raw.motivoEliminacion)
+    );
+    var detalle;
+
+    if (!eliminado) return item;
+
+    detalle = Object.assign({},item.detalle || item.titulo || {});
+    detalle.titulo1 = "";
+    detalle.titulo2 = "";
+    detalle.titulo3 = "";
+    detalle.tituloPreferido = "";
+    detalle.tituloAprobado = "";
+    detalle.tituloaprobado = "";
+    detalle.coordinador = "";
+    detalle.coordinadorNombre = "";
+    detalle.comentario = "";
+    detalle.comentarioCoordinador = "";
+    detalle.fechaEnvio = "";
+    detalle.fechaRevision = "";
+    detalle.estado = "NO_ENVIO";
+    detalle.estadoNuevo = "NO_ENVIO";
+    detalle.tienePropuestas = false;
+    detalle.propuestasCompletas = false;
+    detalle.tieneResolucion = false;
+    detalle.raw = raw;
+
+    item.estado = "NO_ENVIO";
+    item.registroIncompleto = false;
+    item.detalle = detalle;
+    item.titulo = detalle;
+    item.revision = detalle;
+    return item;
+  }
+
+  function instalarProteccionConsultas(){
+    var base = window.ADEstudiantesService;
+    var cargarOriginal;
+    if (!base || base.__accionesProtegidas || typeof base.cargar !== "function") return;
+
+    cargarOriginal = base.cargar;
+    base.cargar = function(periodo){
+      return cargarOriginal.call(base,periodo).then(function(resultado){
+        resultado = resultado || {};
+        resultado.estudiantes = (resultado.estudiantes || []).map(limpiarDetalleEliminado);
+        return resultado;
+      });
+    };
+    base.__accionesProtegidas = true;
+  }
+
+  instalarProteccionConsultas();
+
   window.ADEstudiantesActionsService = {
     obtenerDocumentoId:obtenerDocumentoId,
     tieneDocumentoActivo:tieneDocumentoActivo,
     devolverTitulos:devolverTitulos,
-    eliminarTitulos:eliminarTitulos
+    eliminarTitulos:eliminarTitulos,
+    limpiarDetalleEliminado:limpiarDetalleEliminado
   };
 })(window);
