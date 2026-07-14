@@ -11,6 +11,15 @@ Función:
 (function(window,document){
   "use strict";
 
+  if (window.AD_CONFIG) {
+    window.AD_CONFIG.version = "1.3.0";
+    window.AD_CONFIG.accionesLog = window.AD_CONFIG.accionesLog || {};
+    window.AD_CONFIG.accionesLog.periodoActivado =
+      window.AD_CONFIG.accionesLog.periodoActivado || "ADMIN_PERIODO_ACTIVADO";
+    window.AD_CONFIG.accionesLog.periodoDesactivado =
+      window.AD_CONFIG.accionesLog.periodoDesactivado || "ADMIN_PERIODO_DESACTIVADO";
+  }
+
   var APP_VERSION = window.AD_CONFIG && window.AD_CONFIG.version
     ? String(window.AD_CONFIG.version)
     : "1.3.0";
