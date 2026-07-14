@@ -5,10 +5,14 @@ Función:
 - Sustituir las pantallas antiguas Títulos y Devolver título.
 - Construir una única pantalla Estudiantes por período.
 - Agregar filtros de carrera y estado.
-- Cargar los módulos y estilos de la pantalla.
+- Coordinar la navegación sin bloquear los módulos independientes.
 ========================================================= */
 (function(window,document){
   "use strict";
+
+  var APP_VERSION = window.AD_CONFIG && window.AD_CONFIG.version
+    ? String(window.AD_CONFIG.version)
+    : "1.2.1";
 
   function $(id){ return document.getElementById(id); }
 
@@ -18,7 +22,7 @@ Función:
     var link = document.createElement("link");
     link.id = "ad-estudiantes-css";
     link.rel = "stylesheet";
-    link.href = "./ad-css/ad-estudiantes.css?v=1.2.0";
+    link.href = "./ad-css/ad-estudiantes.css?v=" + encodeURIComponent(APP_VERSION);
     document.head.appendChild(link);
   }
 
@@ -131,6 +135,29 @@ Función:
     document.body.appendChild(modal);
   }
 
+  function activarModuloVista(id){
+    window.setTimeout(function(){
+      if (
+        id === "ad-seccion-carreras" &&
+        window.ADCoordinadoresApp &&
+        typeof window.ADCoordinadoresApp.cargarDatosCarreras === "function"
+      ) {
+        window.ADCoordinadoresApp.cargarDatosCarreras(false).catch(function(){});
+      }
+
+      if (
+        id === "ad-seccion-estudiantes" &&
+        window.ADEstudiantesRuntime &&
+        typeof window.ADEstudiantesRuntime.cargarPeriodos === "function"
+      ) {
+        var selector = $("ad-estudiantes-periodo");
+        if (!selector || !selector.options || selector.options.length <= 1) {
+          window.ADEstudiantesRuntime.cargarPeriodos();
+        }
+      }
+    },0);
+  }
+
   function mostrarVista(id){
     document.querySelectorAll("[data-ad-view]").forEach(function(vista){
       var activa = vista.id === id;
@@ -148,6 +175,8 @@ Función:
     window.dispatchEvent(new CustomEvent("ad:vista-cambiada",{
       detail:{ id:id }
     }));
+
+    activarModuloVista(id);
   }
 
   function instalarNavegacion(){
@@ -159,7 +188,6 @@ Función:
       if (!enlace) return;
 
       evento.preventDefault();
-      evento.stopImmediatePropagation();
       mostrarVista(enlace.getAttribute("data-ad-view-target"));
     },true);
   }
@@ -196,8 +224,8 @@ Función:
 
     badge = $("ad-badge-version");
     footer = $("ad-footer-version");
-    if (badge) badge.textContent = "v1.2.0";
-    if (footer) footer.textContent = "Versión 1.2.0";
+    if (badge) badge.textContent = "v" + APP_VERSION;
+    if (footer) footer.textContent = "Versión " + APP_VERSION;
 
     agregarCss();
     agregarModal();
@@ -207,12 +235,12 @@ Función:
   transformar();
 
   cargarScript(
-    "./ad-js/ad-estudiantes.service.js?v=1.2.0",
+    "./ad-js/ad-estudiantes.service.js?v=" + encodeURIComponent(APP_VERSION),
     "ad-estudiantes-service-script"
   )
     .then(function(){
       return cargarScript(
-        "./ad-js/ad-estudiantes.runtime.js?v=1.2.0",
+        "./ad-js/ad-estudiantes.runtime.js?v=" + encodeURIComponent(APP_VERSION),
         "ad-estudiantes-runtime-script"
       );
     })
@@ -226,6 +254,7 @@ Función:
 
   window.ADTitulosApp = {
     mostrarVista: mostrarVista,
-    transformar: transformar
+    transformar: transformar,
+    activarModuloVista: activarModuloVista
   };
 })(window,document);
