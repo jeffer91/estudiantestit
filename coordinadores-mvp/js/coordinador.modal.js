@@ -1,323 +1,211 @@
-/*
-  Archivo: coordinador.modal.js
-  Ruta: coordinadores-mvp/js/coordinador.modal.js
-
-  Funciones principales:
-  - Abrir y cerrar el modal grande de revisión.
-  - Mostrar datos del estudiante seleccionado.
-  - Mostrar las 3 tarjetas de títulos.
-  - Permitir seleccionar un título y copiarlo al campo de título final.
-  - Validar datos para aprobar o devolver.
-  - Entregar la resolución al controlador principal.
-*/
-
-(function (window, document) {
+/* =========================================================
+Archivo: coordinador.modal.js
+Ruta: /coordinadores-mvp/js/coordinador.modal.js
+Función:
+- Mostrar propuestas y datos del estudiante.
+- Preparar aprobación, corrección o devolución.
+- Mostrar aprobados y devueltos en modo lectura.
+========================================================= */
+(function(window,document){
   'use strict';
 
   var envioActual = null;
+  var iniciado = false;
 
-  function obtenerConfig() {
-    return window.CoordinadorMVPConfig || null;
-  }
+  function state(){ return window.CoordinadorMVPState || null; }
+  function ui(){ return window.CoordinadorMVPUI || null; }
+  function utils(){ return window.CoordinadorMVPUtils || null; }
+  function $(id){ return document.getElementById(id); }
+  function texto(valor){ return String(valor === null || valor === undefined ? '' : valor).trim(); }
+  function setTexto(id,valor){ var el=$(id); if(el) el.textContent=texto(valor)||'-'; }
+  function setValor(id,valor){ var el=$(id); if(el) el.value=texto(valor); }
+  function estadoNormal(valor){ return texto(valor).toUpperCase(); }
 
-  function obtenerUtils() {
-    return window.CoordinadorMVPUtils || null;
-  }
-
-  function obtenerState() {
-    return window.CoordinadorMVPState || null;
-  }
-
-  function obtenerUI() {
-    return window.CoordinadorMVPUI || null;
-  }
-
-  function validarDependencias() {
-    return !!(obtenerConfig() && obtenerUtils() && obtenerState());
-  }
-
-  function iniciar() {
-    if (!validarDependencias()) {
-      return false;
-    }
-
-    conectarEventos();
+  function iniciar(){
+    if(iniciado) return true;
+    iniciado = true;
+    document.addEventListener('change',function(evento){
+      if(evento.target && evento.target.name === 'tituloSeleccionado'){
+        seleccionarTitulo(Number(evento.target.value || 0));
+      }
+    });
     return true;
   }
 
-  function conectarEventos() {
-    document.addEventListener('change', function (evento) {
-      var target = evento.target;
-
-      if (!target || target.name !== 'tituloSeleccionado') {
-        return;
-      }
-
-      seleccionarTitulo(Number(target.value || 0));
-    });
+  function esPendiente(envio){
+    return ['PENDIENTE_REVISION','PENDIENTE_SYNC','ENVIADO','PENDIENTE'].indexOf(estadoNormal(envio && envio.estado)) >= 0;
   }
 
-  function abrir(envio) {
-    if (!validarDependencias()) {
-      return;
-    }
-
+  function abrir(envio){
     envioActual = envio || null;
-
-    if (!envioActual) {
-      mostrarEstado('No se encontró el estudiante seleccionado.', 'error');
+    if(!envioActual){
+      mostrarEstado('No se encontró el estudiante seleccionado.','error');
       return;
     }
 
     limpiarFormulario();
-    pintarDatosEstudiante(envioActual);
+    pintarDatos(envioActual);
     pintarTitulos(envioActual);
-    mostrarModal();
-
-    mostrarEstado('Selecciona un título o escribe el título final corregido.', 'info');
+    configurarModo(envioActual);
+    $('detalleModal').hidden = false;
+    document.body.style.overflow = 'hidden';
   }
 
-  function cerrar() {
-    var modal = document.getElementById('detalleModal');
-
-    if (!modal) {
-      return;
-    }
-
-    modal.hidden = true;
+  function cerrar(){
+    var modal = $('detalleModal');
+    if(modal) modal.hidden = true;
+    document.body.style.overflow = '';
     envioActual = null;
     limpiarFormulario();
   }
 
-  function mostrarModal() {
-    var modal = document.getElementById('detalleModal');
-
-    if (!modal) {
-      return;
-    }
-
-    modal.hidden = false;
+  function pintarDatos(envio){
+    setTexto('modalTitulo', envio.nombres || 'Revisión de títulos');
+    setTexto('modalSubtitulo', (envio.cedula || '-') + ' · ' + (envio.carrera || '-'));
+    setTexto('detalleCedula', envio.cedula);
+    setTexto('detalleNombre', envio.nombres);
+    setTexto('detalleCarrera', envio.carrera);
+    setTexto('detallePeriodo', envio.periodoLabel || envio.periodoId || envio.periodo);
+    setTexto('detalleFechaEnvio', envio.fechaEnvio);
+    setTexto('detalleEstado', ui() && ui().textoEstado ? ui().textoEstado(envio.estado) : envio.estado);
   }
 
-  function pintarDatosEstudiante(envio) {
-    setTexto('#modalTitulo', envio.nombres || 'Revisión de títulos');
-    setTexto('#modalSubtitulo', 'Cédula: ' + (envio.cedula || '-') + ' | Carrera: ' + (envio.carrera || '-'));
+  function pintarTitulos(envio){
+    setTexto('detalleTitulo1', envio.titulo1 || 'Sin título registrado');
+    setTexto('detalleTitulo2', envio.titulo2 || 'Sin título registrado');
+    setTexto('detalleTitulo3', envio.titulo3 || 'Sin título registrado');
 
-    setTexto('#detalleCedula', envio.cedula || '-');
-    setTexto('#detalleNombre', envio.nombres || '-');
-    setTexto('#detalleCarrera', envio.carrera || '-');
-    setTexto('#detallePeriodo', envio.periodo || '-');
-    setTexto('#detalleTelegram', envio.telegram || '-');
-    setTexto('#detalleEstado', envio.estado || '-');
-  }
-
-  function pintarTitulos(envio) {
-    setTexto('#detalleTitulo1', envio.titulo1 || 'Sin título registrado.');
-    setTexto('#detalleTitulo2', envio.titulo2 || 'Sin título registrado.');
-    setTexto('#detalleTitulo3', envio.titulo3 || 'Sin título registrado.');
-
-    marcarPreferido(envio.tituloPreferido);
-  }
-
-  function marcarPreferido(preferido) {
-    var numero = Number(String(preferido || '').replace(/[^\d]/g, ''));
-    var radio;
-
-    if (!numero || numero < 1 || numero > 3) {
-      return;
-    }
-
-    radio = document.querySelector('input[name="tituloSeleccionado"][value="' + numero + '"]');
-
-    if (radio) {
-      radio.checked = true;
-      seleccionarTitulo(numero);
+    var preferido = Number(String(envio.tituloPreferido || '').replace(/[^\d]/g,''));
+    if(preferido >= 1 && preferido <= 3){
+      var radio = document.querySelector('input[name="tituloSeleccionado"][value="' + preferido + '"]');
+      if(radio){ radio.checked = true; seleccionarTitulo(preferido); }
     }
   }
 
-  function seleccionarTitulo(numero) {
-    var titulo = obtenerTituloPorNumero(numero);
+  function configurarModo(envio){
+    var pendiente = esPendiente(envio);
+    var finalInput = $('tituloFinalInput');
+    var comentario = $('comentarioCoordinadorInput');
+    var aprobar = $('btnAprobarEnvio');
+    var devolver = $('btnDevolverEnvio');
+    var radios = document.querySelectorAll('input[name="tituloSeleccionado"]');
 
-    limpiarSeleccionTarjetas();
-
-    if (numero >= 1 && numero <= 3) {
-      var tarjeta = document.querySelector('.proposal-card[data-propuesta="' + numero + '"]');
-
-      if (tarjeta) {
-        tarjeta.classList.add('is-selected');
-      }
+    if(finalInput){
+      finalInput.readOnly = !pendiente;
+      if(!pendiente) finalInput.value = texto(envio.tituloAprobado);
     }
+    if(comentario){
+      comentario.readOnly = !pendiente;
+      comentario.value = texto(envio.comentarioCoordinador);
+    }
+    if(aprobar) aprobar.hidden = !pendiente;
+    if(devolver) devolver.hidden = !pendiente;
+    radios.forEach(function(radio){ radio.disabled = !pendiente; });
 
-    if (titulo) {
-      setValor('#tituloFinalInput', titulo);
-      mostrarEstado('Título ' + numero + ' seleccionado. Puedes editarlo antes de aprobar.', 'info');
+    if(pendiente){
+      mostrarEstado('Selecciona una propuesta o escribe el título final.','info');
+    }else{
+      mostrarEstado('Registro revisado. Esta vista es solo de lectura.','success');
     }
   }
 
-  function limpiarSeleccionTarjetas() {
-    var tarjetas = document.querySelectorAll('.proposal-card');
-
-    Array.prototype.forEach.call(tarjetas, function (tarjeta) {
-      tarjeta.classList.remove('is-selected');
-    });
+  function seleccionarTitulo(numero){
+    document.querySelectorAll('.proposal-card').forEach(function(tarjeta){ tarjeta.classList.remove('is-selected'); });
+    var tarjeta = document.querySelector('.proposal-card[data-propuesta="' + numero + '"]');
+    if(tarjeta) tarjeta.classList.add('is-selected');
+    if(esPendiente(envioActual)){
+      var titulo = obtenerTituloPorNumero(numero);
+      if(titulo) setValor('tituloFinalInput',titulo);
+    }
   }
 
-  function obtenerTituloPorNumero(numero) {
-    if (!envioActual) {
-      return '';
-    }
-
-    if (numero === 1) return envioActual.titulo1 || '';
-    if (numero === 2) return envioActual.titulo2 || '';
-    if (numero === 3) return envioActual.titulo3 || '';
-
+  function obtenerTituloPorNumero(numero){
+    if(!envioActual) return '';
+    if(numero === 1) return texto(envioActual.titulo1);
+    if(numero === 2) return texto(envioActual.titulo2);
+    if(numero === 3) return texto(envioActual.titulo3);
     return '';
   }
 
-  function obtenerNumeroTituloSeleccionado() {
+  function obtenerNumeroTituloSeleccionado(){
     var radio = document.querySelector('input[name="tituloSeleccionado"]:checked');
-
-    if (!radio) {
-      return 0;
-    }
-
-    return Number(radio.value || 0);
+    return radio ? Number(radio.value || 0) : 0;
   }
 
-  function obtenerResolucion(tipo) {
-    var utils = obtenerUtils();
-    var state = obtenerState();
-    var config = obtenerConfig();
-    var coordinador = state.obtenerCoordinadorActual();
-    var numeroTitulo = obtenerNumeroTituloSeleccionado();
-    var tituloOriginal = obtenerTituloPorNumero(numeroTitulo);
-    var tituloFinal = utils.limpiarTitulo(utils.valorMultilinea('#tituloFinalInput'));
-    var comentario = utils.limpiarTextoMultilinea(utils.valorMultilinea('#comentarioCoordinadorInput'));
+  function obtenerResolucion(tipo){
+    var coordinador = state() && state().obtenerCoordinadorActual();
+    var numero = obtenerNumeroTituloSeleccionado();
+    var original = obtenerTituloPorNumero(numero);
+    var final = texto($('tituloFinalInput') && $('tituloFinalInput').value);
+    var comentario = texto($('comentarioCoordinadorInput') && $('comentarioCoordinadorInput').value);
 
-    if (!envioActual) {
-      return utils.error('No hay estudiante seleccionado.');
+    if(!envioActual) return { ok:false, mensaje:'No hay estudiante seleccionado.' };
+    if(!coordinador) return { ok:false, mensaje:'Selecciona un coordinador.' };
+    if(tipo === 'aprobar' && final.length < 8){
+      return { ok:false, mensaje:'Selecciona o escribe el título final.', selector:'#tituloFinalInput' };
+    }
+    if(tipo === 'devolver' && comentario.length < 4){
+      return { ok:false, mensaje:'Escribe una observación para devolver.', selector:'#comentarioCoordinadorInput' };
     }
 
-    if (!coordinador) {
-      return utils.error(config.obtener('textos.seleccionaCoordinador'));
-    }
-
-    if (tipo === 'aprobar') {
-      if (!tituloFinal || tituloFinal.length < config.obtener('revision.tituloMinimo', 8)) {
-        return utils.error(config.obtener('textos.seleccionaTitulo'), '#tituloFinalInput');
+    return {
+      ok:true,
+      data:{
+        tipo:tipo,
+        envio:utils() && utils().clonar ? utils().clonar(envioActual) : Object.assign({},envioActual),
+        tituloSeleccionadoNumero:numero,
+        tituloOriginal:original,
+        tituloFinal:final,
+        comentarioCoordinador:comentario,
+        coordinador:{ id:coordinador.id, nombre:coordinador.nombre, carreras:coordinador.carreras || [] }
       }
-    }
-
-    if (tipo === 'devolver') {
-      if (
-        config.obtener('revision.comentarioObligatorioAlDevolver', true) &&
-        comentario.length < config.obtener('revision.comentarioMinimo', 4)
-      ) {
-        return utils.error(config.obtener('textos.comentarioDevolucion'), '#comentarioCoordinadorInput');
-      }
-    }
-
-    return utils.ok({
-      tipo: tipo,
-      envio: utils.clonar(envioActual),
-      tituloSeleccionadoNumero: numeroTitulo,
-      tituloOriginal: tituloOriginal,
-      tituloFinal: tituloFinal,
-      comentarioCoordinador: comentario,
-      coordinador: {
-        id: coordinador.id,
-        nombre: coordinador.nombre,
-        carreras: coordinador.carreras
-      }
-    });
+    };
   }
 
-  function obtenerResolucionAprobar() {
+  function obtenerResolucionAprobar(){
     var resultado = obtenerResolucion('aprobar');
-
-    if (!resultado.ok) {
-      mostrarEstado(resultado.mensaje, 'error');
-      enfocar(resultado.selector);
-    }
-
+    if(!resultado.ok){ mostrarEstado(resultado.mensaje,'error'); if(ui() && resultado.selector) ui().enfocar(resultado.selector); }
     return resultado;
   }
 
-  function obtenerResolucionDevolver() {
+  function obtenerResolucionDevolver(){
     var resultado = obtenerResolucion('devolver');
-
-    if (!resultado.ok) {
-      mostrarEstado(resultado.mensaje, 'error');
-      enfocar(resultado.selector);
-    }
-
+    if(!resultado.ok){ mostrarEstado(resultado.mensaje,'error'); if(ui() && resultado.selector) ui().enfocar(resultado.selector); }
     return resultado;
   }
 
-  function limpiarFormulario() {
-    var radios = document.querySelectorAll('input[name="tituloSeleccionado"]');
-
-    Array.prototype.forEach.call(radios, function (radio) {
-      radio.checked = false;
-    });
-
-    limpiarSeleccionTarjetas();
-
-    setValor('#tituloFinalInput', '');
-    setValor('#comentarioCoordinadorInput', '');
-    mostrarEstado('', '');
+  function limpiarFormulario(){
+    document.querySelectorAll('input[name="tituloSeleccionado"]').forEach(function(radio){ radio.checked=false; radio.disabled=false; });
+    document.querySelectorAll('.proposal-card').forEach(function(tarjeta){ tarjeta.classList.remove('is-selected'); });
+    setValor('tituloFinalInput','');
+    setValor('comentarioCoordinadorInput','');
+    var aprobar=$('btnAprobarEnvio');
+    var devolver=$('btnDevolverEnvio');
+    if(aprobar) aprobar.hidden=false;
+    if(devolver) devolver.hidden=false;
+    var finalInput=$('tituloFinalInput');
+    var comentario=$('comentarioCoordinadorInput');
+    if(finalInput) finalInput.readOnly=false;
+    if(comentario) comentario.readOnly=false;
+    mostrarEstado('','info');
   }
 
-  function mostrarEstado(mensaje, tipo) {
-    var utils = obtenerUtils();
-
-    if (utils) {
-      utils.mostrarEstado('#estadoModal', mensaje || '', tipo || 'info');
-    }
+  function mostrarEstado(mensaje,tipo){
+    if(ui()) ui().mostrarEstado('estadoModal',mensaje,tipo || 'info');
   }
 
-  function setTexto(selector, texto) {
-    var utils = obtenerUtils();
-
-    if (utils) {
-      utils.setTexto(selector, texto);
-    }
-  }
-
-  function setValor(selector, texto) {
-    var utils = obtenerUtils();
-
-    if (utils) {
-      utils.setValor(selector, texto);
-    }
-  }
-
-  function enfocar(selector) {
-    var ui = obtenerUI();
-
-    if (ui && selector) {
-      ui.enfocar(selector);
-    }
-  }
-
-  function obtenerEnvioActual() {
-    return envioActual ? obtenerUtils().clonar(envioActual) : null;
+  function obtenerEnvioActual(){
+    return envioActual ? (utils() && utils().clonar ? utils().clonar(envioActual) : Object.assign({},envioActual)) : null;
   }
 
   window.CoordinadorMVPModal = Object.freeze({
-    iniciar: iniciar,
-    abrir: abrir,
-    cerrar: cerrar,
-    pintarDatosEstudiante: pintarDatosEstudiante,
-    pintarTitulos: pintarTitulos,
-    seleccionarTitulo: seleccionarTitulo,
-    obtenerNumeroTituloSeleccionado: obtenerNumeroTituloSeleccionado,
-    obtenerTituloPorNumero: obtenerTituloPorNumero,
-    obtenerResolucion: obtenerResolucion,
-    obtenerResolucionAprobar: obtenerResolucionAprobar,
-    obtenerResolucionDevolver: obtenerResolucionDevolver,
-    limpiarFormulario: limpiarFormulario,
-    mostrarEstado: mostrarEstado,
-    obtenerEnvioActual: obtenerEnvioActual
+    iniciar:iniciar,
+    abrir:abrir,
+    cerrar:cerrar,
+    seleccionarTitulo:seleccionarTitulo,
+    obtenerResolucionAprobar:obtenerResolucionAprobar,
+    obtenerResolucionDevolver:obtenerResolucionDevolver,
+    obtenerEnvioActual:obtenerEnvioActual,
+    mostrarEstado:mostrarEstado
   });
-})(window, document);
+})(window,document);
