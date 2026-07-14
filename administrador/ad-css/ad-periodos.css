@@ -1,0 +1,120 @@
+/* =========================================================
+Archivo: ad-periodos.css
+Ruta: /administrador/ad-css/ad-periodos.css
+Función:
+- Estilos de la pantalla de activación y desactivación de períodos.
+========================================================= */
+.ad-periodos-control{
+  display:grid;
+  grid-template-columns:minmax(280px,1.5fr) minmax(160px,.6fr) minmax(210px,.7fr);
+  gap:16px;
+  align-items:end;
+  margin-bottom:16px
+}
+
+.ad-periodos-selector{min-width:0}
+
+.ad-periodo-estado-actual{
+  display:flex;
+  flex-direction:column;
+  justify-content:flex-end;
+  gap:8px;
+  min-height:72px
+}
+
+.ad-periodo-estado-actual>span{
+  color:var(--ad-muted);
+  font-size:13px;
+  font-weight:700
+}
+
+.ad-periodo-estado-actual .ad-badge{
+  align-self:flex-start;
+  min-width:88px;
+  justify-content:center
+}
+
+.ad-periodo-accion-principal{
+  display:flex;
+  justify-content:flex-end;
+  align-items:flex-end
+}
+
+.ad-periodo-accion-principal .ad-btn{
+  width:100%;
+  min-height:44px
+}
+
+.ad-periodos-mensaje{
+  margin:0 0 16px;
+  padding:13px 14px;
+  border:1px solid var(--ad-border);
+  border-radius:12px;
+  background:var(--ad-surface-soft);
+  color:var(--ad-muted);
+  line-height:1.5
+}
+
+.ad-periodos-mensaje.is-loading{
+  border-color:#cfe0fb;
+  background:#eef5ff;
+  color:var(--ad-info)
+}
+
+.ad-periodos-mensaje.is-success{
+  border-color:#ccebd7;
+  background:#e8f7ee;
+  color:var(--ad-success)
+}
+
+.ad-periodos-mensaje.is-error{
+  border-color:#f0cbc7;
+  background:#fff1f0;
+  color:var(--ad-danger)
+}
+
+.ad-tabla-periodos-gestion{min-width:680px}
+.ad-tabla-periodos-gestion th:nth-child(1){width:56%}
+.ad-tabla-periodos-gestion th:nth-child(2){width:18%}
+.ad-tabla-periodos-gestion th:nth-child(3){width:26%}
+.ad-tabla-periodos-gestion td strong{display:block}
+
+.ad-periodo-principal{
+  display:block;
+  margin-top:5px;
+  color:var(--ad-info);
+  font-weight:700
+}
+
+.ad-tabla-periodos-gestion .ad-periodo-toggle{
+  min-width:128px
+}
+
+.ad-badge-neutral{
+  background:#eef2f6;
+  color:#526579
+}
+
+@media(max-width:980px){
+  .ad-periodos-control{
+    grid-template-columns:1fr 1fr
+  }
+
+  .ad-periodos-selector{
+    grid-column:1/-1
+  }
+}
+
+@media(max-width:620px){
+  .ad-periodos-control{
+    grid-template-columns:1fr
+  }
+
+  .ad-periodos-selector{
+    grid-column:auto
+  }
+
+  .ad-periodo-accion-principal{
+    justify-content:stretch
+  }
+}
