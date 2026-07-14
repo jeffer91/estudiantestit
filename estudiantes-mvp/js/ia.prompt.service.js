@@ -5,8 +5,7 @@
   - Construir el prompt académico para la IA de Titulación.
   - Pedir exactamente 3 títulos por propuesta.
   - Forzar 3 enfoques: diagnóstico inicial, proceso/propuesta y resultado/evaluación final.
-  - Usar la carrera del estudiante como dato central.
-  - Solicitar respuesta en JSON limpio para poder procesarla sin errores.
+  - Permitir un nuevo envío cuando Firebase marque DEVUELTO o NO_ENVIO administrativo.
 */
 (function (window) {
   'use strict';
@@ -193,13 +192,99 @@
 
   function limpiarDato(valor) {
     var utils = obtenerUtils();
-    var texto = utils ? utils.limpiarTexto(valor) : String(valor || '').replace(/\s+/g, ' ').trim();
+    var textoLimpio = utils
+      ? utils.limpiarTexto(valor)
+      : String(valor || '').replace(/\s+/g, ' ').trim();
 
-    return texto || 'No especificado';
+    return textoLimpio || 'No especificado';
   }
 
   function obtenerEtapas() {
     return ETAPAS.slice();
+  }
+
+  function estadoPermiteReenvio(registro) {
+    var estado;
+    registro = registro || {};
+    estado = String(
+      registro.estado ||
+      registro.estadoFinal ||
+      registro.estadoFirebase ||
+      registro.estadoProceso ||
+      ''
+    ).toUpperCase().trim();
+
+    return registro.permitirReenvio === true || [
+      'DEVUELTO',
+      'NO_ENVIO',
+      'ELIMINADO',
+      'ELIMINADO_ADMIN',
+      'BORRADO'
+    ].indexOf(estado) >= 0;
+  }
+
+  function consultarPermisoFirebase(cedula) {
+    var firebaseCore = window.EstudianteMVPFirebaseCore || null;
+    var config = window.EstudianteMVPConfig || null;
+    var coleccion = config && typeof config.obtenerColeccion === 'function'
+      ? config.obtenerColeccion('titulos') || 'titulos'
+      : 'titulos';
+    var cedulaLimpia = String(cedula || '').replace(/\D/g, '');
+
+    if (!firebaseCore || !cedulaLimpia) return Promise.resolve(false);
+
+    return firebaseCore.leerDocumento(coleccion, cedulaLimpia)
+      .then(function(documento){
+        if (documento && estadoPermiteReenvio(documento)) return true;
+        if (documento) return false;
+        return firebaseCore.consultarPorCampo(coleccion,'cedula','==',cedulaLimpia,5)
+          .then(function(lista){
+            return (lista || []).some(estadoPermiteReenvio);
+          });
+      })
+      .catch(function(){ return false; });
+  }
+
+  function instalarPermisoReenvio() {
+    var sheets = window.EstudianteMVPSheets || null;
+    var consultaOriginal;
+    var reemplazo;
+
+    if (!sheets || sheets.__permisoReenvioInstalado || typeof sheets.consultarEnvioPorCedula !== 'function') {
+      return;
+    }
+
+    consultaOriginal = sheets.consultarEnvioPorCedula.bind(sheets);
+    reemplazo = Object.assign({},sheets,{
+      consultarEnvioPorCedula:function(cedula){
+        return consultarPermisoFirebase(cedula).then(function(permitido){
+          if (permitido) {
+            return {
+              ok:true,
+              encontrado:false,
+              reenvioPermitido:true,
+              cedula:String(cedula || '').replace(/\D/g,''),
+              mensaje:'Firebase permite un nuevo envío.'
+            };
+          }
+
+          return consultaOriginal(cedula).then(function(resultado){
+            resultado = resultado || {};
+            if (resultado.encontrado && estadoPermiteReenvio(resultado.envio || resultado)) {
+              resultado.encontrado = false;
+              resultado.reenvioPermitido = true;
+            }
+            return resultado;
+          });
+        });
+      }
+    });
+
+    Object.defineProperty(reemplazo,'__permisoReenvioInstalado',{
+      value:true,
+      enumerable:false
+    });
+    window.EstudianteMVPSheets = Object.freeze(reemplazo);
   }
 
   window.EstudianteMVPIAPrompt = Object.freeze({
@@ -207,4 +292,6 @@
     normalizarContexto: normalizarContexto,
     obtenerEtapas: obtenerEtapas
   });
+
+  instalarPermisoReenvio();
 })(window);
