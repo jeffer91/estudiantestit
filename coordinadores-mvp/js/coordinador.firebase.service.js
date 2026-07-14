@@ -4,6 +4,7 @@ Ruta: /coordinadores-mvp/js/coordinador.firebase.service.js
 Función:
 - Conectar la app de coordinadores con Firebase.
 - Leer períodos activos, coordinadores, estudiantes y títulos.
+- Mostrar únicamente envíos con las tres propuestas registradas.
 - Aprobar, reemplazar o devolver títulos.
 - Registrar historial y auditoría.
 Dependencias:
@@ -67,9 +68,19 @@ Dependencias:
 
     for(i = 0; i < nombres.length; i += 1){
       clave = mapa[normal(nombres[i])];
-      if(clave !== undefined && texto(data[clave])) return data[clave];
+      if(clave !== undefined && data[clave] !== undefined && data[clave] !== null){
+        if(typeof data[clave] === 'object') return data[clave];
+        if(texto(data[clave])) return data[clave];
+      }
     }
     return '';
+  }
+
+  function nombreCoordinador(valor, base){
+    if(valor && typeof valor === 'object'){
+      return texto(valor.nombre || valor.Nombre || valor.name || valor.coordinadorNombre);
+    }
+    return texto(valor || campo(base || {}, ['coordinadorNombre','nombreCoordinador']));
   }
 
   function fechaIso(){ return new Date().toISOString(); }
@@ -259,6 +270,7 @@ Dependencias:
     var pTitulo = periodoDe(base);
     var pEstudiante = periodoDe(persona.raw || persona);
     var est = estado(campo(base, ['estado','Estado','estadoFinal','estadoProceso'])) || 'PENDIENTE_REVISION';
+    var coord = campo(base, ['coordinador']);
 
     if(est === 'ENVIADO' || est === 'PENDIENTE_SYNC') est = 'PENDIENTE_REVISION';
 
@@ -279,13 +291,23 @@ Dependencias:
       titulo1: texto(campo(base, ['titulo1','Título 1','Titulo1'])),
       titulo2: texto(campo(base, ['titulo2','Título 2','Titulo2'])),
       titulo3: texto(campo(base, ['titulo3','Título 3','Titulo3'])),
-      tituloPreferido: texto(campo(base, ['tituloPreferido','preferido','tituloSeleccionado','titulofavorito'])),
+      tituloPreferido: texto(campo(base, ['tituloPreferido','tituloPreferidoTexto','preferido','tituloSeleccionado','titulofavorito'])),
       tituloAprobado: texto(campo(base, ['tituloAprobado','tituloaprobado','tituloFinal'])),
       comentarioCoordinador: texto(campo(base, ['comentarioCoordinador','comentario','observacion','motivo'])),
-      coordinador: campo(base, ['coordinador','coordinadorNombre']),
-      fechaRevision: fechaLegible(campo(base, ['fechaRevision','fecharespuestaprobado','actualizadoEn'])),
+      coordinador: nombreCoordinador(coord, base),
+      coordinadorNombre: nombreCoordinador(coord, base),
+      fechaRevision: fechaLegible(campo(base, ['fechaRevision','fecharespuestaprobado','fechaRevisionLocal','actualizadoEn'])),
       raw: base
     };
+  }
+
+  function tieneTitulosEnviados(item){
+    return Boolean(
+      item &&
+      texto(item.titulo1) &&
+      texto(item.titulo2) &&
+      texto(item.titulo3)
+    );
   }
 
   function coincidePeriodo(item, periodo){
@@ -317,8 +339,12 @@ Dependencias:
 
         return titulos
           .map(function(item){ return normalizarTitulo(item, mapa[obtenerCedula(item)]); })
-          .filter(function(item){ return item.cedula && coincidePeriodo(item, periodo); })
-          .sort(function(a,b){ return String(a.nombres || a.cedula).localeCompare(String(b.nombres || b.cedula), 'es'); });
+          .filter(function(item){
+            return item.cedula && coincidePeriodo(item, periodo) && tieneTitulosEnviados(item);
+          })
+          .sort(function(a,b){
+            return String(a.nombres || a.cedula).localeCompare(String(b.nombres || b.cedula), 'es');
+          });
       });
   }
 
@@ -354,6 +380,9 @@ Dependencias:
     var coordinador = resolucion && resolucion.coordinador || {};
     var payload;
 
+    if(!tieneTitulosEnviados(envio)) {
+      return Promise.reject(new Error('El estudiante no tiene las tres propuestas registradas.'));
+    }
     if(!final || final.length < 8) return Promise.reject(new Error('Selecciona o escribe el título final.'));
     nuevoEstado = normal(final) === normal(original) ? 'APROBADO' : 'REEMPLAZADO';
 
@@ -396,6 +425,9 @@ Dependencias:
     var historial;
     var cambios;
 
+    if(!tieneTitulosEnviados(envio)) {
+      return Promise.reject(new Error('El estudiante no tiene las tres propuestas registradas.'));
+    }
     if(comentario.length < 4) return Promise.reject(new Error('Escribe una observación para devolver el título.'));
 
     historialId = [texto(envio.periodoId || 'sin_periodo'), cedula(envio.cedula), Date.now()].join('__');
@@ -452,12 +484,15 @@ Dependencias:
         ]);
       })
       .then(function(partes){
+        var todos = snapshotLista(partes[2]);
+        var validos = todos.filter(function(item){ return tieneTitulosEnviados(normalizarTitulo(item, null)); });
         return {
           ok: true,
           proyecto: config().firebaseConfig && config().firebaseConfig.projectId,
           periodosActivos: partes[0].periodos.length,
           coordinadoresActivos: partes[1].length,
-          titulos: partes[2].size,
+          titulosDocumentos: partes[2].size,
+          titulosValidos: validos.length,
           fecha: fechaIso()
         };
       });
@@ -471,6 +506,7 @@ Dependencias:
     aprobarTitulo: aprobarTitulo,
     devolverTitulo: devolverTitulo,
     diagnostico: diagnostico,
+    tieneTitulosEnviados: tieneTitulosEnviados,
     normalizarEstado: estado,
     normalizarTexto: normal,
     fechaLegible: fechaLegible
