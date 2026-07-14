@@ -6,13 +6,14 @@ Función:
 - Construir una única pantalla Estudiantes por período.
 - Agregar filtros de carrera y estado.
 - Coordinar la navegación sin bloquear los módulos independientes.
+- Cargar la gestión de períodos activos e inactivos.
 ========================================================= */
 (function(window,document){
   "use strict";
 
   var APP_VERSION = window.AD_CONFIG && window.AD_CONFIG.version
     ? String(window.AD_CONFIG.version)
-    : "1.2.1";
+    : "1.3.0";
 
   function $(id){ return document.getElementById(id); }
 
@@ -155,6 +156,14 @@ Función:
           window.ADEstudiantesRuntime.cargarPeriodos();
         }
       }
+
+      if (
+        id === "ad-seccion-periodos" &&
+        window.ADPeriodosApp &&
+        typeof window.ADPeriodosApp.cargarPeriodos === "function"
+      ) {
+        window.ADPeriodosApp.cargarPeriodos();
+      }
     },0);
   }
 
@@ -233,6 +242,17 @@ Función:
   }
 
   transformar();
+
+  cargarScript(
+    "./ad-js/ad-periodos.app.js?v=" + encodeURIComponent(APP_VERSION),
+    "ad-periodos-app-script"
+  ).catch(function(error){
+    var seccion = $("ad-seccion-periodos");
+    if (seccion) {
+      seccion.innerHTML = '<div class="ad-card"><div class="ad-empty">' +
+        (error.message || String(error)) + '</div></div>';
+    }
+  });
 
   cargarScript(
     "./ad-js/ad-estudiantes.service.js?v=" + encodeURIComponent(APP_VERSION),
