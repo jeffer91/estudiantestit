@@ -1,0 +1,248 @@
+/* =========================================================
+Archivo: ad-estudiantes.app.js
+Ruta: /administrador/ad-js/ad-estudiantes.app.js
+Función:
+- Controlar la pantalla Estudiantes.
+- Cargar estudiantes por período.
+- Mostrar estados y detalle en modal.
+========================================================= */
+(function(window, document){
+  "use strict";
+
+  var periodos = [];
+  var estudiantes = [];
+  var cargando = false;
+
+  function service(){
+    if (!window.ADEstudiantesService) throw new Error("ADEstudiantesService no está disponible.");
+    return window.ADEstudiantesService;
+  }
+  function $(id){ return document.getElementById(id); }
+  function texto(v){ return String(v === null || v === undefined ? "" : v).trim(); }
+  function esc(v){ return texto(v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\"/g,"&quot;").replace(/'/g,"&#039;"); }
+  function setTexto(id,v){ var el=$(id); if(el) el.textContent=v; }
+  function setHtml(id,v){ var el=$(id); if(el) el.innerHTML=v; }
+
+  function mostrarEstado(mensaje,tipo){
+    var el=$("ad-estado-estudiantes");
+    if(!el) return;
+    el.classList.remove("is-loading","is-success","is-error");
+    if(tipo) el.classList.add("is-"+tipo);
+    el.textContent=mensaje || "";
+  }
+
+  function etiquetaEstado(estado){
+    switch(estado){
+      case "NO_ENVIO": return { texto:"No envió", clase:"ad-badge-neutral" };
+      case "DEVUELTO": return { texto:"Devuelto", clase:"ad-badge-danger" };
+      case "APROBADO": return { texto:"Aprobado", clase:"ad-badge-success" };
+      case "REEMPLAZADO": return { texto:"Aprobado", clase:"ad-badge-success" };
+      default: return { texto:"Envió", clase:"ad-badge-info" };
+    }
+  }
+
+  function renderResumen(){
+    var enviaron=0,noEnviaron=0,devueltos=0;
+    estudiantes.forEach(function(item){
+      if(item.estado === "NO_ENVIO") noEnviaron += 1;
+      else if(item.estado === "DEVUELTO") devueltos += 1;
+      else enviaron += 1;
+    });
+    setTexto("ad-estudiantes-total",String(estudiantes.length));
+    setTexto("ad-estudiantes-enviaron",String(enviaron));
+    setTexto("ad-estudiantes-no-enviaron",String(noEnviaron));
+    setTexto("ad-estudiantes-devueltos",String(devueltos));
+  }
+
+  function renderTabla(){
+    var filas=[];
+    estudiantes.forEach(function(item,indice){
+      var estado=etiquetaEstado(item.estado);
+      filas.push(
+        "<tr>"+
+          "<td>"+esc(item.cedula)+"</td>"+
+          "<td class='ad-estudiante-nombre'>"+esc(item.nombre || "Sin nombre")+"</td>"+
+          "<td>"+esc(item.carrera || "Sin carrera")+"</td>"+
+          "<td><span class='ad-badge "+estado.clase+"'>"+estado.texto+"</span></td>"+
+          "<td><button class='ad-btn ad-btn-secondary ad-btn-ver-mas' type='button' data-estudiante-index='"+indice+"'>Ver más</button></td>"+
+        "</tr>"
+      );
+    });
+    setHtml("ad-tabla-estudiantes",filas.length?filas.join(""):'<tr><td colspan="5" class="ad-empty">No se encontraron estudiantes en este período.</td></tr>');
+    renderResumen();
+  }
+
+  function renderPeriodos(resultado){
+    var select=$("ad-estudiantes-periodo");
+    var principal=resultado.principal || {};
+    periodos=resultado.periodos || [];
+    if(!select) return;
+    select.innerHTML=periodos.map(function(item){
+      return '<option value="'+esc(item.id)+'"'+(item.id===principal.id?' selected':'')+'>'+esc(item.label || item.id)+'</option>';
+    }).join("");
+    if(!periodos.length) select.innerHTML='<option value="">No hay períodos configurados</option>';
+  }
+
+  function periodoSeleccionado(){
+    var select=$("ad-estudiantes-periodo");
+    var id=select?texto(select.value):"";
+    return periodos.find(function(item){ return item.id===id; }) || null;
+  }
+
+  function cargarEstudiantes(){
+    var periodo=periodoSeleccionado();
+    if(!periodo || cargando) return Promise.resolve();
+    cargando=true;
+    var select=$("ad-estudiantes-periodo");
+    if(select) select.disabled=true;
+    mostrarEstado("Cargando todos los estudiantes del período...","loading");
+    setHtml("ad-tabla-estudiantes",'<tr><td colspan="5" class="ad-empty">Cargando estudiantes...</td></tr>');
+
+    return service().cargar(periodo).then(function(resultado){
+      estudiantes=resultado.estudiantes || [];
+      renderTabla();
+      mostrarEstado(
+        "Se cargaron "+estudiantes.length+" estudiantes del período "+(periodo.label || periodo.id)+
+        (resultado.sheetsDisponible?". También se cruzaron las revisiones disponibles en Google Sheets.":". Se usó la información disponible en Firebase; no se recibieron revisiones desde Google Sheets."),
+        "success"
+      );
+    }).catch(function(error){
+      estudiantes=[];
+      renderTabla();
+      mostrarEstado("No se pudieron cargar los estudiantes: "+(error.message || String(error)),"error");
+    }).then(function(){
+      cargando=false;
+      if(select) select.disabled=false;
+    });
+  }
+
+  function valorDetalle(item,claves){
+    var fuentes=[item.revision,item.titulo,item.historial];
+    var i,j,fuente;
+    for(i=0;i<fuentes.length;i+=1){
+      fuente=fuentes[i] || {};
+      for(j=0;j<claves.length;j+=1){
+        if(texto(fuente[claves[j]])) return fuente[claves[j]];
+        if(fuente.raw && texto(fuente.raw[claves[j]])) return fuente.raw[claves[j]];
+      }
+    }
+    return "";
+  }
+
+  function tarjetaDato(etiqueta,valor){
+    return '<div class="ad-detail-item"><span>'+esc(etiqueta)+'</span><strong>'+esc(valor || "Sin dato")+'</strong></div>';
+  }
+
+  function tituloDisponible(item,numero){
+    return valorDetalle(item,["titulo"+numero,"Titulo"+numero,"Título "+numero]);
+  }
+
+  function renderDetalle(item){
+    var estado=etiquetaEstado(item.estado);
+    var t1=tituloDisponible(item,1);
+    var t2=tituloDisponible(item,2);
+    var t3=tituloDisponible(item,3);
+    var preferido=valorDetalle(item,["tituloPreferido","preferido","tituloSeleccionado"]);
+    var tituloFinal=valorDetalle(item,["tituloAprobado","tituloaprobado","tituloFinal"]);
+    var coordinador=valorDetalle(item,["coordinador","coordinadorNombre"]);
+    var comentario=valorDetalle(item,["comentario","comentarioCoordinador","observacion","motivoArchivo","motivo"]);
+    var fechaEnvio=valorDetalle(item,["fechaEnvio"]);
+    var fechaRevision=valorDetalle(item,["fechaRevision"]);
+    var decision=valorDetalle(item,["estado","estadoNuevo"]);
+    var contenido=[];
+
+    contenido.push('<div class="ad-detail-grid">');
+    contenido.push(tarjetaDato("Cédula",item.cedula));
+    contenido.push(tarjetaDato("Estado",estado.texto));
+    contenido.push(tarjetaDato("Carrera",item.carrera));
+    contenido.push(tarjetaDato("Período",item.periodoLabel || item.periodoId));
+    contenido.push(tarjetaDato("Fecha de envío",fechaEnvio));
+    contenido.push(tarjetaDato("Fecha de revisión",fechaRevision));
+    contenido.push('</div>');
+
+    contenido.push('<section class="ad-detail-section"><h4>Propuestas enviadas</h4>');
+    if(t1 || t2 || t3){
+      contenido.push('<div class="ad-title-card"><strong>Título 1</strong>'+esc(t1 || "Sin dato")+'</div>');
+      contenido.push('<div class="ad-title-card"><strong>Título 2</strong>'+esc(t2 || "Sin dato")+'</div>');
+      contenido.push('<div class="ad-title-card"><strong>Título 3</strong>'+esc(t3 || "Sin dato")+'</div>');
+      if(preferido) contenido.push('<div class="ad-title-card"><strong>Título preferido</strong>'+esc(preferido)+'</div>');
+    }else{
+      contenido.push('<div class="ad-no-data">Este estudiante todavía no ha enviado propuestas.</div>');
+    }
+    contenido.push('</section>');
+
+    contenido.push('<section class="ad-detail-section"><h4>Revisión del coordinador</h4>');
+    if(coordinador || comentario || tituloFinal || decision || item.estado === "DEVUELTO" || item.estado === "APROBADO" || item.estado === "REEMPLAZADO"){
+      contenido.push('<div class="ad-detail-grid">');
+      contenido.push(tarjetaDato("Coordinador",coordinador));
+      contenido.push(tarjetaDato("Decisión",decision || estado.texto));
+      contenido.push(tarjetaDato("Título final",tituloFinal));
+      contenido.push(tarjetaDato("Fecha",fechaRevision));
+      contenido.push('</div>');
+      contenido.push('<div class="ad-observation"><strong>Comentario u observación</strong><br>'+esc(comentario || "Sin comentario registrado.")+'</div>');
+    }else{
+      contenido.push('<div class="ad-no-data">El coordinador todavía no ha registrado una revisión.</div>');
+    }
+    contenido.push('</section>');
+    return contenido.join("");
+  }
+
+  function abrirModal(indice){
+    var item=estudiantes[indice];
+    var modal=$("ad-estudiante-modal");
+    if(!item || !modal) return;
+    setTexto("ad-estudiante-modal-titulo",item.nombre || "Estudiante");
+    setTexto("ad-estudiante-modal-subtitulo",item.cedula+" · "+(item.carrera || "Sin carrera"));
+    setHtml("ad-estudiante-modal-contenido",renderDetalle(item));
+    modal.hidden=false;
+    document.body.classList.add("ad-modal-open");
+  }
+
+  function cerrarModal(){
+    var modal=$("ad-estudiante-modal");
+    if(modal) modal.hidden=true;
+    document.body.classList.remove("ad-modal-open");
+  }
+
+  function cargarPeriodos(){
+    mostrarEstado("Cargando períodos...","loading");
+    return service().listarPeriodos().then(function(resultado){
+      renderPeriodos(resultado);
+      if(periodos.length) return cargarEstudiantes();
+      mostrarEstado("No hay períodos configurados.","error");
+    }).catch(function(error){
+      mostrarEstado("No se pudieron cargar los períodos: "+(error.message || String(error)),"error");
+    });
+  }
+
+  function conectar(){
+    var select=$("ad-estudiantes-periodo");
+    var tabla=$("ad-tabla-estudiantes");
+    var modal=$("ad-estudiante-modal");
+
+    if(select) select.addEventListener("change",cargarEstudiantes);
+    if(tabla) tabla.addEventListener("click",function(evento){
+      var boton=evento.target && evento.target.closest?evento.target.closest(".ad-btn-ver-mas"):null;
+      if(!boton) return;
+      abrirModal(Number(boton.getAttribute("data-estudiante-index")));
+    });
+    if(modal) modal.addEventListener("click",function(evento){
+      if(evento.target && evento.target.closest && evento.target.closest("[data-ad-modal-cerrar]")) cerrarModal();
+    });
+    document.addEventListener("keydown",function(evento){ if(evento.key==="Escape") cerrarModal(); });
+
+    window.addEventListener("ad:vista-cambiada",function(evento){
+      if(evento.detail && evento.detail.id === "ad-seccion-estudiantes" && !periodos.length) cargarPeriodos();
+    });
+    window.addEventListener("ad:periodos-actualizados",function(evento){
+      if(evento.detail){
+        renderPeriodos(evento.detail);
+        var vista=$("ad-seccion-estudiantes");
+        if(vista && !vista.hidden) cargarEstudiantes();
+      }
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded",conectar);
+  window.ADEstudiantesApp={ cargarPeriodos:cargarPeriodos, cargarEstudiantes:cargarEstudiantes, abrirModal:abrirModal };
+})(window, document);
