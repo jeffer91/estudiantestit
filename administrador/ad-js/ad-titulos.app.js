@@ -12,7 +12,7 @@ Función:
   "use strict";
 
   if (window.AD_CONFIG) {
-    window.AD_CONFIG.version = "1.3.0";
+    window.AD_CONFIG.version = "1.4.0";
     window.AD_CONFIG.accionesLog = window.AD_CONFIG.accionesLog || {};
     window.AD_CONFIG.accionesLog.periodoActivado =
       window.AD_CONFIG.accionesLog.periodoActivado || "ADMIN_PERIODO_ACTIVADO";
@@ -22,7 +22,7 @@ Función:
 
   var APP_VERSION = window.AD_CONFIG && window.AD_CONFIG.version
     ? String(window.AD_CONFIG.version)
-    : "1.3.0";
+    : "1.4.0";
 
   function $(id){ return document.getElementById(id); }
 
