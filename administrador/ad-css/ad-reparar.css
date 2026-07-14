@@ -1,0 +1,29 @@
+/* Analizador seguro de títulos y duplicados */
+.ad-base-repair-card{margin-top:18px}
+
+.ad-base-repair-actions{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  justify-content:flex-end
+}
+
+.ad-base-repair-table{min-width:1180px}
+.ad-base-repair-table th:first-child,
+.ad-base-repair-table td:first-child{text-align:center;width:86px}
+.ad-base-repair-table code{
+  display:inline-block;
+  max-width:220px;
+  overflow-wrap:anywhere;
+  white-space:normal;
+  font-size:.78rem
+}
+
+.ad-base-repair-table tr.is-manual{background:#fffaf0}
+.ad-base-repair-table tr.is-safe{background:#fbfffc}
+.ad-base-repair-table input[type="checkbox"]{width:18px;height:18px}
+
+@media(max-width:760px){
+  .ad-base-repair-actions{width:100%;justify-content:stretch}
+  .ad-base-repair-actions .ad-btn{flex:1 1 210px}
+}
