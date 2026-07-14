@@ -76,9 +76,6 @@ Función:
   function pintarDatos(envio){
     setTexto('modalTitulo', envio.nombres || 'Revisión de títulos');
     setTexto('modalSubtitulo', (envio.cedula || '-') + ' · ' + (envio.carrera || '-'));
-    setTexto('detalleCedula', envio.cedula);
-    setTexto('detalleNombre', envio.nombres);
-    setTexto('detalleCarrera', envio.carrera);
     setTexto('detallePeriodo', envio.periodoLabel || envio.periodoId || envio.periodo);
     setTexto('detalleFechaEnvio', envio.fechaEnvio);
     setTexto('detalleEstado', ui() && ui().textoEstado ? ui().textoEstado(envio.estado) : envio.estado);
