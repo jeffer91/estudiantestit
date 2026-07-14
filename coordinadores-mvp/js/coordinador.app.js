@@ -1,318 +1,210 @@
 /* =========================================================
-Nombre completo: carga.app.js
-Ruta o ubicación: /Requisitos/Carga/carga.app.js
-Función o funciones:
-- Orquestar lectura, normalización, validación y guardado de Carga.
-- Trabajar siempre con período seleccionado antes de guardar.
-- Mantener estado centralizado en CargaState.
-- No mostrar vista previa obligatoria; solo prepara datos para resumen.
-Con qué se conecta:
-- carga.state.js
-- carga.config.js
-- readers/carga.reader.file.js
-- readers/carga.reader.clipboard.js
-- process/carga.normalizer.js
-- process/carga.validator.js
-- process/carga.preview.js
-- process/carga.report.js
-- process/carga.save.js
+Archivo: coordinador.app.js
+Ruta: /coordinadores-mvp/js/coordinador.app.js
+Función:
+- Inicializar la app de coordinadores.
+- Cargar períodos, coordinadores y títulos desde Firebase.
+- Conectar filtros, modal, aprobación y devolución.
 ========================================================= */
-(function(window){
-  "use strict";
+(function(window,document){
+  'use strict';
 
-  var cfg = window.CargaConfig;
-  var state = window.CargaState;
+  var iniciado = false;
 
-  if(!cfg || !state){
-    throw new Error("CargaConfig y CargaState deben cargarse antes de CargaApp.");
+  function state(){ return window.CoordinadorMVPState || null; }
+  function ui(){ return window.CoordinadorMVPUI || null; }
+  function modal(){ return window.CoordinadorMVPModal || null; }
+  function firebaseService(){ return window.CoordinadorMVPFirebase || null; }
+  function $(id){ return document.getElementById(id); }
+
+  function validarDependencias(){
+    var faltantes = [];
+    if(!state()) faltantes.push('CoordinadorMVPState');
+    if(!ui()) faltantes.push('CoordinadorMVPUI');
+    if(!modal()) faltantes.push('CoordinadorMVPModal');
+    if(!firebaseService()) faltantes.push('CoordinadorMVPFirebase');
+    if(faltantes.length) throw new Error('Faltan módulos: ' + faltantes.join(', '));
   }
 
-  function text(value){
-    return String(value == null ? "" : value).trim();
+  function cargarCatalogos(){
+    state().limpiarError();
+    state().setCargando(true);
+
+    return Promise.all([
+      firebaseService().listarPeriodosActivos(),
+      firebaseService().listarCoordinadoresActivos()
+    ])
+      .then(function(partes){
+        var periodos = partes[0] || { periodos:[], principal:null };
+        state().setPeriodos(periodos.periodos || [], periodos.principal || null);
+        state().setCoordinadores(partes[1] || []);
+
+        if(!periodos.periodos || !periodos.periodos.length){
+          throw new Error('No existen períodos activos en el administrador.');
+        }
+
+        return cargarTitulos();
+      })
+      .catch(function(error){
+        state().setError(error);
+        throw error;
+      })
+      .finally(function(){ state().setCargando(false); });
   }
 
-  function clone(value){
-    if(value === undefined){ return undefined; }
-    try{ return JSON.parse(JSON.stringify(value)); }
-    catch(error){ return value; }
+  function cargarTitulos(){
+    var periodo = state().obtenerPeriodoActual();
+    if(!periodo){
+      state().setEnvios([]);
+      return Promise.resolve([]);
+    }
+
+    state().limpiarError();
+    state().setCargando(true);
+
+    return firebaseService().listarTitulos(periodo)
+      .then(function(lista){
+        state().setEnvios(lista || []);
+        return lista || [];
+      })
+      .catch(function(error){
+        state().setEnvios([]);
+        state().setError(error);
+        throw error;
+      })
+      .finally(function(){ state().setCargando(false); });
   }
 
-  function emit(name, detail){
+  function cambiarPeriodo(valor){
+    state().setPeriodoActual(valor);
+    return cargarTitulos().catch(function(){ return []; });
+  }
+
+  function cambiarCoordinador(valor){
+    state().setCoordinadorActual(valor);
+  }
+
+  function abrirDetalle(id){
+    var envio = state().seleccionarEstudiante(id);
+    if(!envio){
+      ui().mostrarEstado('estadoPrincipal','No se encontró el estudiante.','error');
+      return;
+    }
+    modal().abrir(envio);
+  }
+
+  function aprobar(){
+    var resultado = modal().obtenerResolucionAprobar();
+    if(!resultado.ok) return;
+
+    state().setCargando(true);
+    firebaseService().aprobarTitulo(resultado.data.envio, resultado.data)
+      .then(function(respuesta){
+        modal().cerrar();
+        ui().mostrarEstado('estadoPrincipal',respuesta.mensaje || 'Título aprobado.','success');
+        return cargarTitulos();
+      })
+      .catch(function(error){
+        modal().mostrarEstado(error.message || String(error),'error');
+      })
+      .finally(function(){ state().setCargando(false); });
+  }
+
+  function devolver(){
+    var resultado = modal().obtenerResolucionDevolver();
+    if(!resultado.ok) return;
+    if(!window.confirm('¿Confirmas que deseas devolver estas propuestas al estudiante?')) return;
+
+    state().setCargando(true);
+    firebaseService().devolverTitulo(resultado.data.envio, resultado.data)
+      .then(function(respuesta){
+        modal().cerrar();
+        ui().mostrarEstado('estadoPrincipal',respuesta.mensaje || 'Título devuelto.','success');
+        return cargarTitulos();
+      })
+      .catch(function(error){
+        modal().mostrarEstado(error.message || String(error),'error');
+      })
+      .finally(function(){ state().setCargando(false); });
+  }
+
+  function mostrarDiagnostico(){
+    ui().mostrarDiagnostico();
+    ui().escribirDiagnostico({ estado:'probando', fecha:new Date().toISOString() });
+    firebaseService().diagnostico()
+      .then(function(resultado){ ui().escribirDiagnostico(resultado); })
+      .catch(function(error){ ui().escribirDiagnostico({ ok:false, error:error.message || String(error) }); });
+  }
+
+  function conectarEventos(){
+    var periodo = $('periodoSelect');
+    var coordinador = $('coordinadorSelect');
+    var buscador = $('buscadorInput');
+
+    if(periodo){
+      periodo.addEventListener('change',function(){ cambiarPeriodo(periodo.value); });
+    }
+    if(coordinador){
+      coordinador.addEventListener('change',function(){ cambiarCoordinador(coordinador.value); });
+    }
+    if(buscador){
+      buscador.addEventListener('input',function(){ state().setBusqueda(buscador.value); });
+    }
+
+    document.addEventListener('click',function(evento){
+      var boton = evento.target && evento.target.closest ? evento.target.closest('[data-accion]') : null;
+      if(!boton) return;
+      var accion = boton.getAttribute('data-accion');
+
+      if(accion === 'cambiar-vista') state().setVistaActual(boton.getAttribute('data-vista'));
+      else if(accion === 'actualizar-datos') cargarCatalogos().catch(function(){});
+      else if(accion === 'ver-detalle') abrirDetalle(boton.getAttribute('data-envio-id'));
+      else if(accion === 'cerrar-modal') modal().cerrar();
+      else if(accion === 'aprobar-envio') aprobar();
+      else if(accion === 'devolver-envio') devolver();
+      else if(accion === 'mostrar-diagnostico') mostrarDiagnostico();
+      else if(accion === 'ocultar-diagnostico') ui().ocultarDiagnostico();
+    });
+
+    document.addEventListener('keydown',function(evento){
+      if(evento.key === 'Escape') modal().cerrar();
+    });
+  }
+
+  function iniciar(){
+    if(iniciado) return;
+    iniciado = true;
+
     try{
-      window.dispatchEvent(new CustomEvent(name, { detail: detail || {} }));
-    }catch(error){}
-  }
-
-  function localPeriod(){
-    var id = "";
-    var label = "";
-
-    try{
-      id = text(localStorage.getItem("carga.periodoSeleccionado"));
-      label = text(localStorage.getItem("carga.periodoSeleccionadoLabel"));
-    }catch(error){}
-
-    return {
-      periodoId: id,
-      periodoLabel: label || id,
-      periodoCanonicoId: id,
-      periodoCanonicoLabel: label || id
-    };
-  }
-
-  function mergeOptions(base, extra){
-    base = base || {};
-    extra = extra || {};
-
-    var period = localPeriod();
-    var merged = Object.assign({}, period, base, extra);
-
-    merged.periodoId = text(merged.periodoCanonicoId || merged.periodoId || merged.id || period.periodoId);
-    merged.periodoLabel = text(merged.periodoCanonicoLabel || merged.periodoLabel || merged.label || period.periodoLabel || merged.periodoId);
-    merged.periodoCanonicoId = merged.periodoId;
-    merged.periodoCanonicoLabel = merged.periodoLabel;
-
-    return merged;
-  }
-
-  function requireModule(name, method){
-    var mod = window[name];
-    if(!mod){
-      throw new Error(name + " no está disponible.");
-    }
-    if(method && typeof mod[method] !== "function"){
-      throw new Error(name + "." + method + " no está disponible.");
-    }
-    return mod;
-  }
-
-  function normalizeRows(rows, options){
-    var normalizer = requireModule("CargaNormalizer", "normalizeRows");
-    return normalizer.normalizeRows(rows, options || {});
-  }
-
-  function validate(normalized){
-    var validator = requireModule("CargaValidator", "validate");
-    return validator.validate(normalized || {});
-  }
-
-  function buildPreview(normalized, validation){
-    if(window.CargaPreview && typeof window.CargaPreview.build === "function"){
-      try{
-        return window.CargaPreview.build(normalized || {}, validation || {});
-      }catch(error){
-        console.warn("[CargaApp] No se pudo construir preview interno", error);
+      validarDependencias();
+      state().iniciar();
+      ui().iniciar();
+      modal().iniciar();
+      conectarEventos();
+      firebaseService().inicializar()
+        .then(cargarCatalogos)
+        .catch(function(error){
+          state().setError(error);
+          ui().mostrarEstado('estadoPrincipal',error.message || String(error),'error');
+        });
+    }catch(error){
+      var estado = $('estadoPrincipal');
+      if(estado){
+        estado.className = 'status-message is-error';
+        estado.textContent = error.message || String(error);
       }
+      console.error('[CoordinadorMVPApp]',error);
     }
-    return { rows: [] };
   }
 
-  function processRows(rows, options){
-    options = mergeOptions(options || {});
-    rows = Array.isArray(rows) ? rows : [];
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded',iniciar);
+  else iniciar();
 
-    state.setStatus(cfg.estados.mapping, "Normalizando datos");
-
-    var normalized = normalizeRows(rows, options);
-    normalized.periodoDetectado = normalized.periodoDetectado || {};
-    normalized.periodoDetectado.periodoId = text(normalized.periodoDetectado.periodoId || options.periodoId);
-    normalized.periodoDetectado.periodoLabel = text(normalized.periodoDetectado.periodoLabel || options.periodoLabel || options.periodoId);
-    normalized.periodoDetectado.periodoCanonicoId = normalized.periodoDetectado.periodoId;
-    normalized.periodoDetectado.periodoCanonicoLabel = normalized.periodoDetectado.periodoLabel;
-    normalized.fileName = text(normalized.fileName || options.fileName || "");
-    normalized.origen = text(normalized.origen || options.origen || "");
-
-    state.patch({
-      rows: rows,
-      normalized: normalized,
-      origen: normalized.origen,
-      fileName: normalized.fileName
-    });
-
-    state.setStatus(cfg.estados.validating, "Validando datos");
-
-    var validation = validate(normalized);
-    validation = validation || { ok: false, errors: [], warnings: [] };
-    validation.errors = Array.isArray(validation.errors) ? validation.errors : [];
-    validation.warnings = Array.isArray(validation.warnings) ? validation.warnings : [];
-
-    var preview = buildPreview(normalized, validation);
-
-    state.patch({
-      preview: preview && Array.isArray(preview.rows) ? preview.rows : [],
-      errors: validation.errors,
-      warnings: validation.warnings
-    });
-
-    state.setStatus(
-      validation.ok ? cfg.estados.ready : cfg.estados.error,
-      validation.ok ? "Carga lista" : "Carga con errores"
-    );
-
-    emit("carga:processed", {
-      total: rows.length,
-      ok: !!validation.ok,
-      errors: validation.errors.length,
-      warnings: validation.warnings.length,
-      periodoId: normalized.periodoDetectado.periodoId,
-      periodoLabel: normalized.periodoDetectado.periodoLabel,
-      fileName: normalized.fileName
-    });
-
-    return {
-      normalized: normalized,
-      validation: validation,
-      preview: preview
-    };
-  }
-
-  function readFile(file, options){
-    options = mergeOptions(options || {}, {
-      fileName: file && file.name ? file.name : ""
-    });
-
-    state.reset();
-    state.setStatus(cfg.estados.reading, "Leyendo archivo");
-
-    return requireModule("CargaReaderFile", "read").read(file).then(function(result){
-      result = result || {};
-
-      var meta = mergeOptions(options, {
-        origen: result.origen || "archivo",
-        fileName: result.fileName || options.fileName,
-        detectedType: result.detectedType || result.tipo || "",
-        encoding: result.encoding || "",
-        sheetName: result.sheetName || "",
-        warnings: result.warnings || []
-      });
-
-      state.patch({
-        origen: meta.origen,
-        fileName: meta.fileName,
-        rows: Array.isArray(result.rows) ? result.rows : []
-      });
-
-      if(Array.isArray(result.warnings) && result.warnings.length){
-        state.patch({ warnings: result.warnings.slice() });
-      }
-
-      return processRows(result.rows || [], meta);
-    }).catch(function(error){
-      state.setStatus(cfg.estados.error, error && error.message ? error.message : "No se pudo leer el archivo");
-      throw error;
-    });
-  }
-
-  function readClipboard(value, options){
-    options = mergeOptions(options || {}, {
-      origen: "clipboard",
-      fileName: "pegado_manual"
-    });
-
-    state.reset();
-    state.setStatus(cfg.estados.reading, "Leyendo datos pegados");
-
-    return requireModule("CargaReaderClipboard", "read").read(value).then(function(result){
-      result = result || {};
-      var meta = mergeOptions(options, result);
-
-      state.patch({
-        origen: result.origen || "clipboard",
-        fileName: result.fileName || "pegado_manual",
-        rows: Array.isArray(result.rows) ? result.rows : []
-      });
-
-      return processRows(result.rows || [], meta);
-    }).catch(function(error){
-      state.setStatus(cfg.estados.error, error && error.message ? error.message : "No se pudo leer el pegado");
-      throw error;
-    });
-  }
-
-  function buildReport(result, current){
-    current = current || state.get();
-    result = result || {};
-
-    var validation = {
-      ok: current.errors.length === 0,
-      errors: current.errors || [],
-      warnings: current.warnings || [],
-      total: current.rows.length
-    };
-
-    if(window.CargaReport && typeof window.CargaReport.build === "function"){
-      try{
-        return window.CargaReport.build(result, validation, current);
-      }catch(error){
-        console.warn("[CargaApp] No se pudo construir reporte con CargaReport", error);
-      }
-    }
-
-    return Object.assign({
-      ok: result.ok !== false,
-      total: result.total || result.totalEntrada || current.rows.length,
-      saved: result.saved || result.guardados || 0,
-      updated: result.updated || result.actualizados || 0,
-      merged: result.merged || result.duplicados || 0,
-      warnings: result.warnings || result.advertencias || validation.warnings,
-      errors: result.errors || result.errores || validation.errors,
-      periodoId: result.periodoId || (current.normalized && current.normalized.periodoDetectado && current.normalized.periodoDetectado.periodoId) || "",
-      periodoLabel: result.periodoLabel || (current.normalized && current.normalized.periodoDetectado && current.normalized.periodoDetectado.periodoLabel) || ""
-    }, result);
-  }
-
-  function save(options){
-    options = mergeOptions(options || {});
-
-    var current = state.get();
-
-    if(!current.normalized){
-      return Promise.resolve({
-        ok: false,
-        total: 0,
-        saved: 0,
-        updated: 0,
-        merged: 0,
-        errors: 1,
-        warnings: 0,
-        message: "Primero lee un archivo antes de guardar."
-      });
-    }
-
-    state.setStatus(cfg.estados.committing, "Guardando en BDLocal");
-
-    return requireModule("CargaSave", "save").save(
-      clone(current.normalized),
-      {
-        errors: current.errors || [],
-        warnings: current.warnings || [],
-        ok: !current.errors || current.errors.length === 0
-      },
-      options
-    ).then(function(result){
-      var latest = state.get();
-      var report = buildReport(result, latest);
-
-      state.patch({ lastResult: report });
-      state.setStatus(
-        report.ok ? cfg.estados.done : cfg.estados.error,
-        report.ok ? "Carga guardada" : (report.message || "Carga no guardada")
-      );
-
-      emit("carga:saved", report);
-      return report;
-    }).catch(function(error){
-      state.setStatus(cfg.estados.error, error && error.message ? error.message : "No se pudo guardar");
-      emit("carga:save-error", { error: error && error.message ? error.message : String(error) });
-      throw error;
-    });
-  }
-
-  window.CargaApp = {
-    processRows: processRows,
-    readFile: readFile,
-    readClipboard: readClipboard,
-    save: save,
-    state: state.get
-  };
-})(window);
+  window.CoordinadorMVPApp = Object.freeze({
+    iniciar:iniciar,
+    cargarCatalogos:cargarCatalogos,
+    cargarTitulos:cargarTitulos,
+    aprobar:aprobar,
+    devolver:devolver
+  });
+})(window,document);
