@@ -6,34 +6,45 @@ Función:
 - Construir una única pantalla Estudiantes por período.
 - Agregar filtros de carrera y estado.
 - Coordinar la navegación sin bloquear los módulos independientes.
-- Cargar la gestión de períodos activos e inactivos.
+- Cargar períodos, estadísticas y reparación segura de la base.
 ========================================================= */
 (function(window,document){
   "use strict";
 
   if (window.AD_CONFIG) {
-    window.AD_CONFIG.version = "1.4.0";
+    window.AD_CONFIG.version = "1.5.0";
     window.AD_CONFIG.accionesLog = window.AD_CONFIG.accionesLog || {};
     window.AD_CONFIG.accionesLog.periodoActivado =
       window.AD_CONFIG.accionesLog.periodoActivado || "ADMIN_PERIODO_ACTIVADO";
     window.AD_CONFIG.accionesLog.periodoDesactivado =
       window.AD_CONFIG.accionesLog.periodoDesactivado || "ADMIN_PERIODO_DESACTIVADO";
+    window.AD_CONFIG.accionesLog.baseAnalizada =
+      window.AD_CONFIG.accionesLog.baseAnalizada || "ADMIN_BASE_ANALIZADA";
+    window.AD_CONFIG.accionesLog.tituloNormalizado =
+      window.AD_CONFIG.accionesLog.tituloNormalizado || "ADMIN_TITULO_NORMALIZADO";
+    window.AD_CONFIG.accionesLog.duplicadoDetectado =
+      window.AD_CONFIG.accionesLog.duplicadoDetectado || "ADMIN_DUPLICADO_DETECTADO";
   }
 
   var APP_VERSION = window.AD_CONFIG && window.AD_CONFIG.version
     ? String(window.AD_CONFIG.version)
-    : "1.4.0";
+    : "1.5.0";
 
   function $(id){ return document.getElementById(id); }
 
-  function agregarCss(){
-    if (document.getElementById("ad-estudiantes-css")) return;
-
+  function agregarCssArchivo(id,ruta){
+    if (document.getElementById(id)) return;
     var link = document.createElement("link");
-    link.id = "ad-estudiantes-css";
+    link.id = id;
     link.rel = "stylesheet";
-    link.href = "./ad-css/ad-estudiantes.css?v=" + encodeURIComponent(APP_VERSION);
+    link.href = ruta + "?v=" + encodeURIComponent(APP_VERSION);
     document.head.appendChild(link);
+  }
+
+  function agregarCss(){
+    agregarCssArchivo("ad-estudiantes-css","./ad-css/ad-estudiantes.css");
+    agregarCssArchivo("ad-estadisticas-css","./ad-css/ad-estadisticas.css");
+    agregarCssArchivo("ad-reparar-css","./ad-css/ad-reparar.css");
   }
 
   function cargarScript(src,id){
@@ -173,6 +184,25 @@ Función:
       ) {
         window.ADPeriodosApp.cargarPeriodos();
       }
+
+      if (
+        id === "ad-seccion-estadisticas" &&
+        window.ADEstadisticasApp &&
+        typeof window.ADEstadisticasApp.cargarPeriodos === "function"
+      ) {
+        var selectorStats = $("ad-estadisticas-periodo");
+        if (!selectorStats || !selectorStats.options || selectorStats.options.length <= 1) {
+          window.ADEstadisticasApp.cargarPeriodos();
+        }
+      }
+
+      if (
+        id === "ad-seccion-reparar" &&
+        window.ADRepararApp &&
+        typeof window.ADRepararApp.instalarNormalizador === "function"
+      ) {
+        window.ADRepararApp.instalarNormalizador();
+      }
     },0);
   }
 
@@ -237,7 +267,7 @@ Función:
 
     if (tituloPrincipal) tituloPrincipal.textContent = "Administrador de titulación";
     if (descripcionPrincipal) {
-      descripcionPrincipal.textContent = "Gestión de períodos, coordinadores, carreras, estudiantes y diagnóstico de conexiones.";
+      descripcionPrincipal.textContent = "Gestión de períodos, coordinadores, carreras, estudiantes, estadísticas y diagnóstico de conexiones.";
     }
 
     badge = $("ad-badge-version");
@@ -264,6 +294,17 @@ Función:
   });
 
   cargarScript(
+    "./ad-js/ad-base-repair.service.js?v=" + encodeURIComponent(APP_VERSION),
+    "ad-base-repair-service-script"
+  ).then(function(){
+    if (window.ADRepararApp && typeof window.ADRepararApp.instalarNormalizador === "function") {
+      window.ADRepararApp.instalarNormalizador();
+    }
+  }).catch(function(error){
+    console.error("No se pudo cargar el analizador de base:",error);
+  });
+
+  cargarScript(
     "./ad-js/ad-estudiantes.service.js?v=" + encodeURIComponent(APP_VERSION),
     "ad-estudiantes-service-script"
   )
@@ -271,6 +312,12 @@ Función:
       return cargarScript(
         "./ad-js/ad-estudiantes.runtime.js?v=" + encodeURIComponent(APP_VERSION),
         "ad-estudiantes-runtime-script"
+      );
+    })
+    .then(function(){
+      return cargarScript(
+        "./ad-js/ad-estadisticas.app.js?v=" + encodeURIComponent(APP_VERSION),
+        "ad-estadisticas-app-script"
       );
     })
     .catch(function(error){
