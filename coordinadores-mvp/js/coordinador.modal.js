@@ -3,6 +3,8 @@ Archivo: coordinador.modal.js
 Ruta: /coordinadores-mvp/js/coordinador.modal.js
 Función:
 - Mostrar propuestas y datos del estudiante.
+- Resaltar en dorado el título favorito elegido por el estudiante.
+- Mantener separada la preferencia del estudiante de la selección del coordinador.
 - Preparar aprobación, corrección o devolución.
 - Impedir revisar registros sin las tres propuestas.
 - Mostrar aprobados y devueltos en modo lectura.
@@ -22,6 +24,15 @@ Función:
   function setTexto(id,valor){ var el=$(id); if(el) el.textContent=texto(valor)||'-'; }
   function setValor(id,valor){ var el=$(id); if(el) el.value=texto(valor); }
   function estadoNormal(valor){ return texto(valor).toUpperCase(); }
+  function normalizarComparacion(valor){
+    return texto(valor)
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g,'')
+      .replace(/[^a-z0-9]+/g,' ')
+      .replace(/\s+/g,' ')
+      .trim();
+  }
 
   function iniciar(){
     if(iniciado) return true;
@@ -85,17 +96,112 @@ Función:
     setTexto('detalleTitulo1', envio.titulo1 || 'Sin título registrado');
     setTexto('detalleTitulo2', envio.titulo2 || 'Sin título registrado');
     setTexto('detalleTitulo3', envio.titulo3 || 'Sin título registrado');
+    pintarFavorito(envio);
+  }
 
-    var preferido = Number(String(envio.tituloPreferido || '').replace(/[^\d]/g,''));
-    if(preferido >= 1 && preferido <= 3){
-      var radio = document.querySelector('input[name="tituloSeleccionado"][value="' + preferido + '"]');
-      if(radio){ radio.checked = true; seleccionarTitulo(preferido); }
+  function pintarFavorito(envio){
+    var numero = obtenerNumeroFavorito(envio);
+
+    document.querySelectorAll('.proposal-card').forEach(function(tarjeta){
+      tarjeta.classList.remove('is-favorite');
+      tarjeta.removeAttribute('aria-label');
+    });
+    document.querySelectorAll('.favorite-badge').forEach(function(insignia){
+      insignia.hidden = true;
+    });
+
+    if(numero < 1 || numero > 3) return 0;
+
+    var tarjeta = document.querySelector('.proposal-card[data-propuesta="' + numero + '"]');
+    var insignia = document.querySelector('.favorite-badge[data-favorito="' + numero + '"]');
+
+    if(tarjeta){
+      tarjeta.classList.add('is-favorite');
+      tarjeta.setAttribute('aria-label','Título ' + numero + ', favorito del estudiante');
     }
+    if(insignia) insignia.hidden = false;
+
+    return numero;
+  }
+
+  function obtenerNumeroFavorito(envio){
+    var raw = envio && envio.raw && typeof envio.raw === 'object' ? envio.raw : {};
+    var candidatos = [
+      envio && envio.tituloPreferidoNumero,
+      envio && envio.tituloPreferido,
+      envio && envio.tituloPreferidoTexto,
+      envio && envio.preferido,
+      envio && envio.tituloSeleccionado,
+      envio && envio.tituloFavorito,
+      valorFlexible(raw,['tituloPreferidoNumero','tituloPreferido','tituloPreferidoTexto','preferido','tituloSeleccionado','tituloFavorito','titulofavorito'])
+    ];
+    var titulos = [
+      normalizarComparacion(envio && envio.titulo1),
+      normalizarComparacion(envio && envio.titulo2),
+      normalizarComparacion(envio && envio.titulo3)
+    ];
+    var i;
+    var candidato;
+    var numero;
+    var normalizado;
+
+    for(i = 0; i < candidatos.length; i += 1){
+      candidato = texto(candidatos[i]);
+      if(!candidato) continue;
+
+      numero = extraerNumeroFavorito(candidato);
+      if(numero) return numero;
+
+      normalizado = normalizarComparacion(candidato);
+      if(!normalizado) continue;
+
+      if(normalizado === titulos[0]) return 1;
+      if(normalizado === titulos[1]) return 2;
+      if(normalizado === titulos[2]) return 3;
+    }
+
+    return 0;
+  }
+
+  function extraerNumeroFavorito(valor){
+    var limpio = texto(valor).toLowerCase().trim();
+    var coincidencia;
+
+    if(/^[123]$/.test(limpio)) return Number(limpio);
+
+    coincidencia = limpio.match(/^(?:t[ií]tulo|propuesta|opci[oó]n|alternativa|favorito)\s*#?\s*([123])(?:\s|[-:.)]|$)/i);
+    if(coincidencia) return Number(coincidencia[1]);
+
+    coincidencia = limpio.match(/^([123])\s*[-:.)]\s+/);
+    if(coincidencia) return Number(coincidencia[1]);
+
+    return 0;
+  }
+
+  function valorFlexible(objeto,nombres){
+    var data = objeto || {};
+    var mapa = {};
+    var i;
+    var clave;
+
+    Object.keys(data).forEach(function(item){
+      mapa[normalizarComparacion(item)] = item;
+    });
+
+    for(i = 0; i < nombres.length; i += 1){
+      clave = mapa[normalizarComparacion(nombres[i])];
+      if(clave !== undefined && data[clave] !== undefined && data[clave] !== null){
+        if(texto(data[clave])) return data[clave];
+      }
+    }
+
+    return '';
   }
 
   function configurarModo(envio){
     var completos = tieneTitulosCompletos(envio);
     var pendiente = esPendiente(envio) && completos;
+    var favorito = obtenerNumeroFavorito(envio);
     var finalInput = $('tituloFinalInput');
     var comentario = $('comentarioCoordinadorInput');
     var aprobar = $('btnAprobarEnvio');
@@ -116,6 +222,8 @@ Función:
 
     if(!completos){
       mostrarEstado('Este registro no contiene las tres propuestas y no puede ser revisado.','error');
+    }else if(pendiente && favorito){
+      mostrarEstado('El favorito del estudiante está resaltado en dorado. Selecciona la propuesta que aprobarás o escribe el título final.','info');
     }else if(pendiente){
       mostrarEstado('Selecciona una propuesta o escribe el título final.','info');
     }else{
@@ -202,7 +310,14 @@ Función:
       radio.checked=false;
       radio.disabled=false;
     });
-    document.querySelectorAll('.proposal-card').forEach(function(tarjeta){ tarjeta.classList.remove('is-selected'); });
+    document.querySelectorAll('.proposal-card').forEach(function(tarjeta){
+      tarjeta.classList.remove('is-selected');
+      tarjeta.classList.remove('is-favorite');
+      tarjeta.removeAttribute('aria-label');
+    });
+    document.querySelectorAll('.favorite-badge').forEach(function(insignia){
+      insignia.hidden=true;
+    });
     setValor('tituloFinalInput','');
     setValor('comentarioCoordinadorInput','');
     var aprobar=$('btnAprobarEnvio');
@@ -231,6 +346,7 @@ Función:
     abrir:abrir,
     cerrar:cerrar,
     seleccionarTitulo:seleccionarTitulo,
+    obtenerNumeroFavorito:obtenerNumeroFavorito,
     obtenerResolucionAprobar:obtenerResolucionAprobar,
     obtenerResolucionDevolver:obtenerResolucionDevolver,
     obtenerEnvioActual:obtenerEnvioActual,
