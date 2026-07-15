@@ -5,13 +5,14 @@ Función:
 - Sustituir las pantallas antiguas Títulos y Devolver título.
 - Construir una única pantalla Estudiantes por período.
 - Agregar filtros, buscador y acciones administrativas.
+- Integrar la administración central de proveedores IA.
 - Coordinar períodos, estadísticas y reparación segura.
 ========================================================= */
 (function(window,document){
   "use strict";
 
   if (window.AD_CONFIG) {
-    window.AD_CONFIG.version = "1.6.0";
+    window.AD_CONFIG.version = "1.7.0";
     window.AD_CONFIG.accionesLog = window.AD_CONFIG.accionesLog || {};
     window.AD_CONFIG.accionesLog.periodoActivado =
       window.AD_CONFIG.accionesLog.periodoActivado || "ADMIN_PERIODO_ACTIVADO";
@@ -27,11 +28,17 @@ Función:
       window.AD_CONFIG.accionesLog.titulosDevueltos || "ADMIN_TITULOS_DEVUELTOS";
     window.AD_CONFIG.accionesLog.titulosEliminados =
       window.AD_CONFIG.accionesLog.titulosEliminados || "ADMIN_TITULOS_ELIMINADOS";
+    window.AD_CONFIG.accionesLog.iaCreada =
+      window.AD_CONFIG.accionesLog.iaCreada || "ADMIN_IA_CREADA";
+    window.AD_CONFIG.accionesLog.iaActualizada =
+      window.AD_CONFIG.accionesLog.iaActualizada || "ADMIN_IA_ACTUALIZADA";
+    window.AD_CONFIG.accionesLog.iaProbada =
+      window.AD_CONFIG.accionesLog.iaProbada || "ADMIN_IA_PROBADA";
   }
 
   var APP_VERSION = window.AD_CONFIG && window.AD_CONFIG.version
     ? String(window.AD_CONFIG.version)
-    : "1.6.0";
+    : "1.7.0";
 
   function $(id){ return document.getElementById(id); }
 
@@ -48,6 +55,7 @@ Función:
     agregarCssArchivo("ad-estudiantes-css","./ad-css/ad-estudiantes.css");
     agregarCssArchivo("ad-estadisticas-css","./ad-css/ad-estadisticas.css");
     agregarCssArchivo("ad-reparar-css","./ad-css/ad-reparar.css");
+    agregarCssArchivo("ad-ia-css","./ad-css/ad-ia.css");
   }
 
   function cargarScript(src,id){
@@ -140,6 +148,38 @@ Función:
     document.body.appendChild(modal);
   }
 
+  function agregarSeccionIA(){
+    var nav = document.querySelector(".ad-nav");
+    var referenciaNav = document.querySelector('[data-ad-view-target="ad-seccion-reparar"]') ||
+      document.querySelector('[data-ad-view-target="ad-seccion-diagnostico"]');
+    var enlace;
+    var referenciaSeccion = $("ad-seccion-reparar") || $("ad-seccion-diagnostico") || $("ad-seccion-logs");
+    var seccion;
+
+    if (nav && !document.querySelector('[data-ad-view-target="ad-seccion-ia"]')) {
+      enlace = document.createElement("a");
+      enlace.href = "#ad-seccion-ia";
+      enlace.setAttribute("data-ad-view-target","ad-seccion-ia");
+      enlace.textContent = "IA";
+      if (referenciaNav && referenciaNav.parentNode === nav) nav.insertBefore(enlace,referenciaNav);
+      else nav.appendChild(enlace);
+    }
+
+    if (!$("ad-seccion-ia")) {
+      seccion = document.createElement("section");
+      seccion.className = "ad-section ad-view";
+      seccion.id = "ad-seccion-ia";
+      seccion.hidden = true;
+      seccion.setAttribute("data-ad-view","");
+      seccion.innerHTML = '<div class="ad-card"><div class="ad-empty">Cargando módulo IA...</div></div>';
+      if (referenciaSeccion && referenciaSeccion.parentNode) referenciaSeccion.parentNode.insertBefore(seccion,referenciaSeccion);
+      else {
+        var main = document.querySelector(".ad-main");
+        if (main) main.appendChild(seccion);
+      }
+    }
+  }
+
   function activarModuloVista(id){
     window.setTimeout(function(){
       if (id === "ad-seccion-carreras" && window.ADCoordinadoresApp && typeof window.ADCoordinadoresApp.cargarDatosCarreras === "function") {
@@ -155,6 +195,10 @@ Función:
       if (id === "ad-seccion-estadisticas" && window.ADEstadisticasApp && typeof window.ADEstadisticasApp.cargarPeriodos === "function") {
         var selectorStats = $("ad-estadisticas-periodo");
         if (!selectorStats || !selectorStats.options || selectorStats.options.length <= 1) window.ADEstadisticasApp.cargarPeriodos();
+      }
+      if (id === "ad-seccion-ia" && window.ADIAApp) {
+        if (typeof window.ADIAApp.instalar === "function") window.ADIAApp.instalar();
+        else if (typeof window.ADIAApp.cargar === "function") window.ADIAApp.cargar();
       }
       if (id === "ad-seccion-reparar" && window.ADRepararApp && typeof window.ADRepararApp.instalarNormalizador === "function") {
         window.ADRepararApp.instalarNormalizador();
@@ -207,14 +251,21 @@ Función:
     }
     if (enlaceDevolver) enlaceDevolver.remove();
     if (seccionDevolver) seccionDevolver.remove();
+
+    agregarSeccionIA();
+
     if (tituloPrincipal) tituloPrincipal.textContent = "Administrador de titulación";
-    if (descripcionPrincipal) descripcionPrincipal.textContent = "Gestión de períodos, coordinadores, carreras, estudiantes, estadísticas y diagnóstico de conexiones.";
+    if (descripcionPrincipal) descripcionPrincipal.textContent = "Gestión de períodos, coordinadores, carreras, estudiantes, IA, estadísticas y diagnóstico de conexiones.";
     if ($("ad-badge-version")) $("ad-badge-version").textContent = "v" + APP_VERSION;
     if ($("ad-footer-version")) $("ad-footer-version").textContent = "Versión " + APP_VERSION;
 
     agregarCss();
     agregarModal();
     instalarNavegacion();
+
+    if (window.location.hash === "#ad-seccion-ia") {
+      window.setTimeout(function(){ mostrarVista("ad-seccion-ia"); },0);
+    }
   }
 
   transformar();
@@ -246,6 +297,18 @@ Función:
       if (estado) {
         estado.classList.add("is-error");
         estado.textContent = error.message || String(error);
+      }
+    });
+
+  cargarScript("./ad-js/ad-ia.service.js?v=" + encodeURIComponent(APP_VERSION),"ad-ia-service-script")
+    .then(function(){
+      return cargarScript("./ad-js/ad-ia.app.js?v=" + encodeURIComponent(APP_VERSION),"ad-ia-app-script");
+    })
+    .catch(function(error){
+      var seccion = $("ad-seccion-ia");
+      if (seccion) {
+        seccion.innerHTML = '<div class="ad-card"><div class="ad-empty">No se pudo cargar el módulo IA: ' +
+          (error.message || String(error)) + '</div></div>';
       }
     });
 
