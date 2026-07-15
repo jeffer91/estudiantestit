@@ -166,7 +166,10 @@
     model = utils.limpiarTexto(data.model || data.modelo || data.modelName || '');
     modelo = utils.limpiarTexto(data.modelo || data.model || data.modelName || '');
     nombre = utils.limpiarTexto(data.nombre || data.name || proveedor);
-    prioridad = numeroSeguro(data.prioridad || data.priority, 999);
+    prioridad = numeroSeguro(
+      data.prioridad !== undefined ? data.prioridad : data.priority,
+      prioridadFallback(id)
+    );
     timeoutMs = Math.max(5000, numeroSeguro(data.timeoutMs || data.timeout, 45000));
     maxTokens = Math.max(100, numeroSeguro(data.maxTokens || data.max_tokens, 900));
     temperatura = numeroSeguro(
@@ -198,6 +201,23 @@
       actualizadoEn: data.actualizadoEn || data.updatedAt || null,
       raw: data
     };
+  }
+
+  function prioridadFallback(id) {
+    var mapa = {
+      gemini: 1,
+      groq: 2,
+      cerebras: 3,
+      cloudflare: 4,
+      nvidia: 5,
+      github_models: 6,
+      openrouter: 7,
+      openrouter_qwen: 8,
+      openrouter_deepseek: 9,
+      huggingface: 10
+    };
+
+    return mapa[String(id || '').toLowerCase()] || 999;
   }
 
   function inferirTipo(id) {
