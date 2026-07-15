@@ -306,7 +306,10 @@ Función:
       setEstado("Proveedor guardado correctamente.","success");
       cerrarFormulario();
       return cargar(true).then(function(){
-        if (probarDespues) return probarUno(resultado.proveedor.id);
+        if (probarDespues) {
+          setCargando(false);
+          return probarUno(resultado.proveedor.id);
+        }
         return resultado;
       });
     }).catch(function(error){
