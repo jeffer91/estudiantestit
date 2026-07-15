@@ -4,6 +4,8 @@ Ruta: /administrador/ad-js/ad-ia.app.js
 Función:
 - Construir y controlar la sección IA del administrador.
 - Listar, agregar, editar, activar y desactivar proveedores.
+- Mostrar claramente si cada proveedor tiene una clave guardada.
+- Conservar la clave al editar sin volver a mostrarla.
 - Crear el catálogo inicial de 10 opciones.
 - Probar una IA o todas las IA activas.
 ========================================================= */
@@ -21,16 +23,28 @@ Función:
     if (!window.ADIAService) throw new Error("ADIAService no está disponible.");
     return window.ADIAService;
   }
+
   function $(id){ return document.getElementById(id); }
-  function texto(v){ return String(v === null || v === undefined ? "" : v).trim(); }
-  function escapar(v){
-    return texto(v)
+
+  function texto(valor){
+    return String(valor === null || valor === undefined ? "" : valor).trim();
+  }
+
+  function escapar(valor){
+    return texto(valor)
       .replace(/&/g,"&amp;")
       .replace(/</g,"&lt;")
       .replace(/>/g,"&gt;")
       .replace(/"/g,"&quot;")
       .replace(/'/g,"&#039;");
   }
+
+  function numeroEntrada(valor,fallback){
+    var limpio = typeof valor === "string" ? valor.replace(",",".") : valor;
+    var numero = Number(limpio);
+    return Number.isFinite(numero) ? numero : Number(fallback || 0);
+  }
+
   function prioridadFallback(id){
     var mapa = {
       gemini:1,
@@ -47,15 +61,45 @@ Función:
     return mapa[texto(id).toLowerCase()] || 999;
   }
 
-  function fecha(v){
-    if (!v) return "Sin prueba";
+  function tieneClave(proveedor){
+    return Boolean(texto(proveedor && (proveedor.apiKey || proveedor.key)));
+  }
+
+  function claveEnmascarada(proveedor){
+    var clave = texto(proveedor && (proveedor.apiKey || proveedor.key));
+    if (!clave) return "";
+    if (clave.length <= 4) return "••••";
+    return "••••••••" + clave.slice(-4);
+  }
+
+  function fecha(valor){
+    if (!valor) return "Sin prueba";
     try {
-      var d = new Date(v);
-      return Number.isNaN(d.getTime()) ? texto(v) : d.toLocaleString("es-EC");
-    } catch(error) {
-      return texto(v);
+      var fechaValor = new Date(valor);
+      return Number.isNaN(fechaValor.getTime())
+        ? texto(valor)
+        : fechaValor.toLocaleString("es-EC");
+    } catch(error){
+      return texto(valor);
     }
   }
+
+  function instalarEstilosAdicionales(){
+    if ($("ad-ia-clave-estilos")) return;
+    var style = document.createElement("style");
+    style.id = "ad-ia-clave-estilos";
+    style.textContent = [
+      ".ad-ia-key-status{display:inline-flex;align-items:center;gap:6px;padding:6px 9px;border-radius:999px;font-size:12px;font-weight:800;white-space:nowrap}",
+      ".ad-ia-key-status.is-saved{background:#e8f7ed;color:#147338}",
+      ".ad-ia-key-status.is-empty{background:#fff1ef;color:#a52920}",
+      ".ad-ia-key-help{display:block;margin-top:7px;font-size:12px;font-weight:700;color:#66768a}",
+      ".ad-ia-key-help.is-saved{color:#147338}",
+      ".ad-ia-test-error{display:block;max-width:220px;margin-top:4px;color:#a52920;font-size:11px;line-height:1.3;word-break:break-word}",
+      ".ad-ia-table th,.ad-ia-table td{vertical-align:middle}"
+    ].join("");
+    document.head.appendChild(style);
+  }
+
   function setEstado(mensaje,tipo){
     var box = $("ad-ia-estado");
     if (!box) return;
@@ -65,10 +109,12 @@ Función:
     if (tipo === "warning") box.classList.add("is-warning");
     box.textContent = mensaje || "";
   }
+
   function setCargando(valor,mensaje){
     estado.cargando = valor === true;
-    var botones = document.querySelectorAll("#ad-seccion-ia button");
-    botones.forEach(function(btn){ btn.disabled = estado.cargando; });
+    document.querySelectorAll("#ad-seccion-ia button").forEach(function(boton){
+      boton.disabled = estado.cargando;
+    });
     if (mensaje) setEstado(mensaje,"info");
   }
 
@@ -97,13 +143,13 @@ Función:
       '    <span>Prueba correcta <strong id="ad-ia-pruebas-ok">0</strong></span>',
       '  </div>',
       '  <div class="ad-ia-warning">',
-      '    Las claves se conservan cuando editas y dejas el campo vacío. Los modelos gratuitos pueden cambiar; por eso endpoint y modelo quedan editables.',
+      '    Por seguridad, una clave guardada nunca vuelve a mostrarse completa. Al editar verás “Clave guardada” y los últimos cuatro caracteres. Si dejas el campo vacío, se conserva.',
       '  </div>',
       '  <div id="ad-ia-estado" class="ad-status-box">Cargando proveedores IA...</div>',
       '  <div class="ad-table-wrap">',
       '    <table class="ad-table ad-ia-table">',
-      '      <thead><tr><th>Prioridad</th><th>Proveedor</th><th>Tipo</th><th>Modelo</th><th>Estado</th><th>Última prueba</th><th>Acciones</th></tr></thead>',
-      '      <tbody id="ad-ia-tabla"><tr><td colspan="7" class="ad-empty">Cargando...</td></tr></tbody>',
+      '      <thead><tr><th>Prioridad</th><th>Proveedor</th><th>Tipo</th><th>Modelo</th><th>Clave</th><th>Estado</th><th>Última prueba</th><th>Acciones</th></tr></thead>',
+      '      <tbody id="ad-ia-tabla"><tr><td colspan="8" class="ad-empty">Cargando...</td></tr></tbody>',
       '    </table>',
       '  </div>',
       '  <div id="ad-ia-pruebas-lista" class="ad-ia-test-all"></div>',
@@ -128,8 +174,11 @@ Función:
       '      <label>Prioridad<input id="ad-ia-prioridad" type="number" min="1" max="999" value="10"></label>',
       '      <label>Tiempo máximo (ms)<input id="ad-ia-timeout" type="number" min="5000" step="1000" value="45000"></label>',
       '      <label>Máximo de tokens<input id="ad-ia-max-tokens" type="number" min="100" step="50" value="900"></label>',
-      '      <label>Temperatura<input id="ad-ia-temperatura" type="number" min="0" max="2" step="0.1" value="0.4"></label>',
-      '      <label class="ad-ia-field-double">API key o token<input id="ad-ia-api-key" type="password" autocomplete="new-password" placeholder="Dejar vacío para conservar la clave actual"></label>',
+      '      <label>Temperatura<input id="ad-ia-temperatura" type="text" inputmode="decimal" value="0.4" placeholder="0.4"></label>',
+      '      <label class="ad-ia-field-double">API key o token',
+      '        <input id="ad-ia-api-key" type="password" autocomplete="new-password" placeholder="Ingresa una clave nueva">',
+      '        <small id="ad-ia-clave-estado" class="ad-ia-key-help">Aún no hay una clave guardada.</small>',
+      '      </label>',
       '      <label class="ad-ia-check"><input id="ad-ia-activo" type="checkbox"><span>Proveedor activo</span></label>',
       '      <label class="ad-ia-field-full">Descripción<textarea id="ad-ia-descripcion" placeholder="Uso o nota del proveedor"></textarea></label>',
       '    </div>',
@@ -146,6 +195,7 @@ Función:
   function instalar(){
     var seccion = $("ad-seccion-ia");
     if (!seccion) return;
+    instalarEstilosAdicionales();
     if (!estado.inicializado) {
       seccion.innerHTML = htmlBase();
       conectarEventos();
@@ -158,7 +208,7 @@ Función:
     $("ad-ia-agregar").addEventListener("click",function(){ abrirFormulario(null); });
     $("ad-ia-catalogo").addEventListener("click",crearCatalogo);
     $("ad-ia-probar-todas").addEventListener("click",probarTodas);
-    $("ad-ia-recargar").addEventListener("click",cargar);
+    $("ad-ia-recargar").addEventListener("click",function(){ cargar(); });
     $("ad-ia-form-cerrar").addEventListener("click",cerrarFormulario);
     $("ad-ia-form-limpiar").addEventListener("click",function(){ abrirFormulario(null); });
     $("ad-ia-form-probar").addEventListener("click",guardarYProbar);
@@ -173,6 +223,7 @@ Función:
     var mantenerBloqueo = estado.cargando;
     if (estado.cargando && forzar !== true) return Promise.resolve();
     if (!mantenerBloqueo) setCargando(true,"Leyendo proveedores IA desde Firebase...");
+
     return servicio().listar().then(function(lista){
       estado.proveedores = (lista || []).map(function(proveedor){
         if (Number(proveedor.prioridad || 999) >= 999) {
@@ -182,6 +233,7 @@ Función:
       }).sort(function(a,b){
         return Number(a.prioridad || 999) - Number(b.prioridad || 999);
       });
+
       pintar();
       setEstado(
         estado.proveedores.length
@@ -200,8 +252,9 @@ Función:
   function pintar(){
     var total = estado.proveedores.length;
     var activas = estado.proveedores.filter(function(p){ return p.activo; }).length;
-    var conClave = estado.proveedores.filter(function(p){ return Boolean(p.apiKey || p.key); }).length;
+    var conClave = estado.proveedores.filter(tieneClave).length;
     var pruebasOk = estado.proveedores.filter(function(p){ return p.ultimaPruebaOk; }).length;
+
     $("ad-ia-total").textContent = String(total);
     $("ad-ia-activas").textContent = String(activas);
     $("ad-ia-con-clave").textContent = String(conClave);
@@ -218,14 +271,22 @@ Función:
         ? (p.ultimaPruebaOk ? "Correcta" : "Error")
         : "Sin prueba";
       var latencia = p.ultimaLatenciaMs ? p.ultimaLatenciaMs + " ms" : "";
+      var claveHtml = tieneClave(p)
+        ? '<span class="ad-ia-key-status is-saved" title="La clave está guardada">Guardada ' + escapar(claveEnmascarada(p)) + '</span>'
+        : '<span class="ad-ia-key-status is-empty">Sin clave</span>';
+      var errorHtml = !p.ultimaPruebaOk && p.ultimoError
+        ? '<small class="ad-ia-test-error" title="' + escapar(p.ultimoError) + '">' + escapar(texto(p.ultimoError).slice(0,90)) + '</small>'
+        : '';
+
       return [
         '<tr>',
         '  <td><strong>' + escapar(p.prioridad) + '</strong></td>',
         '  <td><div class="ad-ia-name"><strong>' + escapar(p.nombre) + '</strong><small>' + escapar(p.id) + '</small></div></td>',
         '  <td>' + escapar(p.tipo) + '</td>',
         '  <td><div class="ad-ia-model"><strong>' + escapar(p.modelo || "Sin modelo") + '</strong><small>' + escapar(p.endpoint || "Endpoint automático") + '</small></div></td>',
+        '  <td>' + claveHtml + '</td>',
         '  <td><span class="ad-ia-status ' + (p.activo ? "is-active" : "is-inactive") + '">' + (p.activo ? "Activa" : "Inactiva") + '</span></td>',
-        '  <td><div class="ad-ia-test ' + pruebaClase + '"><strong>' + escapar(pruebaTexto) + '</strong><span>' + escapar(latencia || fecha(p.ultimaPruebaEn)) + '</span></div></td>',
+        '  <td><div class="ad-ia-test ' + pruebaClase + '"><strong>' + escapar(pruebaTexto) + '</strong><span>' + escapar(latencia || fecha(p.ultimaPruebaEn)) + '</span>' + errorHtml + '</div></td>',
         '  <td><div class="ad-ia-row-actions">',
         '    <button class="ad-btn ad-btn-secondary" type="button" data-ia-accion="editar" data-ia-id="' + escapar(p.id) + '">Editar</button>',
         '    <button class="ad-btn ad-btn-secondary" type="button" data-ia-accion="probar" data-ia-id="' + escapar(p.id) + '">Probar</button>',
@@ -237,22 +298,44 @@ Función:
   }
 
   function pintarVacio(mensaje){
-    $("ad-ia-tabla").innerHTML = '<tr><td colspan="7" class="ad-empty">' + escapar(mensaje) + '</td></tr>';
+    $("ad-ia-tabla").innerHTML = '<tr><td colspan="8" class="ad-empty">' + escapar(mensaje) + '</td></tr>';
   }
 
   function manejarAccionFila(evento){
-    var boton = evento.target && evento.target.closest ? evento.target.closest("[data-ia-accion]") : null;
+    var boton = evento.target && evento.target.closest
+      ? evento.target.closest("[data-ia-accion]")
+      : null;
     if (!boton || estado.cargando) return;
+
     var id = boton.getAttribute("data-ia-id");
     var accion = boton.getAttribute("data-ia-accion");
     var proveedor = estado.proveedores.find(function(item){ return item.id === id; });
+
     if (accion === "editar") abrirFormulario(proveedor);
     if (accion === "probar") probarUno(id);
     if (accion === "estado") cambiarEstado(id,boton.getAttribute("data-ia-activo") === "true");
   }
 
+  function actualizarEstadoClave(proveedor){
+    var ayuda = $("ad-ia-clave-estado");
+    var input = $("ad-ia-api-key");
+    if (!ayuda || !input) return;
+
+    ayuda.className = "ad-ia-key-help";
+
+    if (tieneClave(proveedor)) {
+      ayuda.classList.add("is-saved");
+      ayuda.textContent = "Clave guardada correctamente: " + claveEnmascarada(proveedor) + ". Déjala vacía para conservarla.";
+      input.placeholder = "Dejar vacío para conservar la clave guardada";
+    } else {
+      ayuda.textContent = "Este proveedor todavía no tiene una clave guardada.";
+      input.placeholder = "Ingresa la API key o token";
+    }
+  }
+
   function abrirFormulario(proveedor){
     var existe = Boolean(proveedor && proveedor.id);
+
     $("ad-ia-form-card").hidden = false;
     $("ad-ia-form-titulo").textContent = existe ? "Editar " + proveedor.nombre : "Agregar IA";
     $("ad-ia-id").value = existe ? proveedor.id : "";
@@ -265,7 +348,12 @@ Función:
     $("ad-ia-timeout").value = existe ? proveedor.timeoutMs : 45000;
     $("ad-ia-max-tokens").value = existe ? proveedor.maxTokens : 900;
     $("ad-ia-temperatura").value = existe ? proveedor.temperatura : 0.4;
+
+    // Nunca se vuelve a colocar la clave real en el input.
+    // El servicio conserva la existente cuando este campo permanece vacío.
     $("ad-ia-api-key").value = "";
+    actualizarEstadoClave(existe ? proveedor : null);
+
     $("ad-ia-activo").checked = existe ? proveedor.activo : false;
     $("ad-ia-descripcion").value = existe ? proveedor.descripcion : "";
     $("ad-ia-form-card").scrollIntoView({ behavior:"smooth", block:"start" });
@@ -277,10 +365,14 @@ Función:
 
   function siguientePrioridad(){
     if (!estado.proveedores.length) return 1;
-    return Math.max.apply(null,estado.proveedores.map(function(p){ return Number(p.prioridad || 0); })) + 1;
+    return Math.max.apply(null,estado.proveedores.map(function(p){
+      return Number(p.prioridad || 0);
+    })) + 1;
   }
 
   function datosFormulario(){
+    var claveNueva = $("ad-ia-api-key").value;
+
     return {
       id:$("ad-ia-id").value,
       nombre:$("ad-ia-nombre").value,
@@ -288,12 +380,12 @@ Función:
       endpoint:$("ad-ia-endpoint").value,
       modelo:$("ad-ia-modelo").value,
       model:$("ad-ia-modelo").value,
-      prioridad:Number($("ad-ia-prioridad").value || 999),
-      timeoutMs:Number($("ad-ia-timeout").value || 45000),
-      maxTokens:Number($("ad-ia-max-tokens").value || 900),
-      temperatura:Number($("ad-ia-temperatura").value || 0.4),
-      apiKey:$("ad-ia-api-key").value,
-      key:$("ad-ia-api-key").value,
+      prioridad:numeroEntrada($("ad-ia-prioridad").value,999),
+      timeoutMs:numeroEntrada($("ad-ia-timeout").value,45000),
+      maxTokens:numeroEntrada($("ad-ia-max-tokens").value,900),
+      temperatura:numeroEntrada($("ad-ia-temperatura").value,0.4),
+      apiKey:claveNueva,
+      key:claveNueva,
       activo:$("ad-ia-activo").checked,
       descripcion:$("ad-ia-descripcion").value
     };
@@ -301,10 +393,19 @@ Función:
 
   function guardarFormulario(probarDespues){
     if (estado.cargando) return Promise.resolve();
+
+    var claveFueReemplazada = Boolean(texto($("ad-ia-api-key").value));
     setCargando(true,"Guardando proveedor IA...");
+
     return servicio().guardar(datosFormulario()).then(function(resultado){
-      setEstado("Proveedor guardado correctamente.","success");
+      setEstado(
+        claveFueReemplazada
+          ? "Proveedor guardado y clave actualizada correctamente."
+          : "Proveedor guardado. La clave anterior fue conservada.",
+        "success"
+      );
       cerrarFormulario();
+
       return cargar(true).then(function(){
         if (probarDespues) {
           setCargando(false);
@@ -331,6 +432,7 @@ Función:
   function crearCatalogo(){
     if (estado.cargando) return;
     setCargando(true,"Creando los proveedores faltantes del catálogo...");
+
     servicio().sembrarCatalogo().then(function(resultado){
       setEstado(
         resultado.totalCreados
@@ -349,6 +451,7 @@ Función:
   function cambiarEstado(id,activo){
     if (estado.cargando) return;
     setCargando(true,(activo ? "Activando " : "Desactivando ") + id + "...");
+
     servicio().cambiarEstado(id,activo).then(function(){
       setEstado("Estado actualizado correctamente.","success");
       return cargar(true);
@@ -362,6 +465,7 @@ Función:
   function probarUno(id){
     if (estado.cargando) return Promise.resolve();
     setCargando(true,"Probando " + id + "...");
+
     return servicio().probar(id).then(function(resultado){
       setEstado(
         resultado.nombre + " respondió correctamente en " + resultado.latenciaMs + " ms.",
@@ -382,15 +486,18 @@ Función:
 
   function probarTodas(){
     if (estado.cargando) return;
+
     var activas = estado.proveedores.filter(function(p){ return p.activo; });
     var lista = $("ad-ia-pruebas-lista");
     lista.innerHTML = "";
+
     if (!activas.length) {
       setEstado("No hay proveedores activos para probar.","warning");
       return;
     }
 
     setCargando(true,"Probando " + activas.length + " proveedores activos...");
+
     var resultados = [];
     var cadena = Promise.resolve();
 
