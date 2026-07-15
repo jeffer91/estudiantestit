@@ -1,0 +1,257 @@
+.ad-ia-toolbar,
+.ad-ia-summary,
+.ad-ia-form-grid,
+.ad-ia-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.ad-ia-toolbar {
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.ad-ia-toolbar__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ad-ia-summary {
+  margin-bottom: 16px;
+}
+
+.ad-ia-summary span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 12px;
+  border: 1px solid var(--ad-border);
+  border-radius: 999px;
+  background: var(--ad-surface-soft);
+  color: var(--ad-muted);
+  font-size: 13px;
+}
+
+.ad-ia-summary strong {
+  color: var(--ad-text);
+}
+
+.ad-ia-table td {
+  vertical-align: middle;
+}
+
+.ad-ia-name {
+  display: grid;
+  gap: 3px;
+  min-width: 150px;
+}
+
+.ad-ia-name strong {
+  color: var(--ad-text);
+}
+
+.ad-ia-name small,
+.ad-ia-model small {
+  color: var(--ad-muted);
+}
+
+.ad-ia-model {
+  max-width: 280px;
+  word-break: break-word;
+}
+
+.ad-ia-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 86px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.ad-ia-status.is-active,
+.ad-ia-test.is-ok {
+  background: #e8f7ed;
+  color: #147338;
+}
+
+.ad-ia-status.is-inactive {
+  background: #eef2f6;
+  color: #66768a;
+}
+
+.ad-ia-test {
+  display: grid;
+  gap: 3px;
+  min-width: 100px;
+  color: var(--ad-muted);
+  font-size: 12px;
+}
+
+.ad-ia-test.is-error {
+  color: #a52920;
+}
+
+.ad-ia-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 220px;
+}
+
+.ad-ia-row-actions .ad-btn {
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.ad-ia-form-card {
+  margin-top: 18px;
+}
+
+.ad-ia-form-card[hidden] {
+  display: none;
+}
+
+.ad-ia-form-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.ad-ia-form-head h4 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.ad-ia-form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+}
+
+.ad-ia-form-grid label {
+  display: grid;
+  gap: 7px;
+  color: var(--ad-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.ad-ia-form-grid input,
+.ad-ia-form-grid select,
+.ad-ia-form-grid textarea {
+  width: 100%;
+  min-height: 42px;
+  padding: 10px 12px;
+  border: 1px solid var(--ad-border);
+  border-radius: 10px;
+  background: var(--ad-surface);
+  color: var(--ad-text);
+}
+
+.ad-ia-form-grid textarea {
+  min-height: 92px;
+  resize: vertical;
+}
+
+.ad-ia-field-full {
+  grid-column: 1 / -1;
+}
+
+.ad-ia-field-double {
+  grid-column: span 2;
+}
+
+.ad-ia-check {
+  display: flex !important;
+  align-items: center;
+  gap: 10px !important;
+  min-height: 42px;
+  padding-top: 23px;
+}
+
+.ad-ia-check input {
+  width: 18px;
+  min-height: 18px;
+}
+
+.ad-ia-warning {
+  padding: 12px 14px;
+  border: 1px solid #f1d7a4;
+  border-radius: 12px;
+  background: #fff9eb;
+  color: #7b5811;
+  line-height: 1.5;
+  font-size: 13px;
+}
+
+.ad-ia-test-all {
+  margin-top: 14px;
+  display: grid;
+  gap: 8px;
+}
+
+.ad-ia-test-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--ad-border);
+  border-radius: 10px;
+  background: var(--ad-surface-soft);
+}
+
+.ad-ia-test-item strong {
+  color: var(--ad-text);
+}
+
+.ad-ia-test-item span {
+  color: var(--ad-muted);
+  text-align: right;
+}
+
+@media (max-width: 980px) {
+  .ad-ia-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ad-ia-field-double {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 680px) {
+  .ad-ia-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ad-ia-field-full,
+  .ad-ia-field-double {
+    grid-column: auto;
+  }
+
+  .ad-ia-toolbar,
+  .ad-ia-form-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ad-ia-row-actions {
+    min-width: 0;
+  }
+
+  .ad-ia-test-item {
+    flex-direction: column;
+  }
+
+  .ad-ia-test-item span {
+    text-align: left;
+  }
+}
