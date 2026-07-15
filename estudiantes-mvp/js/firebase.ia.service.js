@@ -2,11 +2,11 @@
   Archivo: firebase.ia.service.js
   Ruta: estudiantes-mvp/js/firebase.ia.service.js
   Funciones principales:
-  - Leer proveedores IA desde Firebase, colección IA.
-  - Normalizar proveedores como gemini, groq y cloudflare.
-  - Ordenar proveedores según configuración del MVP.
-  - Guardar o actualizar proveedores IA desde config.html.
-  - Entregar proveedores activos al servicio de IA de Titulación.
+  - Leer proveedores IA configurados desde el administrador.
+  - Normalizar proveedores por tipo, prioridad, modelo y endpoint.
+  - Ordenar dinámicamente cualquier cantidad de proveedores.
+  - Entregar únicamente proveedores activos al motor de titulación.
+  - Mantener la pantalla de estudiantes en modo solo lectura.
 */
 (function (window) {
   'use strict';
@@ -78,79 +78,9 @@
       });
   }
 
-  function guardarProveedor(proveedor) {
-    var config = obtenerConfig();
-    var firebase = obtenerFirebase();
-    var utils = obtenerUtils();
-    var coleccion;
-    var normalizado;
-    var id;
-    var data;
-
-    if (!config || !firebase || !utils) {
-      return Promise.reject(new Error('Faltan módulos base para guardar proveedor IA.'));
-    }
-
-    normalizado = normalizarProveedor(proveedor || {});
-    id = normalizado.id || normalizado.proveedor;
-
-    if (!id) {
-      return Promise.reject(new Error('No se pudo identificar el proveedor IA.'));
-    }
-
-    coleccion = config.obtenerColeccion('ia') || 'IA';
-
-    data = {
-      id: id,
-      proveedor: id,
-      nombre: normalizado.nombre,
-      activo: normalizado.activo,
-      endpoint: normalizado.endpoint,
-      apiKey: normalizado.apiKey,
-      key: normalizado.key,
-      model: normalizado.model,
-      modelo: normalizado.modelo,
-      origen: normalizado.origen || 'config-mvp',
-      actualizadoEnLocal: utils.fechaIso(),
-      actualizadoEn: firebase.serverTimestamp()
-    };
-
-    return firebase.guardarDocumento(coleccion, id, data, { merge: true })
-      .then(function (resultado) {
-        resultado.proveedor = normalizado;
-        return resultado;
-      });
-  }
-
-  function desactivarProveedor(providerId) {
-    var config = obtenerConfig();
-    var firebase = obtenerFirebase();
-    var utils = obtenerUtils();
-    var coleccion;
-    var id;
-
-    if (!config || !firebase || !utils) {
-      return Promise.reject(new Error('Faltan módulos base para desactivar proveedor IA.'));
-    }
-
-    id = utils.normalizarClave(providerId);
-
-    if (!id) {
-      return Promise.reject(new Error('No se recibió el ID del proveedor IA.'));
-    }
-
-    coleccion = config.obtenerColeccion('ia') || 'IA';
-
-    return firebase.guardarDocumento(coleccion, id, {
-      activo: false,
-      actualizadoEnLocal: utils.fechaIso(),
-      actualizadoEn: firebase.serverTimestamp()
-    }, { merge: true });
-  }
-
   function normalizarListaProveedores(lista) {
     var config = obtenerConfig();
-    var orden = config && config.data && config.data.ia
+    var ordenFallback = config && config.data && config.data.ia
       ? config.data.ia.proveedoresOrden || []
       : [];
 
@@ -162,23 +92,34 @@
         return !!item.id;
       })
       .sort(function (a, b) {
-        var ia = orden.indexOf(a.id);
-        var ib = orden.indexOf(b.id);
+        var prioridadA = Number(a.prioridad || 999);
+        var prioridadB = Number(b.prioridad || 999);
+        var ordenA;
+        var ordenB;
 
-        if (ia === -1) ia = 999;
-        if (ib === -1) ib = 999;
-
-        if (ia !== ib) {
-          return ia - ib;
+        if (prioridadA !== prioridadB) {
+          return prioridadA - prioridadB;
         }
 
-        return String(a.nombre || a.id).localeCompare(String(b.nombre || b.id));
+        ordenA = ordenFallback.indexOf(a.id);
+        ordenB = ordenFallback.indexOf(b.id);
+
+        if (ordenA === -1) ordenA = 999;
+        if (ordenB === -1) ordenB = 999;
+
+        if (ordenA !== ordenB) {
+          return ordenA - ordenB;
+        }
+
+        return String(a.nombre || a.id).localeCompare(String(b.nombre || b.id), 'es');
       });
   }
 
   function normalizarProveedor(data, idForzado) {
     var utils = obtenerUtils();
+    var proveedor;
     var id;
+    var tipo;
     var activo;
     var endpoint;
     var apiKey;
@@ -186,7 +127,10 @@
     var model;
     var modelo;
     var nombre;
-    var proveedor;
+    var prioridad;
+    var timeoutMs;
+    var maxTokens;
+    var temperatura;
 
     if (!utils) {
       throw new Error('No está disponible EstudianteMVPUtils.');
@@ -199,11 +143,18 @@
       data.proveedor ||
       data.id ||
       data.provider ||
+      data._id ||
       data.nombre ||
       ''
     );
 
     id = proveedor;
+    tipo = utils.normalizarClave(
+      data.tipo ||
+      data.protocol ||
+      data.protocolo ||
+      inferirTipo(id)
+    ).replace(/_/g, '-');
 
     activo = normalizarBooleano(
       data.activo !== undefined ? data.activo : data.active
@@ -215,21 +166,65 @@
     model = utils.limpiarTexto(data.model || data.modelo || data.modelName || '');
     modelo = utils.limpiarTexto(data.modelo || data.model || data.modelName || '');
     nombre = utils.limpiarTexto(data.nombre || data.name || proveedor);
+    prioridad = numeroSeguro(data.prioridad || data.priority, 999);
+    timeoutMs = Math.max(5000, numeroSeguro(data.timeoutMs || data.timeout, 45000));
+    maxTokens = Math.max(100, numeroSeguro(data.maxTokens || data.max_tokens, 900));
+    temperatura = numeroSeguro(
+      data.temperatura !== undefined ? data.temperatura : data.temperature,
+      0.4
+    );
 
     return {
       id: id,
       proveedor: proveedor,
       nombre: nombre,
+      tipo: tipo,
       activo: activo,
+      prioridad: prioridad,
       endpoint: endpoint,
       apiKey: apiKey,
       key: key,
       model: model,
       modelo: modelo,
+      timeoutMs: timeoutMs,
+      maxTokens: maxTokens,
+      temperatura: temperatura,
+      descripcion: utils.limpiarTexto(data.descripcion || data.description || ''),
+      ultimaPruebaOk: data.ultimaPruebaOk === true,
+      ultimaPruebaEn: data.ultimaPruebaEn || null,
+      ultimaLatenciaMs: numeroSeguro(data.ultimaLatenciaMs, 0),
+      ultimoError: utils.limpiarTexto(data.ultimoError || ''),
       origen: utils.limpiarTexto(data.origen || data.source || ''),
       actualizadoEn: data.actualizadoEn || data.updatedAt || null,
       raw: data
     };
+  }
+
+  function inferirTipo(id) {
+    id = String(id || '').toLowerCase();
+
+    if (id === 'gemini') {
+      return 'gemini';
+    }
+
+    if (id === 'cloudflare') {
+      return 'cloudflare';
+    }
+
+    if (
+      id === 'groq' ||
+      id === 'openrouter' ||
+      id === 'openrouter_qwen' ||
+      id === 'openrouter_deepseek' ||
+      id === 'cerebras' ||
+      id === 'nvidia' ||
+      id === 'github_models' ||
+      id === 'huggingface'
+    ) {
+      return 'openai-compatible';
+    }
+
+    return 'generic';
   }
 
   function normalizarBooleano(valor) {
@@ -242,26 +237,33 @@
 
     valor = String(valor == null ? '' : valor).toLowerCase().trim();
 
-    if (valor === 'true' || valor === 'activo' || valor === '1' || valor === 'si' || valor === 'sí') {
-      return true;
-    }
+    return (
+      valor === 'true' ||
+      valor === 'activo' ||
+      valor === '1' ||
+      valor === 'si' ||
+      valor === 'sí'
+    );
+  }
 
-    return false;
+  function numeroSeguro(valor, fallback) {
+    var numero = Number(valor);
+
+    return Number.isFinite(numero)
+      ? numero
+      : Number(fallback || 0);
   }
 
   function obtenerProveedorPreferido(proveedores) {
-    var config = obtenerConfig();
-    var principal = config && config.data && config.data.ia
-      ? config.data.ia.proveedorPrincipal
-      : 'gemini';
-
     proveedores = Array.isArray(proveedores) ? proveedores : [];
 
-    return proveedores.find(function (proveedor) {
-      return proveedor.id === principal && proveedor.activo;
-    }) || proveedores.find(function (proveedor) {
-      return proveedor.activo;
-    }) || null;
+    return proveedores
+      .filter(function (proveedor) {
+        return proveedor.activo;
+      })
+      .sort(function (a, b) {
+        return Number(a.prioridad || 999) - Number(b.prioridad || 999);
+      })[0] || null;
   }
 
   function probarLectura() {
@@ -274,8 +276,10 @@
             return {
               id: proveedor.id,
               nombre: proveedor.nombre,
+              tipo: proveedor.tipo,
               activo: proveedor.activo,
-              endpoint: proveedor.endpoint,
+              prioridad: proveedor.prioridad,
+              endpointConfigurado: !!proveedor.endpoint,
               modelo: proveedor.modelo || proveedor.model
             };
           }),
@@ -290,8 +294,6 @@
     listarProveedores: listarProveedores,
     listarProveedoresActivos: listarProveedoresActivos,
     leerProveedor: leerProveedor,
-    guardarProveedor: guardarProveedor,
-    desactivarProveedor: desactivarProveedor,
     normalizarProveedor: normalizarProveedor,
     obtenerProveedorPreferido: obtenerProveedorPreferido,
     probarLectura: probarLectura
