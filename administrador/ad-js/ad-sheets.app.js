@@ -3,25 +3,62 @@
   'use strict';
 
   var iniciado=false;
-  function s(){ if(!window.ADSheetsService) throw new Error('ADSheetsService no disponible.'); return window.ADSheetsService; }
-  function $(id){ return document.getElementById(id); }
-  function t(v){ return String(v==null?'':v).trim(); }
+  var COORDINADORES_STORAGE_KEY='titulos_coordinadores_catalogo_v1';
+
+  function s(){if(!window.ADSheetsService)throw new Error('ADSheetsService no disponible.');return window.ADSheetsService;}
+  function $(id){return document.getElementById(id);}
+  function t(v){return String(v==null?'':v).trim();}
   function estado(mensaje,tipo){
-    var el=$('ad-sheets-estado');
-    if(!el) return;
+    var el=$('ad-sheets-estado');if(!el)return;
     el.className='ad-status-box';
-    if(tipo==='success') el.classList.add('is-success');
-    if(tipo==='error') el.classList.add('is-error');
-    if(tipo==='warning') el.classList.add('is-warning');
+    if(tipo==='success')el.classList.add('is-success');
+    if(tipo==='error')el.classList.add('is-error');
+    if(tipo==='warning')el.classList.add('is-warning');
     el.textContent=mensaje||'';
   }
   function resultado(nombre,data){
-    var el=$('ad-sheets-resultado');
-    if(!el) return;
-    var copia;
-    try{ copia=JSON.parse(JSON.stringify(data||{})); }catch(e){ copia={}; }
-    if(copia.configuracion) copia.configuracion.token=copia.configuracion.token?'CONFIGURADO':'';
+    var el=$('ad-sheets-resultado');if(!el)return;var copia;
+    try{copia=JSON.parse(JSON.stringify(data||{}));}catch(e){copia={};}
+    if(copia.configuracion)copia.configuracion.token=copia.configuracion.token?'CONFIGURADO':'';
     el.textContent=nombre+'\n\n'+JSON.stringify(copia,null,2);
+  }
+  function normalizarCoordinador(item,indice){
+    item=item||{};
+    var id=t(item.id||item._docId||item.nombre||('coordinador_'+indice));
+    return {
+      id:id,
+      _docId:id,
+      nombre:t(item.nombre||item.Nombre||id),
+      telegram:t(item.telegram||item.Telegram||''),
+      Telegram:t(item.telegram||item.Telegram||''),
+      activo:item.activo!==false,
+      carreras:Array.isArray(item.carreras)?item.carreras.slice():[],
+      carrerasAsignadas:Array.isArray(item.carrerasAsignadas)?item.carrerasAsignadas.slice():[]
+    };
+  }
+  function guardarCatalogoCoordinadores(lista){
+    lista=Array.isArray(lista)?lista.map(normalizarCoordinador).filter(function(item){return item.nombre;}):[];
+    if(!lista.length)return false;
+    try{
+      window.localStorage.setItem(COORDINADORES_STORAGE_KEY,JSON.stringify({
+        actualizadoEn:new Date().toISOString(),
+        origen:'administrador',
+        total:lista.length,
+        coordinadores:lista
+      }));
+      return true;
+    }catch(error){return false;}
+  }
+  function compartirCoordinadores(){
+    var servicio=window.ADCoordinadoresService;
+    if(!servicio||typeof servicio.listarCoordinadores!=='function')return Promise.resolve({ok:false,total:0});
+    return servicio.listarCoordinadores(500).then(function(respuesta){
+      var lista=respuesta&&respuesta.coordinadores||[];
+      var guardado=guardarCatalogoCoordinadores(lista);
+      return {ok:guardado,total:lista.length};
+    }).catch(function(error){
+      return {ok:false,total:0,error:error&&error.message||String(error)};
+    });
   }
   function plantilla(){
     return [
@@ -50,13 +87,18 @@
     ].join('');
   }
   function cargar(){
-    return s().leerConfiguracion().then(function(cfg){
+    return Promise.all([s().leerConfiguracion(),compartirCoordinadores()]).then(function(partes){
+      var cfg=partes[0]||{};var catalogo=partes[1]||{};
       $('ad-sheets-url').value=cfg.endpoint||'';
       $('ad-sheets-timeout').value=cfg.timeoutMs||45000;
       $('ad-sheets-activo').checked=cfg.activo!==false;
       $('ad-sheets-token').value='';
       $('ad-sheets-token-ayuda').textContent=cfg.token?'Clave guardada':'Sin clave guardada';
-      estado(cfg.endpoint?'Configuración lista.':'Falta la URL publicada de Apps Script.',cfg.endpoint?'success':'warning');
+      if(cfg.endpoint){
+        estado('Configuración lista. Catálogo compartido con Coordinadores: '+(catalogo.ok?catalogo.total+' registro(s)':'no disponible')+'.',catalogo.ok?'success':'warning');
+      }else{
+        estado('Falta la URL publicada de Apps Script.','warning');
+      }
       return cfg;
     });
   }
@@ -68,33 +110,28 @@
         activo:$('ad-sheets-activo').checked,
         timeoutMs:Number($('ad-sheets-timeout').value||45000)
       });
-    }).then(function(){
-      estado('Configuración guardada. Coordinadores la leerá directamente.','success');
-      return cargar();
-    }).catch(function(error){ estado(error.message||String(error),'error'); });
+    }).then(function(){estado('Configuración guardada. Coordinadores la leerá directamente.','success');return cargar();})
+      .catch(function(error){estado(error.message||String(error),'error');});
   }
   function ejecutar(nombre,fn){
     estado('Ejecutando '+nombre+'...','');
-    return fn().then(function(r){ estado(nombre+' respondió correctamente.','success'); resultado(nombre,r); return r; })
-      .catch(function(error){ estado(nombre+' falló: '+(error.message||String(error)),'error'); resultado(nombre,{ok:false,error:error.message||String(error)}); });
+    return fn().then(function(r){estado(nombre+' respondió correctamente.','success');resultado(nombre,r);return r;})
+      .catch(function(error){estado(nombre+' falló: '+(error.message||String(error)),'error');resultado(nombre,{ok:false,error:error.message||String(error)});});
   }
-  function consultar(){
-    return ejecutar('CONSULTAR_ENVIO_CEDULA',function(){ return s().consultarCedula(t($('ad-sheets-cedula').value),t($('ad-sheets-periodo').value)); });
-  }
+  function consultar(){return ejecutar('VERIFICAR_ENVIO',function(){return s().consultarCedula(t($('ad-sheets-cedula').value),t($('ad-sheets-periodo').value));});}
   function conectar(){
     $('ad-sheets-guardar').addEventListener('click',guardar);
-    $('ad-sheets-importar').addEventListener('click',function(){ s().importarDesdeFirebase().then(cargar).then(function(){ estado('Configuración anterior importada.','success'); }).catch(function(e){ estado(e.message||String(e),'error'); }); });
-    $('ad-sheets-ping').addEventListener('click',function(){ ejecutar('PING',s().probarPing); });
-    $('ad-sheets-coordinadores').addEventListener('click',function(){ ejecutar('LISTAR_COORDINADORES',s().probarCoordinadores); });
-    $('ad-sheets-envios').addEventListener('click',function(){ ejecutar('LISTAR_ENVIOS_COORDINADOR',s().probarEnvios); });
+    $('ad-sheets-importar').addEventListener('click',function(){s().importarDesdeFirebase().then(cargar).then(function(){estado('Configuración anterior importada.','success');}).catch(function(e){estado(e.message||String(e),'error');});});
+    $('ad-sheets-ping').addEventListener('click',function(){ejecutar('PING',s().probarPing);});
+    $('ad-sheets-coordinadores').addEventListener('click',function(){ejecutar('LISTAR_COORDINADORES',s().probarCoordinadores);});
+    $('ad-sheets-envios').addEventListener('click',function(){ejecutar('LISTAR_ENVIOS_POR_CARRERA',s().probarEnvios);});
     $('ad-sheets-consultar').addEventListener('click',consultar);
   }
   function instalar(){
-    var seccion=$('ad-seccion-sheets');
-    if(!seccion) return;
-    if(!iniciado){ seccion.innerHTML=plantilla(); conectar(); iniciado=true; }
-    cargar().catch(function(e){ estado(e.message||String(e),'error'); });
+    var seccion=$('ad-seccion-sheets');if(!seccion)return;
+    if(!iniciado){seccion.innerHTML=plantilla();conectar();iniciado=true;}
+    cargar().catch(function(e){estado(e.message||String(e),'error');});
   }
-  window.ADSheetsApp={instalar:instalar,cargar:cargar};
+  window.ADSheetsApp={instalar:instalar,cargar:cargar,compartirCoordinadores:compartirCoordinadores};
   instalar();
 })(window,document);
