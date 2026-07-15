@@ -4,6 +4,7 @@ Ruta: /administrador/ad-js/ad-devolver.app.js
 Función:
 - Devolver título enviado para que el estudiante pueda enviar nuevamente.
 - Copia el documento a historial, registra log y elimina el original.
+- Cargar la corrección del proxy IA del administrador.
 ========================================================= */
 (function(window, document){
   "use strict";
@@ -100,6 +101,16 @@ Función:
     if (b) b.addEventListener("click", ejecutar, true);
   }
 
+  function cargarCorreccionProxyIA(){
+    if (document.getElementById("ad-ia-proxy-override-script")) return;
+    var script = document.createElement("script");
+    script.id = "ad-ia-proxy-override-script";
+    script.src = "./ad-js/ad-ia.proxy.override.js?v=1.7.2";
+    script.async = true;
+    document.body.appendChild(script);
+  }
+
   document.addEventListener("DOMContentLoaded", conectar);
+  cargarCorreccionProxyIA();
   window.ADDevolverApp = { devolverTitulo: devolverTitulo, ejecutar: ejecutar };
 })(window, document);
