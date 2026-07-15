@@ -31,6 +31,22 @@ Función:
       .replace(/"/g,"&quot;")
       .replace(/'/g,"&#039;");
   }
+  function prioridadFallback(id){
+    var mapa = {
+      gemini:1,
+      groq:2,
+      cerebras:3,
+      cloudflare:4,
+      nvidia:5,
+      github_models:6,
+      openrouter:7,
+      openrouter_qwen:8,
+      openrouter_deepseek:9,
+      huggingface:10
+    };
+    return mapa[texto(id).toLowerCase()] || 999;
+  }
+
   function fecha(v){
     if (!v) return "Sin prueba";
     try {
@@ -153,11 +169,19 @@ Función:
     $("ad-ia-tabla").addEventListener("click",manejarAccionFila);
   }
 
-  function cargar(){
-    if (estado.cargando) return Promise.resolve();
-    setCargando(true,"Leyendo proveedores IA desde Firebase...");
+  function cargar(forzar){
+    var mantenerBloqueo = estado.cargando;
+    if (estado.cargando && forzar !== true) return Promise.resolve();
+    if (!mantenerBloqueo) setCargando(true,"Leyendo proveedores IA desde Firebase...");
     return servicio().listar().then(function(lista){
-      estado.proveedores = lista || [];
+      estado.proveedores = (lista || []).map(function(proveedor){
+        if (Number(proveedor.prioridad || 999) >= 999) {
+          proveedor.prioridad = prioridadFallback(proveedor.id);
+        }
+        return proveedor;
+      }).sort(function(a,b){
+        return Number(a.prioridad || 999) - Number(b.prioridad || 999);
+      });
       pintar();
       setEstado(
         estado.proveedores.length
@@ -169,7 +193,7 @@ Función:
       setEstado(error.message || String(error),"error");
       pintarVacio("No fue posible cargar los proveedores.");
     }).then(function(){
-      setCargando(false);
+      if (!mantenerBloqueo) setCargando(false);
     });
   }
 
@@ -281,7 +305,7 @@ Función:
     return servicio().guardar(datosFormulario()).then(function(resultado){
       setEstado("Proveedor guardado correctamente.","success");
       cerrarFormulario();
-      return cargar().then(function(){
+      return cargar(true).then(function(){
         if (probarDespues) return probarUno(resultado.proveedor.id);
         return resultado;
       });
@@ -311,7 +335,7 @@ Función:
           : "Los 10 proveedores del catálogo ya existen.",
         "success"
       );
-      return cargar();
+      return cargar(true);
     }).catch(function(error){
       setEstado(error.message || String(error),"error");
     }).then(function(){
@@ -324,7 +348,7 @@ Función:
     setCargando(true,(activo ? "Activando " : "Desactivando ") + id + "...");
     servicio().cambiarEstado(id,activo).then(function(){
       setEstado("Estado actualizado correctamente.","success");
-      return cargar();
+      return cargar(true);
     }).catch(function(error){
       setEstado(error.message || String(error),"error");
     }).then(function(){
@@ -340,10 +364,10 @@ Función:
         resultado.nombre + " respondió correctamente en " + resultado.latenciaMs + " ms.",
         "success"
       );
-      return cargar().then(function(){ return resultado; });
+      return cargar(true).then(function(){ return resultado; });
     }).catch(function(error){
       setEstado("La prueba de " + id + " falló: " + (error.message || String(error)),"error");
-      return cargar().then(function(){ throw error; });
+      return cargar(true).then(function(){ throw error; });
     }).then(function(resultado){
       setCargando(false);
       return resultado;
@@ -383,7 +407,7 @@ Función:
     cadena.then(function(){
       var correctas = resultados.filter(function(r){ return r.ok; }).length;
       setEstado("Pruebas terminadas: " + correctas + " correctas de " + resultados.length + ".","success");
-      return cargar();
+      return cargar(true);
     }).catch(function(error){
       setEstado(error.message || String(error),"error");
     }).then(function(){
