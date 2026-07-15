@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Coordinadores de Titulación</title>
-  <link rel="stylesheet" href="css/coordinador.css?v=2.2.2" />
+  <link rel="stylesheet" href="css/coordinador.css?v=2.3.0" />
 </head>
 <body>
   <header class="app-header">
@@ -15,7 +15,7 @@
         <h1>Coordinadores de titulación</h1>
         <p>Revisión y aprobación de propuestas académicas.</p>
       </div>
-      <span class="version-badge">v2.2.2</span>
+      <span class="version-badge">v2.3.0</span>
     </div>
   </header>
 
@@ -47,7 +47,7 @@
       </div>
 
       <div id="estadoPrincipal" class="status-message is-info">
-        Inicializando Firebase...
+        Inicializando Google Sheets y Firebase de respaldo...
       </div>
     </section>
 
@@ -99,7 +99,7 @@
       <div class="diagnostic-head">
         <div>
           <p class="section-kicker">Diagnóstico</p>
-          <h2>Estado de Firebase</h2>
+          <h2>Estado de Google Sheets y Firebase</h2>
         </div>
         <button type="button" class="btn btn--ghost" data-accion="ocultar-diagnostico">Cerrar</button>
       </div>
@@ -191,14 +191,14 @@
 
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
-  <script src="../administrador/ad-js/ad-config.js?v=1.5.0"></script>
-  <script src="js/coordinador.config.js?v=2.2.2"></script>
-  <script src="js/coordinador.utils.js?v=2.2.2"></script>
-  <script src="js/coordinador.state.js?v=2.2.2"></script>
-  <script src="js/coordinador.firebase.service.js?v=2.2.2"></script>
-  <script src="js/coordinador.ui.js?v=2.2.2"></script>
-  <script src="js/coordinador.modal.js?v=2.2.2"></script>
-  <script src="js/coordinador.favorito.sheets.js?v=2.2.2"></script>
-  <script src="js/coordinador.app.js?v=2.2.2"></script>
+  <script src="../administrador/ad-js/ad-config.js?v=1.7.0"></script>
+  <script src="js/coordinador.config.js?v=2.3.0"></script>
+  <script src="js/coordinador.utils.js?v=2.3.0"></script>
+  <script src="js/coordinador.state.js?v=2.3.0"></script>
+  <script src="js/coordinador.firebase.service.js?v=2.3.0"></script>
+  <script src="js/coordinador.sheets.primary.js?v=2.3.0"></script>
+  <script src="js/coordinador.ui.js?v=2.3.0"></script>
+  <script src="js/coordinador.modal.js?v=2.3.0"></script>
+  <script src="js/coordinador.app.js?v=2.3.0"></script>
 </body>
 </html>
