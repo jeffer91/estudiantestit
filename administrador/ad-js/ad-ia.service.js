@@ -5,11 +5,12 @@ Función:
 - Administrar proveedores IA desde Firebase.
 - Crear el catálogo inicial de 10 opciones.
 - Agregar, editar, activar, desactivar y ordenar proveedores.
-- Probar cada proveedor de forma individual.
+- Probar proveedores mediante /api/ia para evitar bloqueos CORS.
 - Guardar resultados de prueba y auditoría.
 Dependencias:
 - ad-config.js
 - ad-firebase.service.js
+- Cloudflare Pages Function /functions/api/ia.js
 ========================================================= */
 
 (function(window){
@@ -114,38 +115,63 @@ Dependencias:
     return window.ADFirebaseService;
   }
   function coleccion(){ return (cfg().colecciones && cfg().colecciones.ia) || "IA"; }
-  function texto(v){ return String(v === null || v === undefined ? "" : v).trim(); }
-  function idSeguro(v){
-    if (window.AD_UTILS && typeof window.AD_UTILS.normalizarDocId === "function") {
-      return window.AD_UTILS.normalizarDocId(v);
-    }
-    return texto(v).toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_+|_+$/g,"");
-  }
-  function numero(v,fallback){
-    var n = Number(v);
+  function texto(valor){ return String(valor === null || valor === undefined ? "" : valor).trim(); }
+  function numero(valor,fallback){
+    var limpio = typeof valor === "string" ? valor.replace(",",".") : valor;
+    var n = Number(limpio);
     return Number.isFinite(n) ? n : Number(fallback || 0);
   }
-  function booleano(v){
-    if (v === true || v === false) return v;
-    v = texto(v).toLowerCase();
-    return ["true","1","si","sí","activo"].indexOf(v) >= 0;
+  function booleano(valor){
+    if (valor === true || valor === false) return valor;
+    return ["true","1","si","sí","activo"].indexOf(texto(valor).toLowerCase()) >= 0;
   }
-  function ocultarClave(valor){
-    var key = texto(valor);
-    if (!key) return "";
-    if (key.length <= 8) return key.charAt(0) + "******";
-    return key.slice(0,4) + "…" + key.slice(-4);
+  function idSeguro(valor){
+    if (window.AD_UTILS && typeof window.AD_UTILS.normalizarDocId === "function") {
+      return window.AD_UTILS.normalizarDocId(valor);
+    }
+    return texto(valor)
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g,"")
+      .replace(/[^a-z0-9]+/g,"_")
+      .replace(/^_+|_+$/g,"");
+  }
+  function inferirTipo(id){
+    id = idSeguro(id);
+    if (id === "gemini") return "gemini";
+    if (id === "cloudflare") return "cloudflare";
+    if ([
+      "groq","cerebras","nvidia","github_models","openrouter",
+      "openrouter_qwen","openrouter_deepseek","huggingface"
+    ].indexOf(id) >= 0) return "openai-compatible";
+    return "generic";
+  }
+  function prioridadFallback(id){
+    var mapa = {
+      gemini:1,
+      groq:2,
+      cerebras:3,
+      cloudflare:4,
+      nvidia:5,
+      github_models:6,
+      openrouter:7,
+      openrouter_qwen:8,
+      openrouter_deepseek:9,
+      huggingface:10
+    };
+    return mapa[idSeguro(id)] || 999;
   }
   function limpiarProveedor(raw){
     var data = raw || {};
     var id = idSeguro(data.id || data.proveedor || data.provider || data._docId || data.nombre);
+    var prioridad = data.prioridad !== undefined ? data.prioridad : data.priority;
     return {
       id:id,
       proveedor:id,
       nombre:texto(data.nombre || data.name || id),
-      tipo:texto(data.tipo || data.protocol || data.protocolo || inferirTipo(id)),
+      tipo:texto(data.tipo || data.protocol || data.protocolo || inferirTipo(id)).replace(/_/g,"-"),
       activo:booleano(data.activo !== undefined ? data.activo : data.active),
-      prioridad:Math.max(1,numero(data.prioridad || data.priority,999)),
+      prioridad:Math.max(1,numero(prioridad,prioridadFallback(id))),
       endpoint:texto(data.endpoint || data.url || data.baseUrl),
       modelo:texto(data.modelo || data.model || data.modelName),
       model:texto(data.model || data.modelo || data.modelName),
@@ -163,15 +189,6 @@ Dependencias:
       raw:data
     };
   }
-  function inferirTipo(id){
-    id = idSeguro(id);
-    if (id === "gemini") return "gemini";
-    if (id === "cloudflare") return "cloudflare";
-    if (["groq","openrouter","openrouter_qwen","openrouter_deepseek","cerebras","nvidia","github_models","huggingface"].indexOf(id) >= 0) {
-      return "openai-compatible";
-    }
-    return "generic";
-  }
   function ordenar(lista){
     return (lista || []).slice().sort(function(a,b){
       var pa = numero(a.prioridad,999);
@@ -179,6 +196,9 @@ Dependencias:
       if (pa !== pb) return pa - pb;
       return String(a.nombre || a.id).localeCompare(String(b.nombre || b.id),"es");
     });
+  }
+  function proxyUrl(){
+    return new URL("/api/ia",window.location.origin).toString();
   }
 
   function listar(){
@@ -256,9 +276,9 @@ Dependencias:
   function sembrarCatalogo(){
     return listar().then(function(actuales){
       var mapa = {};
-      actuales.forEach(function(item){ mapa[item.id] = true; });
       var creados = [];
       var cadena = Promise.resolve();
+      actuales.forEach(function(item){ mapa[item.id] = true; });
 
       CATALOGO.forEach(function(preset){
         if (mapa[preset.id]) return;
@@ -290,28 +310,73 @@ Dependencias:
     });
   }
 
+  function promptPrueba(){
+    return [
+      "Responde únicamente JSON válido.",
+      "Genera exactamente tres títulos académicos de 15 a 25 palabras sobre mejora del aprendizaje mediante tecnología.",
+      '{"sugerencias":[{"titulo":"..."},{"titulo":"..."},{"titulo":"..."}]}'
+    ].join("\n");
+  }
+
+  function ejecutarProxy(proveedor,prompt,opciones){
+    return fetch(proxyUrl(),{
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({
+        provider:proveedor,
+        prompt:prompt,
+        options:opciones || {}
+      })
+    }).then(function(resp){
+      return resp.text().then(function(body){
+        var json;
+        try { json = body ? JSON.parse(body) : {}; }
+        catch(errorJson) {
+          if (resp.status === 404 || /<!doctype|<html/i.test(body)) {
+            throw new Error("El proxy IA todavía no está desplegado en Cloudflare Pages. Espera el nuevo despliegue y recarga.");
+          }
+          throw new Error("El proxy IA respondió en un formato no válido.");
+        }
+        if (!resp.ok || json.ok === false) {
+          throw new Error(json.error || json.message || ("El proxy IA respondió HTTP " + resp.status));
+        }
+        if (!texto(json.text)) throw new Error("El proveedor no devolvió texto utilizable.");
+        return json;
+      });
+    }).catch(function(error){
+      if (error && error.message === "Failed to fetch") {
+        throw new Error("No se pudo conectar con /api/ia. Verifica que Cloudflare Pages haya terminado el despliegue con Functions.");
+      }
+      throw error;
+    });
+  }
+
   function probar(id){
     var proveedor;
     var inicio = Date.now();
     return leer(id).then(function(item){
       if (!item) throw new Error("No se encontró el proveedor.");
       proveedor = item;
-      return ejecutarPrueba(item);
+      return ejecutarProxy(item,promptPrueba(),{
+        timeoutMs:item.timeoutMs,
+        temperatura:item.temperatura,
+        maxTokens:item.maxTokens
+      });
     }).then(function(resultado){
-      var latencia = Date.now() - inicio;
+      var latencia = numero(resultado.latencyMs,Date.now() - inicio);
       return guardarResultadoPrueba(proveedor.id,true,latencia,"").then(function(){
         return registrarLog("ADMIN_IA_PROBADA",{
           proveedorId:proveedor.id,
           ok:true,
-          latenciaMs:latencia
+          latenciaMs:latencia,
+          metodo:"pages-function"
         }).catch(function(){ return null; }).then(function(){
           return {
             ok:true,
             proveedor:proveedor.id,
             nombre:proveedor.nombre,
             latenciaMs:latencia,
-            texto:resultado.texto,
-            respuesta:resultado.respuesta
+            texto:resultado.text
           };
         });
       });
@@ -326,7 +391,8 @@ Dependencias:
             proveedorId:proveedor.id,
             ok:false,
             latenciaMs:latencia,
-            error:mensaje
+            error:mensaje,
+            metodo:"pages-function"
           }).catch(function(){ return null; });
         })
         .then(function(){ throw error; });
@@ -341,163 +407,6 @@ Dependencias:
       ultimoError:texto(error),
       actualizadoPor:cfg().administrador || "administrador"
     },{ merge:true });
-  }
-
-  function ejecutarPrueba(proveedor){
-    var prompt = [
-      "Responde únicamente JSON válido.",
-      "Genera exactamente tres títulos académicos breves sobre mejora del aprendizaje con tecnología.",
-      '{"sugerencias":[{"titulo":"..."},{"titulo":"..."},{"titulo":"..."}]}'
-    ].join("\n");
-    var tipo = texto(proveedor.tipo || inferirTipo(proveedor.id));
-    if (tipo === "gemini") return probarGemini(proveedor,prompt);
-    if (tipo === "openai-compatible") return probarOpenAI(proveedor,prompt);
-    if (tipo === "cloudflare") return probarCloudflare(proveedor,prompt);
-    return probarGenerico(proveedor,prompt);
-  }
-
-  function probarGemini(p,prompt){
-    var key = texto(p.apiKey || p.key);
-    var modelo = texto(p.modelo || p.model || "gemini-2.0-flash");
-    var endpoint = texto(p.endpoint) || (
-      "https://generativelanguage.googleapis.com/v1beta/models/" +
-      encodeURIComponent(modelo) + ":generateContent?key=" + encodeURIComponent(key)
-    );
-    if (!key && endpoint.indexOf("key=") === -1) throw new Error("Gemini no tiene API key.");
-    return enviar(endpoint,{
-      contents:[{ role:"user", parts:[{ text:prompt }] }],
-      generationConfig:{
-        temperature:numero(p.temperatura,0.4),
-        maxOutputTokens:numero(p.maxTokens,900)
-      }
-    },{
-      "Content-Type":"application/json"
-    },p.timeoutMs).then(function(respuesta){
-      var textoRespuesta = respuesta && respuesta.candidates &&
-        respuesta.candidates[0] && respuesta.candidates[0].content &&
-        respuesta.candidates[0].content.parts && respuesta.candidates[0].content.parts[0] &&
-        respuesta.candidates[0].content.parts[0].text;
-      if (!textoRespuesta) throw new Error("Gemini respondió sin texto.");
-      return { texto:textoRespuesta, respuesta:respuesta };
-    });
-  }
-
-  function probarOpenAI(p,prompt){
-    var key = texto(p.apiKey || p.key);
-    var endpoint = texto(p.endpoint);
-    var headers = {
-      "Content-Type":"application/json",
-      "Authorization":"Bearer " + key
-    };
-    if (!endpoint) throw new Error("El proveedor no tiene endpoint.");
-    if (!key) throw new Error("El proveedor no tiene API key o token.");
-
-    if (p.id.indexOf("openrouter") === 0) {
-      headers["HTTP-Referer"] = window.location ? window.location.origin : "";
-      headers["X-Title"] = "Administrador Titulación";
-    }
-    if (p.id === "github_models") {
-      headers["Accept"] = "application/vnd.github+json";
-    }
-
-    return enviar(endpoint,{
-      model:texto(p.modelo || p.model),
-      messages:[
-        { role:"system", content:"Eres una IA de titulación. Responde solo JSON válido." },
-        { role:"user", content:prompt }
-      ],
-      temperature:numero(p.temperatura,0.4),
-      max_tokens:numero(p.maxTokens,900)
-    },headers,p.timeoutMs).then(function(respuesta){
-      var textoRespuesta = respuesta && respuesta.choices && respuesta.choices[0] &&
-        ((respuesta.choices[0].message && respuesta.choices[0].message.content) || respuesta.choices[0].text);
-      textoRespuesta = textoRespuesta || (respuesta && (respuesta.output_text || respuesta.text));
-      if (!textoRespuesta) throw new Error("El proveedor respondió sin texto.");
-      return { texto:textoRespuesta, respuesta:respuesta };
-    });
-  }
-
-  function probarCloudflare(p,prompt){
-    var key = texto(p.apiKey || p.key);
-    var endpoint = texto(p.endpoint);
-    if (!endpoint) throw new Error("Cloudflare necesita endpoint completo.");
-    if (!key) throw new Error("Cloudflare no tiene API key o token.");
-    return enviar(endpoint,{
-      model:texto(p.modelo || p.model),
-      messages:[
-        { role:"system", content:"Eres una IA de titulación. Responde solo JSON válido." },
-        { role:"user", content:prompt }
-      ],
-      temperature:numero(p.temperatura,0.4),
-      max_tokens:numero(p.maxTokens,900)
-    },{
-      "Content-Type":"application/json",
-      "Authorization":"Bearer " + key
-    },p.timeoutMs).then(function(respuesta){
-      var textoRespuesta = respuesta && respuesta.result &&
-        (respuesta.result.response || respuesta.result.text);
-      textoRespuesta = textoRespuesta || (respuesta && (respuesta.response || respuesta.text));
-      if (!textoRespuesta && respuesta && respuesta.choices && respuesta.choices[0]) {
-        textoRespuesta = respuesta.choices[0].message && respuesta.choices[0].message.content;
-      }
-      if (!textoRespuesta) throw new Error("Cloudflare respondió sin texto.");
-      return { texto:textoRespuesta, respuesta:respuesta };
-    });
-  }
-
-  function probarGenerico(p,prompt){
-    var key = texto(p.apiKey || p.key);
-    var endpoint = texto(p.endpoint);
-    var headers = { "Content-Type":"application/json" };
-    if (!endpoint) throw new Error("El proveedor genérico necesita endpoint.");
-    if (key) headers.Authorization = "Bearer " + key;
-    return enviar(endpoint,{
-      prompt:prompt,
-      model:texto(p.modelo || p.model),
-      temperature:numero(p.temperatura,0.4),
-      max_tokens:numero(p.maxTokens,900)
-    },headers,p.timeoutMs).then(function(respuesta){
-      var textoRespuesta = respuesta && (respuesta.text || respuesta.output || respuesta.respuesta || respuesta.message);
-      if (textoRespuesta && typeof textoRespuesta !== "string") textoRespuesta = JSON.stringify(textoRespuesta);
-      if (!textoRespuesta) textoRespuesta = JSON.stringify(respuesta || {});
-      return { texto:textoRespuesta, respuesta:respuesta };
-    });
-  }
-
-  function enviar(endpoint,body,headers,timeoutMs){
-    var controller = window.AbortController ? new AbortController() : null;
-    var timer = null;
-    var opciones = {
-      method:"POST",
-      headers:headers || { "Content-Type":"application/json" },
-      body:JSON.stringify(body || {})
-    };
-    if (controller) {
-      opciones.signal = controller.signal;
-      timer = setTimeout(function(){ controller.abort(); },Math.max(5000,numero(timeoutMs,45000)));
-    }
-    return fetch(endpoint,opciones).then(function(resp){
-      return resp.text().then(function(bodyText){
-        var json;
-        try { json = bodyText ? JSON.parse(bodyText) : {}; }
-        catch(errorJson){ json = { text:bodyText, rawText:bodyText }; }
-        if (!resp.ok) {
-          var mensaje = json && json.error && (json.error.message || json.error);
-          mensaje = mensaje || json.message || json.mensaje || ("HTTP " + resp.status);
-          throw new Error(typeof mensaje === "string" ? mensaje : JSON.stringify(mensaje));
-        }
-        return json;
-      });
-    }).catch(function(error){
-      if (error && error.name === "AbortError") throw new Error("La prueba superó el tiempo máximo.");
-      throw error;
-    }).then(function(resultado){
-      if (timer) clearTimeout(timer);
-      return resultado;
-    },function(error){
-      if (timer) clearTimeout(timer);
-      throw error;
-    });
   }
 
   function registrarLog(accion,detalle){
@@ -523,6 +432,6 @@ Dependencias:
     sembrarCatalogo:sembrarCatalogo,
     probar:probar,
     limpiarProveedor:limpiarProveedor,
-    ocultarClave:ocultarClave
+    proxyUrl:proxyUrl
   };
 })(window);
