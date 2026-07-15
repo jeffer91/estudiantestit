@@ -2,10 +2,10 @@
   Archivo: ia.providers.service.js
   Ruta: estudiantes-mvp/js/ia.providers.service.js
   Funciones principales:
-  - Ejecutar solicitudes a proveedores IA configurados en Firebase.
-  - Soportar Gemini, Groq y Cloudflare.
-  - Usar endpoint, modelo y clave leídos desde Firebase.
-  - Devolver texto limpio para que ia.titulacion.service.js lo convierta en sugerencias.
+  - Ejecutar solicitudes a proveedores IA configurados desde el administrador.
+  - Soportar Gemini, OpenAI compatible, Cloudflare y endpoints genéricos.
+  - Permitir cualquier cantidad de proveedores sin programarlos por separado.
+  - Usar endpoint, modelo, prioridad y clave leídos desde Firebase.
   - Controlar timeout y errores sin detener toda la app.
 */
 (function (window) {
@@ -21,10 +21,12 @@
 
   function generarTexto(proveedor, prompt, opciones) {
     var normalizado;
+    var tipo;
 
     proveedor = proveedor || {};
     opciones = opciones || {};
     normalizado = normalizarProveedorRuntime(proveedor);
+    tipo = normalizado.tipo || inferirTipo(normalizado.id);
 
     if (!normalizado.id) {
       return Promise.reject(new Error('Proveedor IA sin identificador.'));
@@ -34,33 +36,34 @@
       return Promise.reject(new Error('No se recibió prompt para generar con IA.'));
     }
 
-    if (normalizado.id === 'gemini') {
+    if (tipo === 'gemini') {
       return generarConGemini(normalizado, prompt, opciones);
     }
 
-    if (normalizado.id === 'groq') {
-      return generarConOpenAICompatible(normalizado, prompt, opciones, 'groq');
+    if (tipo === 'openai-compatible') {
+      return generarConOpenAICompatible(normalizado, prompt, opciones);
     }
 
-    if (normalizado.id === 'openrouter') {
-      return generarConOpenAICompatible(normalizado, prompt, opciones, 'openrouter');
-    }
-
-    if (normalizado.id === 'cloudflare') {
+    if (tipo === 'cloudflare') {
       return generarConCloudflare(normalizado, prompt, opciones);
+    }
+
+    if (tipo === 'generic') {
+      return generarConEndpointGenerico(normalizado, prompt, opciones);
     }
 
     if (normalizado.endpoint) {
       return generarConEndpointGenerico(normalizado, prompt, opciones);
     }
 
-    return Promise.reject(new Error('Proveedor IA no soportado o sin endpoint: ' + normalizado.id));
+    return Promise.reject(
+      new Error('Proveedor IA no soportado o sin endpoint: ' + normalizado.id)
+    );
   }
 
   function generarConGemini(proveedor, prompt, opciones) {
-    var config = obtenerConfig();
     var apiKey = proveedor.apiKey || proveedor.key;
-    var modelo = proveedor.modelo || proveedor.model || 'gemini-1.5-flash';
+    var modelo = proveedor.modelo || proveedor.model || 'gemini-2.0-flash';
     var endpoint = proveedor.endpoint || construirEndpointGemini(modelo, apiKey);
     var body;
 
@@ -80,8 +83,8 @@
         }
       ],
       generationConfig: {
-        temperature: Number(opciones.temperatura || config.obtener('ia.temperatura', 0.4)),
-        maxOutputTokens: Number(opciones.maxTokens || config.obtener('ia.maxTokens', 900))
+        temperature: obtenerTemperatura(proveedor, opciones),
+        maxOutputTokens: obtenerMaxTokens(proveedor, opciones)
       }
     };
 
@@ -90,22 +93,35 @@
       headers: {
         'Content-Type': 'application/json'
       },
-      timeoutMs: obtenerTimeout(opciones)
+      timeoutMs: obtenerTimeout(proveedor, opciones)
     }).then(function (respuesta) {
       return extraerTextoGemini(respuesta);
     });
   }
 
-  function generarConOpenAICompatible(proveedor, prompt, opciones, tipo) {
-    var config = obtenerConfig();
+  function generarConOpenAICompatible(proveedor, prompt, opciones) {
     var apiKey = proveedor.apiKey || proveedor.key;
-    var modelo = proveedor.modelo || proveedor.model || obtenerModeloFallback(tipo);
-    var endpoint = proveedor.endpoint || obtenerEndpointFallback(tipo);
+    var modelo = proveedor.modelo || proveedor.model || obtenerModeloFallback(proveedor.id);
+    var endpoint = proveedor.endpoint || obtenerEndpointFallback(proveedor.id);
     var headers;
     var body;
 
+    if (!endpoint) {
+      return Promise.reject(
+        new Error('El proveedor ' + proveedor.id + ' no tiene endpoint configurado.')
+      );
+    }
+
     if (!apiKey) {
-      return Promise.reject(new Error((tipo || 'Proveedor') + ' no tiene apiKey configurada.'));
+      return Promise.reject(
+        new Error('El proveedor ' + proveedor.id + ' no tiene apiKey configurada.')
+      );
+    }
+
+    if (!modelo) {
+      return Promise.reject(
+        new Error('El proveedor ' + proveedor.id + ' no tiene modelo configurado.')
+      );
     }
 
     headers = {
@@ -113,9 +129,13 @@
       'Authorization': 'Bearer ' + apiKey
     };
 
-    if (tipo === 'openrouter') {
+    if (proveedor.id.indexOf('openrouter') === 0) {
       headers['HTTP-Referer'] = window.location ? window.location.origin : '';
       headers['X-Title'] = 'Estudiantes MVP';
+    }
+
+    if (proveedor.id === 'github_models') {
+      headers.Accept = 'application/vnd.github+json';
     }
 
     body = {
@@ -130,28 +150,29 @@
           content: prompt
         }
       ],
-      temperature: Number(opciones.temperatura || config.obtener('ia.temperatura', 0.4)),
-      max_tokens: Number(opciones.maxTokens || config.obtener('ia.maxTokens', 900))
+      temperature: obtenerTemperatura(proveedor, opciones),
+      max_tokens: obtenerMaxTokens(proveedor, opciones)
     };
 
     return enviarJson(endpoint, body, {
       method: 'POST',
       headers: headers,
-      timeoutMs: obtenerTimeout(opciones)
+      timeoutMs: obtenerTimeout(proveedor, opciones)
     }).then(function (respuesta) {
       return extraerTextoOpenAICompatible(respuesta);
     });
   }
 
   function generarConCloudflare(proveedor, prompt, opciones) {
-    var config = obtenerConfig();
     var apiKey = proveedor.apiKey || proveedor.key;
     var endpoint = proveedor.endpoint;
     var modelo = proveedor.modelo || proveedor.model || '';
     var body;
 
     if (!endpoint) {
-      return Promise.reject(new Error('Cloudflare necesita un endpoint completo configurado en Firebase.'));
+      return Promise.reject(
+        new Error('Cloudflare necesita un endpoint completo configurado en Firebase.')
+      );
     }
 
     if (!apiKey) {
@@ -170,8 +191,8 @@
           content: prompt
         }
       ],
-      temperature: Number(opciones.temperatura || config.obtener('ia.temperatura', 0.4)),
-      max_tokens: Number(opciones.maxTokens || config.obtener('ia.maxTokens', 900))
+      temperature: obtenerTemperatura(proveedor, opciones),
+      max_tokens: obtenerMaxTokens(proveedor, opciones)
     };
 
     return enviarJson(endpoint, body, {
@@ -180,23 +201,30 @@
         'Content-Type': 'application/json',
         'Authorization': 'Bearer ' + apiKey
       },
-      timeoutMs: obtenerTimeout(opciones)
+      timeoutMs: obtenerTimeout(proveedor, opciones)
     }).then(function (respuesta) {
       return extraerTextoCloudflare(respuesta);
     });
   }
 
   function generarConEndpointGenerico(proveedor, prompt, opciones) {
-    var config = obtenerConfig();
     var apiKey = proveedor.apiKey || proveedor.key;
     var headers = {
       'Content-Type': 'application/json'
     };
-    var body = {
+    var body;
+
+    if (!proveedor.endpoint) {
+      return Promise.reject(
+        new Error('El proveedor genérico no tiene endpoint configurado.')
+      );
+    }
+
+    body = {
       prompt: prompt,
       model: proveedor.modelo || proveedor.model || '',
-      temperature: Number(opciones.temperatura || config.obtener('ia.temperatura', 0.4)),
-      max_tokens: Number(opciones.maxTokens || config.obtener('ia.maxTokens', 900))
+      temperature: obtenerTemperatura(proveedor, opciones),
+      max_tokens: obtenerMaxTokens(proveedor, opciones)
     };
 
     if (apiKey) {
@@ -206,7 +234,7 @@
     return enviarJson(proveedor.endpoint, body, {
       method: 'POST',
       headers: headers,
-      timeoutMs: obtenerTimeout(opciones)
+      timeoutMs: obtenerTimeout(proveedor, opciones)
     }).then(function (respuesta) {
       return extraerTextoGenerico(respuesta);
     });
@@ -246,15 +274,13 @@
 
     return fetch(endpoint, fetchOptions)
       .then(function (response) {
-        if (timer) {
-          clearTimeout(timer);
-        }
-
         return response.text().then(function (texto) {
           var json = intentarParsearJson(texto);
 
           if (!response.ok) {
-            throw new Error(obtenerMensajeHttp(response.status, json, texto));
+            throw new Error(
+              obtenerMensajeHttp(response.status, json, texto)
+            );
           }
 
           return json || {
@@ -264,16 +290,28 @@
         });
       })
       .catch(function (error) {
-        if (timer) {
-          clearTimeout(timer);
-        }
-
         if (error && error.name === 'AbortError') {
           throw new Error('La IA tardó demasiado en responder.');
         }
 
         throw error;
-      });
+      })
+      .then(
+        function (resultado) {
+          if (timer) {
+            clearTimeout(timer);
+          }
+
+          return resultado;
+        },
+        function (error) {
+          if (timer) {
+            clearTimeout(timer);
+          }
+
+          throw error;
+        }
+      );
   }
 
   function extraerTextoGemini(respuesta) {
@@ -287,7 +325,11 @@
     if (respuesta.candidates && respuesta.candidates.length) {
       candidato = respuesta.candidates[0];
 
-      if (candidato.content && candidato.content.parts && candidato.content.parts.length) {
+      if (
+        candidato.content &&
+        candidato.content.parts &&
+        candidato.content.parts.length
+      ) {
         parte = candidato.content.parts[0];
 
         if (parte.text) {
@@ -309,7 +351,10 @@
     }
 
     if (respuesta.choices && respuesta.choices.length) {
-      if (respuesta.choices[0].message && respuesta.choices[0].message.content) {
+      if (
+        respuesta.choices[0].message &&
+        respuesta.choices[0].message.content
+      ) {
         return respuesta.choices[0].message.content;
       }
 
@@ -367,7 +412,9 @@
     }
 
     if (respuesta.output) {
-      return typeof respuesta.output === 'string' ? respuesta.output : JSON.stringify(respuesta.output);
+      return typeof respuesta.output === 'string'
+        ? respuesta.output
+        : JSON.stringify(respuesta.output);
     }
 
     if (respuesta.message) {
@@ -375,7 +422,9 @@
     }
 
     if (respuesta.respuesta) {
-      return typeof respuesta.respuesta === 'string' ? respuesta.respuesta : JSON.stringify(respuesta.respuesta);
+      return typeof respuesta.respuesta === 'string'
+        ? respuesta.respuesta
+        : JSON.stringify(respuesta.respuesta);
     }
 
     return JSON.stringify(respuesta);
@@ -383,30 +432,74 @@
 
   function construirEndpointGemini(modelo, apiKey) {
     return 'https://generativelanguage.googleapis.com/v1beta/models/' +
-      encodeURIComponent(modelo || 'gemini-1.5-flash') +
+      encodeURIComponent(modelo || 'gemini-2.0-flash') +
       ':generateContent?key=' +
       encodeURIComponent(apiKey || '');
   }
 
-  function obtenerEndpointFallback(tipo) {
-    if (tipo === 'groq') {
+  function obtenerEndpointFallback(id) {
+    if (id === 'groq') {
       return 'https://api.groq.com/openai/v1/chat/completions';
     }
 
-    if (tipo === 'openrouter') {
+    if (
+      id === 'openrouter' ||
+      id === 'openrouter_qwen' ||
+      id === 'openrouter_deepseek'
+    ) {
       return 'https://openrouter.ai/api/v1/chat/completions';
+    }
+
+    if (id === 'cerebras') {
+      return 'https://api.cerebras.ai/v1/chat/completions';
+    }
+
+    if (id === 'nvidia') {
+      return 'https://integrate.api.nvidia.com/v1/chat/completions';
+    }
+
+    if (id === 'github_models') {
+      return 'https://models.github.ai/inference/chat/completions';
+    }
+
+    if (id === 'huggingface') {
+      return 'https://router.huggingface.co/v1/chat/completions';
     }
 
     return '';
   }
 
-  function obtenerModeloFallback(tipo) {
-    if (tipo === 'groq') {
+  function obtenerModeloFallback(id) {
+    if (id === 'groq') {
       return 'llama-3.1-8b-instant';
     }
 
-    if (tipo === 'openrouter') {
-      return 'openai/gpt-4o-mini';
+    if (id === 'openrouter') {
+      return 'openrouter/free';
+    }
+
+    if (id === 'openrouter_qwen') {
+      return 'qwen/qwen3-4b:free';
+    }
+
+    if (id === 'openrouter_deepseek') {
+      return 'deepseek/deepseek-r1-0528-qwen3-8b:free';
+    }
+
+    if (id === 'cerebras') {
+      return 'qwen-3-32b';
+    }
+
+    if (id === 'nvidia') {
+      return 'meta/llama-3.1-8b-instruct';
+    }
+
+    if (id === 'github_models') {
+      return 'openai/gpt-4.1-mini';
+    }
+
+    if (id === 'huggingface') {
+      return 'Qwen/Qwen3-8B';
     }
 
     return '';
@@ -414,35 +507,161 @@
 
   function normalizarProveedorRuntime(proveedor) {
     var utils = obtenerUtils();
+    var tipo;
 
     if (!utils) {
       throw new Error('No está disponible EstudianteMVPUtils.');
     }
 
     proveedor = proveedor || {};
+    tipo = utils.normalizarClave(
+      proveedor.tipo ||
+      proveedor.protocol ||
+      proveedor.protocolo ||
+      inferirTipo(proveedor.id || proveedor.proveedor)
+    ).replace(/_/g, '-');
 
     return {
-      id: utils.normalizarClave(proveedor.id || proveedor.proveedor || proveedor.provider || ''),
-      nombre: utils.limpiarTexto(proveedor.nombre || proveedor.name || proveedor.id || ''),
+      id: utils.normalizarClave(
+        proveedor.id ||
+        proveedor.proveedor ||
+        proveedor.provider ||
+        ''
+      ),
+      nombre: utils.limpiarTexto(
+        proveedor.nombre ||
+        proveedor.name ||
+        proveedor.id ||
+        ''
+      ),
+      tipo: tipo,
       activo: proveedor.activo === true,
-      endpoint: utils.limpiarTexto(proveedor.endpoint || proveedor.url || ''),
-      apiKey: utils.limpiarTexto(proveedor.apiKey || proveedor.apikey || proveedor.api_key || ''),
-      key: utils.limpiarTexto(proveedor.key || proveedor.token || proveedor.apiKey || ''),
-      model: utils.limpiarTexto(proveedor.model || proveedor.modelo || ''),
-      modelo: utils.limpiarTexto(proveedor.modelo || proveedor.model || ''),
+      prioridad: numeroSeguro(proveedor.prioridad || proveedor.priority, 999),
+      endpoint: utils.limpiarTexto(
+        proveedor.endpoint ||
+        proveedor.url ||
+        ''
+      ),
+      apiKey: utils.limpiarTexto(
+        proveedor.apiKey ||
+        proveedor.apikey ||
+        proveedor.api_key ||
+        ''
+      ),
+      key: utils.limpiarTexto(
+        proveedor.key ||
+        proveedor.token ||
+        proveedor.apiKey ||
+        ''
+      ),
+      model: utils.limpiarTexto(
+        proveedor.model ||
+        proveedor.modelo ||
+        ''
+      ),
+      modelo: utils.limpiarTexto(
+        proveedor.modelo ||
+        proveedor.model ||
+        ''
+      ),
+      timeoutMs: numeroSeguro(
+        proveedor.timeoutMs ||
+        proveedor.timeout,
+        45000
+      ),
+      maxTokens: numeroSeguro(
+        proveedor.maxTokens ||
+        proveedor.max_tokens,
+        900
+      ),
+      temperatura: numeroSeguro(
+        proveedor.temperatura !== undefined
+          ? proveedor.temperatura
+          : proveedor.temperature,
+        0.4
+      ),
       raw: proveedor
     };
   }
 
-  function obtenerTimeout(opciones) {
+  function inferirTipo(id) {
+    id = String(id || '').toLowerCase();
+
+    if (id === 'gemini') {
+      return 'gemini';
+    }
+
+    if (id === 'cloudflare') {
+      return 'cloudflare';
+    }
+
+    if (
+      id === 'groq' ||
+      id === 'openrouter' ||
+      id === 'openrouter_qwen' ||
+      id === 'openrouter_deepseek' ||
+      id === 'cerebras' ||
+      id === 'nvidia' ||
+      id === 'github_models' ||
+      id === 'huggingface'
+    ) {
+      return 'openai-compatible';
+    }
+
+    return 'generic';
+  }
+
+  function obtenerTimeout(proveedor, opciones) {
     var config = obtenerConfig();
 
+    proveedor = proveedor || {};
     opciones = opciones || {};
 
     return Number(
       opciones.timeoutMs ||
+      proveedor.timeoutMs ||
       (config ? config.obtener('ia.timeoutMs', 45000) : 45000)
     );
+  }
+
+  function obtenerMaxTokens(proveedor, opciones) {
+    var config = obtenerConfig();
+
+    proveedor = proveedor || {};
+    opciones = opciones || {};
+
+    return Number(
+      opciones.maxTokens ||
+      proveedor.maxTokens ||
+      (config ? config.obtener('ia.maxTokens', 900) : 900)
+    );
+  }
+
+  function obtenerTemperatura(proveedor, opciones) {
+    var config = obtenerConfig();
+
+    proveedor = proveedor || {};
+    opciones = opciones || {};
+
+    if (opciones.temperatura !== undefined && opciones.temperatura !== null) {
+      return Number(opciones.temperatura);
+    }
+
+    if (proveedor.temperatura !== undefined && proveedor.temperatura !== null) {
+      return Number(proveedor.temperatura);
+    }
+
+    return Number(
+      config ? config.obtener('ia.temperatura', 0.4) : 0.4
+    );
+  }
+
+  function numeroSeguro(valor, fallback) {
+    var numero = Number(valor);
+
+    return Number.isFinite(numero)
+      ? numero
+      : Number(fallback || 0);
   }
 
   function intentarParsearJson(texto) {
@@ -458,6 +677,10 @@
       return json.error.message;
     }
 
+    if (json && json.error && typeof json.error === 'string') {
+      return json.error;
+    }
+
     if (json && json.message) {
       return json.message;
     }
@@ -466,7 +689,10 @@
       return json.mensaje;
     }
 
-    return 'El proveedor IA respondió con error HTTP ' + status + ': ' + String(texto || '').slice(0, 180);
+    return 'El proveedor IA respondió con error HTTP ' +
+      status +
+      ': ' +
+      String(texto || '').slice(0, 180);
   }
 
   window.EstudianteMVPIAProviders = Object.freeze({
