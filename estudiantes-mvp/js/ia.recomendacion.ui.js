@@ -1,10 +1,9 @@
 /*
   Archivo: ia.recomendacion.ui.js
   Funciones principales:
-  - Mostrar siempre las tres sugerencias.
+  - Mostrar siempre las tres sugerencias generadas o corregidas por IA.
   - Marcar visualmente la mejor sin aplicarla automáticamente.
   - Mantener la decisión final en manos del estudiante.
-  - Identificar correctamente el respaldo local en el diagnóstico visual.
 */
 (function (window, document) {
   'use strict';
@@ -23,8 +22,7 @@
       '.suggestion-card.is-recommended{border:2px solid #c9ad63;box-shadow:0 14px 34px rgba(138,107,36,.14)}',
       '.ia-recommended-badge{display:inline-flex;align-items:center;margin-left:8px;padding:4px 9px;border-radius:999px;background:#fff4cf;color:#7a5a09;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.04em}',
       '.student-modal__title-card.is-recommended{border:2px solid #c9ad63;background:linear-gradient(145deg,#fffdf7,#ffffff)}',
-      '.student-modal__recommendation{margin:9px 0 0;color:#7a5a09;font-size:13px;font-weight:800;line-height:1.4}',
-      '.ia-diagnostico__punto[data-ia-proveedor="respaldo_local"]{background:#16a34a}'
+      '.student-modal__recommendation{margin:9px 0 0;color:#7a5a09;font-size:13px;font-weight:800;line-height:1.4}'
     ].join('');
 
     document.head.appendChild(style);
@@ -98,7 +96,10 @@
       var fuerte;
 
       if (!tarjeta) return;
-      tarjeta.classList.toggle('is-recommended', item.recomendada === true || item.recomendado === true);
+      tarjeta.classList.toggle(
+        'is-recommended',
+        item.recomendada === true || item.recomendado === true
+      );
       cabecera = tarjeta.querySelector('.suggestion-card__head');
       fuerte = cabecera ? cabecera.querySelector('strong') : null;
 
@@ -117,6 +118,7 @@
       var item = sugerencias[index] || {};
       var etiqueta = tarjeta.querySelector('h3');
       var textoJustificacion;
+      var acciones = tarjeta.querySelector('.student-modal__actions');
 
       if (etiqueta) etiqueta.textContent = 'Título sugerido ' + (index + 1);
 
@@ -125,11 +127,11 @@
         if (etiqueta) agregarBadge(etiqueta);
       }
 
-      if (item.justificacion) {
+      if (item.justificacion && acciones) {
         textoJustificacion = document.createElement('p');
         textoJustificacion.className = 'student-modal__recommendation';
         textoJustificacion.textContent = item.justificacion;
-        tarjeta.insertBefore(textoJustificacion, tarjeta.querySelector('.student-modal__actions'));
+        tarjeta.insertBefore(textoJustificacion, acciones);
       }
     });
   }
@@ -143,46 +145,6 @@
     badge.textContent = 'Recomendada';
     contenedor.appendChild(badge);
   }
-
-  function marcarFallbackLocal(numeroPropuesta) {
-    var bloque = document.querySelector(
-      '[data-ia-diagnostico="' + Number(numeroPropuesta || 0) + '"]'
-    );
-    var contenedor;
-    var punto;
-
-    if (!bloque) return;
-    contenedor = bloque.querySelector('[data-ia-puntos]');
-    if (!contenedor) return;
-
-    Array.prototype.forEach.call(
-      contenedor.querySelectorAll('[data-estado="correcto"]:not([data-ia-proveedor="respaldo_local"])'),
-      function (item) {
-        item.setAttribute('data-estado', 'error');
-      }
-    );
-
-    punto = contenedor.querySelector('[data-ia-proveedor="respaldo_local"]');
-    if (!punto) {
-      punto = document.createElement('span');
-      punto.className = 'ia-diagnostico__punto';
-      punto.setAttribute('data-ia-proveedor', 'respaldo_local');
-      punto.setAttribute('role', 'img');
-      contenedor.appendChild(punto);
-    }
-
-    punto.setAttribute('data-estado', 'correcto');
-    punto.setAttribute('title', 'Generador de respaldo: correcto');
-    punto.setAttribute('aria-label', 'Generador de respaldo: correcto');
-  }
-
-  document.addEventListener('ia-titulacion:fallback-local', function (evento) {
-    var numero = Number(evento && evento.detail && evento.detail.numeroPropuesta || 1);
-
-    window.setTimeout(function () { marcarFallbackLocal(numero); }, 50);
-    window.setTimeout(function () { marcarFallbackLocal(numero); }, 250);
-    window.setTimeout(function () { marcarFallbackLocal(numero); }, 700);
-  });
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', instalar, { once: true });
