@@ -62,8 +62,18 @@ Función:
     });
   }
 
+  var MIGRATION_KEY = "titulos_coordinadores_sheets_migrados_v1";
+
   function colCoordinadores(){ return config().colecciones.coordinadores; }
   function colLogs(){ return config().colecciones.logs; }
+  function migracionHecha(){
+    try { return window.localStorage.getItem(MIGRATION_KEY) === "SI"; }
+    catch (error) { return false; }
+  }
+  function marcarMigracion(){
+    try { window.localStorage.setItem(MIGRATION_KEY,"SI"); }
+    catch (error) {}
+  }
   function fechaCliente(){
     try { return firebaseService().fechaCliente(); }
     catch (error) { return new Date().toISOString(); }
@@ -166,7 +176,7 @@ Función:
 
   function listarSheets(){
     return asegurarSheetsService().then(function(servicio){
-      return servicio.enviarGet("LISTAR_COORDINADORES",{});
+      return servicio.enviarGet("LISTAR_COORDINADORES",{ incluirInactivos:true });
     }).then(function(respuesta){
       var lista = extraerListaSheets(respuesta);
       return respaldarListaFirebase(lista).then(function(){ return lista; });
@@ -174,35 +184,51 @@ Función:
   }
 
   function listarCoordinadores(limite){
-    return listarSheets().then(function(lista){
-      if (lista.length) {
-        return { ok:true,total:lista.length,coordinadores:lista,fuente:"google-sheets",fuentePrincipal:"Google Sheets" };
-      }
-      return listarFirebase(limite).then(function(respaldo){
-        if (!respaldo.length) {
-          return { ok:true,total:0,coordinadores:[],fuente:"google-sheets",fuentePrincipal:"Google Sheets" };
-        }
+    return Promise.allSettled([
+      listarSheets(),
+      listarFirebase(limite)
+    ]).then(function(partes){
+      var listaSheets = partes[0].status === "fulfilled" ? partes[0].value : [];
+      var respaldo = partes[1].status === "fulfilled" ? partes[1].value : [];
+      var errorSheets = partes[0].status === "rejected" ? partes[0].reason : null;
+      var idsSheets = {};
+      var faltantes = [];
+
+      listaSheets.forEach(function(item){ idsSheets[texto(item.id || item._docId)] = true; });
+      respaldo.forEach(function(item){
+        var id = texto(item.id || item._docId);
+        if (id && !idsSheets[id]) faltantes.push(id);
+      });
+
+      if (!migracionHecha() && respaldo.length && (!listaSheets.length || faltantes.length)) {
         return sincronizarCatalogo(respaldo,"administrador-migracion-automatica").then(function(){
+          marcarMigracion();
           return {
             ok:true,total:respaldo.length,coordinadores:respaldo,fuente:"google-sheets",fuentePrincipal:"Google Sheets",
             migracionAutomatica:true,
-            mensaje:"Los coordinadores de Firebase se migraron automáticamente a Google Sheets."
+            mensaje:"El catálogo completo de Firebase se migró automáticamente a Google Sheets."
           };
         }).catch(function(errorSync){
           return {
             ok:true,total:respaldo.length,coordinadores:respaldo,fuente:"firebase-respaldo",fuentePrincipal:"Google Sheets",
-            advertencia:"Google Sheets todavía no contiene coordinadores y no se pudo completar la migración automática: " + (errorSync.message || String(errorSync))
+            advertencia:"No se pudo completar la migración inicial a Google Sheets: " + (errorSync.message || String(errorSync))
           };
         });
-      });
-    }).catch(function(errorSheets){
-      return listarFirebase(limite).then(function(respaldo){
-        if (!respaldo.length) throw errorSheets;
+      }
+
+      if (listaSheets.length) {
+        return { ok:true,total:listaSheets.length,coordinadores:listaSheets,fuente:"google-sheets",fuentePrincipal:"Google Sheets" };
+      }
+
+      if (respaldo.length) {
         return {
           ok:true,total:respaldo.length,coordinadores:respaldo,fuente:"firebase-respaldo",fuentePrincipal:"Google Sheets",
-          advertencia:"Google Sheets no respondió. Se muestra Firebase como respaldo temporal: " + (errorSheets.message || String(errorSheets))
+          advertencia:errorSheets ? "Google Sheets no respondió. Se muestra Firebase como respaldo temporal: " + (errorSheets.message || String(errorSheets)) : "Google Sheets no contiene coordinadores."
         };
-      });
+      }
+
+      if (errorSheets) throw errorSheets;
+      return { ok:true,total:0,coordinadores:[],fuente:"google-sheets",fuentePrincipal:"Google Sheets" };
     });
   }
 
@@ -342,7 +368,12 @@ Función:
   }
 
   function sincronizarTodosConSheets(){
-    return listarFirebase(1000).then(function(lista){ return sincronizarCatalogo(lista,"administrador-sincronizacion-inicial"); });
+    return listarFirebase(1000).then(function(lista){
+      return sincronizarCatalogo(lista,"administrador-sincronizacion-inicial").then(function(resultado){
+        marcarMigracion();
+        return resultado;
+      });
+    });
   }
 
   function guardarAsignacionCarrera(coordinadorId,carrera){
