@@ -2,13 +2,15 @@
 Archivo: coordinador.envios.carreras.js
 Ruta: /coordinadores-mvp/js/coordinador.envios.carreras.js
 Función:
-- Consultar Google Sheets por cada carrera asignada al coordinador.
-- Evitar enviar varias carreras como una sola cadena.
-- Unificar y eliminar registros duplicados.
+- Recuperar envíos mediante consultas amplias y por carrera.
+- No enviar el período al servidor para evitar coincidencias rígidas.
+- Unificar respuestas, eliminar duplicados y construir períodos reales.
 - Mantener Google Sheets como fuente principal.
 ========================================================= */
 (function(window){
   'use strict';
+
+  var ultimoDiagnostico={consultas:0,respondidas:0,fallidas:0,filasRecibidas:0,enviosNormalizados:0};
 
   function texto(valor){
     return String(valor===null||valor===undefined?'':valor).trim();
@@ -28,29 +30,18 @@ Función:
     if(typeof item==='string')return texto(item);
     item=item||{};
     return texto(
-      item.nombreCarrera||
-      item.NombreCarrera||
-      item.carrera||
-      item.Carrera||
-      item.codigoCarrera||
-      item.CodigoCarrera||
-      item.key||
-      item.id||
-      ''
+      item.nombreCarrera||item.NombreCarrera||item.carrera||item.Carrera||
+      item.codigoCarrera||item.CodigoCarrera||item.key||item.id||''
     );
   }
 
   function obtenerCarreras(opciones){
     opciones=opciones||{};
     var origen=opciones.carreras||(opciones.coordinador&&opciones.coordinador.carreras)||[];
-
-    if(!Array.isArray(origen)){
-      origen=texto(origen).split(/[,;\n]+/);
-    }
+    if(!Array.isArray(origen))origen=texto(origen).split(/[,;\n]+/);
 
     var mapa={};
     var salida=[];
-
     origen.forEach(function(item){
       var carrera=obtenerNombreCarrera(item);
       var clave=normal(carrera);
@@ -58,32 +49,16 @@ Función:
       mapa[clave]=true;
       salida.push(carrera);
     });
-
     return salida;
   }
 
-  function obtenerPeriodo(opciones){
-    opciones=opciones||{};
-    var periodo=opciones.periodo||{};
-
-    if(typeof periodo==='string'){
-      return {id:texto(periodo),label:texto(periodo)};
-    }
-
-    return {
-      id:texto(periodo.id||periodo.periodoId||''),
-      label:texto(periodo.label||periodo.periodoLabel||periodo.periodo||periodo.id||'')
-    };
-  }
-
   function extraerLista(valor,profundidad){
-    if(profundidad>7||valor===null||valor===undefined)return [];
+    if(profundidad>8||valor===null||valor===undefined)return [];
     if(Array.isArray(valor))return valor;
     if(typeof valor!=='object')return [];
 
     var claves=['envios','estudiantes','registros','filas','rows','items','resultados','resultado','result','data'];
     var i;
-
     for(i=0;i<claves.length;i+=1){
       if(Array.isArray(valor[claves[i]]))return valor[claves[i]];
     }
@@ -93,22 +68,87 @@ Función:
       var encontrada=extraerLista(valor[nombres[i]],profundidad+1);
       if(encontrada.length)return encontrada;
     }
-
     return [];
   }
 
   function claveEnvio(envio,indice){
     envio=envio||{};
     return texto(
-      envio.id||
-      envio._clave||
-      [envio.cedula,envio.periodoId||envio.periodoLabel||envio.periodo,envio.carrera,envio.fila||indice].join('|')
+      envio.id||envio._clave||[
+        envio.cedula,
+        envio.periodoId||envio.periodoLabel||envio.periodo,
+        envio.carrera,
+        envio.fila||indice
+      ].join('|')
     );
+  }
+
+  function construirConsultas(enviarGet,carreras){
+    var consultas=[];
+    var carrerasTexto=carreras.join(',');
+
+    consultas.push(function(){
+      return enviarGet('LISTAR_ENVIOS_POR_CARRERA',{
+        hoja:'Envios',
+        estado:'',
+        todas:'true',
+        incluirTodos:'true'
+      });
+    });
+
+    consultas.push(function(){
+      return enviarGet('LISTAR_ENVIOS_COORDINADOR',{
+        hoja:'Envios',
+        estado:'',
+        carreras:carrerasTexto,
+        todas:'true',
+        incluirTodos:'true'
+      });
+    });
+
+    carreras.forEach(function(carrera){
+      consultas.push(function(){
+        return enviarGet('LISTAR_ENVIOS_POR_CARRERA',{
+          hoja:'Envios',
+          estado:'',
+          carrera:carrera,
+          carreras:carrera
+        });
+      });
+    });
+
+    return consultas;
+  }
+
+  function construirPeriodosDesdeEnvios(lista){
+    var mapa={};
+    var periodos=[];
+
+    (Array.isArray(lista)?lista:[]).forEach(function(item){
+      item=item||{};
+      var id=texto(item.periodoId||item.periodoLabel||item.periodo);
+      var label=texto(item.periodoLabel||item.periodo||item.periodoId);
+      var clave=normal(id||label);
+      if(!clave||mapa[clave])return;
+      mapa[clave]=true;
+      periodos.push({id:id||label,label:label||id,activo:true});
+    });
+
+    periodos.sort(function(a,b){
+      return texto(b.label).localeCompare(texto(a.label),'es',{numeric:true});
+    });
+
+    if(periodos.length)periodos[0].principal=true;
+    return {
+      periodos:periodos,
+      principal:periodos[0]||null,
+      envios:Array.isArray(lista)?lista:[]
+    };
   }
 
   function instalar(){
     var servicio=window.CoordinadorMVPSheetsPrimary;
-    if(!servicio||servicio.__enviosPorCarreraInstalado)return false;
+    if(!servicio||servicio.__enviosFlexiblesInstalado)return false;
     if(typeof servicio.enviarGet!=='function'||typeof servicio.normalizarEnvio!=='function')return false;
 
     var enviarGet=servicio.enviarGet;
@@ -117,59 +157,69 @@ Función:
     servicio.listarEnvios=function(opciones){
       opciones=opciones||{};
       var carreras=obtenerCarreras(opciones);
-      var periodo=obtenerPeriodo(opciones);
-      var consultas=carreras.length?carreras:[''];
+      var consultas=construirConsultas(enviarGet,carreras);
 
-      return Promise.allSettled(consultas.map(function(carrera){
-        var payload={
-          hoja:'Envios',
-          estado:''
-        };
+      ultimoDiagnostico={
+        consultas:consultas.length,
+        respondidas:0,
+        fallidas:0,
+        filasRecibidas:0,
+        enviosNormalizados:0,
+        carrerasSolicitadas:carreras.slice()
+      };
 
-        if(carrera){
-          payload.carrera=carrera;
-          payload.carreras=carrera;
-        }
-        if(periodo.label)payload.periodo=periodo.label;
-        if(periodo.id)payload.periodoId=periodo.id;
+      return Promise.allSettled(consultas.map(function(ejecutar){return ejecutar();}))
+        .then(function(resultados){
+          var filas=[];
+          var errores=[];
 
-        return enviarGet('LISTAR_ENVIOS_POR_CARRERA',payload).then(function(respuesta){
-          return extraerLista(respuesta,0);
+          resultados.forEach(function(resultado){
+            if(resultado.status==='fulfilled'){
+              ultimoDiagnostico.respondidas+=1;
+              var lista=extraerLista(resultado.value,0);
+              ultimoDiagnostico.filasRecibidas+=lista.length;
+              filas=filas.concat(lista);
+            }else{
+              ultimoDiagnostico.fallidas+=1;
+              errores.push(resultado.reason);
+            }
+          });
+
+          if(!filas.length&&errores.length===resultados.length)throw errores[0];
+
+          var mapa={};
+          var envios=[];
+          filas.map(normalizarEnvio).forEach(function(envio,indice){
+            if(!envio||!envio.cedula)return;
+            if(!envio.titulo1&&!envio.titulo2&&!envio.titulo3)return;
+            var clave=claveEnvio(envio,indice);
+            if(mapa[clave])return;
+            mapa[clave]=true;
+            envios.push(envio);
+          });
+
+          ultimoDiagnostico.enviosNormalizados=envios.length;
+          return envios;
         });
-      })).then(function(resultados){
-        var filas=[];
-        var errores=[];
-
-        resultados.forEach(function(resultado){
-          if(resultado.status==='fulfilled'){
-            filas=filas.concat(resultado.value||[]);
-          }else{
-            errores.push(resultado.reason);
-          }
-        });
-
-        if(!filas.length&&errores.length===resultados.length){
-          throw errores[0];
-        }
-
-        var mapa={};
-        var envios=[];
-
-        filas.map(normalizarEnvio).forEach(function(envio,indice){
-          if(!envio||!envio.cedula)return;
-          if(!envio.titulo1&&!envio.titulo2&&!envio.titulo3)return;
-
-          var clave=claveEnvio(envio,indice);
-          if(mapa[clave])return;
-          mapa[clave]=true;
-          envios.push(envio);
-        });
-
-        return envios;
-      });
     };
 
+    servicio.listarPeriodos=function(){
+      return servicio.listarEnvios({carreras:[],incluirTodos:true})
+        .then(function(lista){
+          var resultado=construirPeriodosDesdeEnvios(lista);
+          if(resultado.periodos.length)return resultado;
+          var cfg=window.CoordinadorMVPConfig;
+          var id=cfg&&cfg.obtener?cfg.obtener('periodos.fallbackId','2026-02__2026-08'):'2026-02__2026-08';
+          var label=cfg&&cfg.obtener?cfg.obtener('periodos.fallbackLabel','Febrero 2026 a Agosto 2026'):'Febrero 2026 a Agosto 2026';
+          var fallback={id:id,label:label,activo:true,principal:true,fallback:true};
+          return {periodos:[fallback],principal:fallback,envios:lista};
+        });
+    };
+
+    servicio.construirPeriodosDesdeEnvios=construirPeriodosDesdeEnvios;
+    servicio.obtenerDiagnosticoConsulta=function(){return Object.assign({},ultimoDiagnostico);};
     servicio.__enviosPorCarreraInstalado=true;
+    servicio.__enviosFlexiblesInstalado=true;
     return true;
   }
 
