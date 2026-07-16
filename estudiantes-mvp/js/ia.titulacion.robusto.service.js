@@ -96,11 +96,9 @@
           mejor: candidato,
           errores: ctx.errores,
           providers: ctx.providers,
-          core: ctx.core,
-          revisionesExitosas: 0
+          core: ctx.core
         });
-      })
-      .catch(function (errorProveedor) {
+      }, function (errorProveedor) {
         ctx.errores.push({
           proveedor: obtenerId(proveedor),
           mensaje: limpiarError(errorProveedor)
@@ -150,7 +148,6 @@
 
         reporte = ctx.core.validarYRecomendar(secciones, ctx.params);
         candidato = crearCandidato(proveedor, reporte, true);
-        ctx.revisionesExitosas += 1;
 
         if (esMejor(candidato, ctx.mejor)) ctx.mejor = candidato;
 
@@ -169,8 +166,7 @@
 
         ctx.indice += 1;
         return revisarConOtraIA(ctx);
-      })
-      .catch(function (errorProveedor) {
+      }, function (errorProveedor) {
         ctx.errores.push({
           proveedor: obtenerId(proveedor),
           mensaje: limpiarError(errorProveedor)
