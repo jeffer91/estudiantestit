@@ -1,8 +1,9 @@
 /*
   Integración directa de IA 3x3 con estudiante.html.
   - Deja un único botón al final de la propuesta 3.
-  - No intercepta ni cancela el flujo antiguo: usa una acción exclusiva.
+  - Usa una acción exclusiva y no depende del motor antiguo.
   - Genera 9 títulos para las 3 propuestas.
+  - Cuando se usa la IA, exige elegir una alternativa por sección.
 */
 (function (window, document) {
   'use strict';
@@ -30,9 +31,67 @@
       return;
     }
 
+    instalarValidacionSeleccion();
     configurarUnicoBoton();
     document.addEventListener('click', manejarClickGeneracion);
     instalado = true;
+  }
+
+  function instalarValidacionSeleccion() {
+    var state = window.EstudianteMVPState;
+    var validarOriginal;
+    var reemplazo;
+
+    if (
+      !state ||
+      state.__validacionIA3x3Instalada ||
+      typeof state.validarPropuesta !== 'function'
+    ) {
+      return;
+    }
+
+    validarOriginal = state.validarPropuesta.bind(state);
+    reemplazo = Object.assign({}, state, {
+      validarPropuesta: function (numero) {
+        var validacion = validarOriginal(numero);
+        var propuesta;
+
+        if (!validacion.ok) return validacion;
+
+        propuesta = reemplazo.obtenerPropuesta(numero) || {};
+        if (
+          Array.isArray(propuesta.sugerenciasIA) &&
+          propuesta.sugerenciasIA.length === 3 &&
+          !Number(propuesta.sugerenciaSeleccionadaNumero || 0)
+        ) {
+          return {
+            ok: false,
+            mensaje: 'Selecciona uno de los 3 títulos sugeridos para la propuesta ' + numero + '.',
+            selector: '#p' + numero + 'Sugerencias',
+            numeroPropuesta: Number(numero)
+          };
+        }
+
+        return validacion;
+      },
+      validarPropuestas: function () {
+        var i;
+        var validacion;
+
+        for (i = 1; i <= 3; i += 1) {
+          validacion = reemplazo.validarPropuesta(i);
+          if (!validacion.ok) return validacion;
+        }
+
+        return {
+          ok: true,
+          mensaje: 'Las 3 propuestas están completas y tienen un título seleccionado.'
+        };
+      },
+      __validacionIA3x3Instalada: true
+    });
+
+    window.EstudianteMVPState = Object.freeze(reemplazo);
   }
 
   function configurarUnicoBoton() {
@@ -253,7 +312,7 @@
       evento = new CustomEvent(nombre, { detail: detalle || {} });
       document.dispatchEvent(evento);
     } catch (error) {
-      /* Navegadores antiguos: el diagnóstico no debe bloquear la generación. */
+      /* El diagnóstico nunca debe bloquear la generación. */
     }
   }
 
