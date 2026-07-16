@@ -2,13 +2,13 @@
   Orquestador IA 3x3:
   - Una IA genera 9 títulos: 3 por sección.
   - La app valida estructura y calidad.
-  - Otra IA corrige los mismos 9 cuando es necesario.
-  - Nunca genera títulos mediante plantillas locales.
+  - Solo cuando existen errores graves, una segunda IA efectiva revisa los mismos 9.
+  - Los proveedores que no conectan se omiten; no cuentan como revisores.
+  - Se conserva siempre el grupo con mejor evaluación.
+  - Nunca se generan títulos mediante plantillas locales.
 */
 (function (window) {
   'use strict';
-
-  window.__ESTUDIANTE_IA_SELECCION_INSTALADA__ = true;
 
   var instalado = false;
   var intentosInstalacion = 0;
@@ -26,7 +26,9 @@
     window.EstudianteMVPIATitulacion = Object.freeze(Object.assign({}, original, {
       generarNueveTitulos: generarNueveTitulos,
       generarTitulos3x3: generarNueveTitulos,
-      __flujoNueveTitulos: true
+      __flujoNueveTitulos: true,
+      modo: '3x3',
+      version: '3.1.0'
     }));
 
     instalado = true;
@@ -42,6 +44,10 @@
 
     return firebase.listarProveedoresActivos().then(function (lista) {
       lista = Array.isArray(lista) ? lista.slice() : [];
+      lista.sort(function (a, b) {
+        return Number(a.prioridad || 999) - Number(b.prioridad || 999);
+      });
+
       if (!lista.length) throw new Error('No hay proveedores IA activos.');
 
       return buscarGenerador({
@@ -84,16 +90,22 @@
         reporte = ctx.core.validarYRecomendar(secciones, ctx.params);
         candidato = crearCandidato(proveedor, reporte, false);
 
-        if (reporte.perfecto) {
-          return construirResultado(candidato, null, 'Se generaron 9 títulos correctamente. Elige uno en cada sección.');
+        /* Las mejoras menores afectan la puntuación, pero no bloquean la entrega. */
+        if (reporte.apto) {
+          return construirResultado(
+            candidato,
+            null,
+            reporte.menores
+              ? 'Se generaron 9 títulos válidos. Algunos tienen mejoras menores, pero puedes elegir uno en cada sección.'
+              : 'Se generaron 9 títulos correctamente. Elige uno en cada sección.'
+          );
         }
 
-        return revisarConOtraIA({
+        return buscarRevisorDisponible({
           params: ctx.params,
           proveedores: ctx.proveedores,
           indice: ctx.indice + 1,
           base: candidato,
-          mejor: candidato,
           errores: ctx.errores,
           providers: ctx.providers,
           core: ctx.core
@@ -108,26 +120,28 @@
       });
   }
 
-  function revisarConOtraIA(ctx) {
+  /*
+    Busca una IA que pueda actuar como revisora. Los fallos de conexión o una
+    respuesta incompleta hacen que se pruebe otro proveedor. En cuanto una IA
+    devuelve una revisión completa de 9 títulos, no se consulta ninguna otra.
+  */
+  function buscarRevisorDisponible(ctx) {
     var proveedor;
     var promptRevision;
 
     if (ctx.indice >= ctx.proveedores.length) {
-      if (ctx.mejor && ctx.mejor.reporte.apto) {
-        return construirResultado(
-          ctx.mejor,
-          ctx.base.proveedor,
-          'Se conservaron los mejores 9 títulos disponibles. Revisa la recomendación de cada sección y elige.'
-        );
-      }
-      throw construirErrorFinal(ctx.errores);
+      return construirResultado(
+        ctx.base,
+        ctx.base.proveedor,
+        'La revisión externa no estuvo disponible. Se conservaron los 9 títulos originales para que puedas elegir.'
+      );
     }
 
     proveedor = ctx.proveedores[ctx.indice];
     promptRevision = ctx.core.construirPromptRevision(
       ctx.params,
-      ctx.mejor.reporte.secciones,
-      ctx.mejor.reporte
+      ctx.base.reporte.secciones,
+      ctx.base.reporte
     );
 
     return llamarProveedor(ctx.providers, proveedor, promptRevision, true, ctx.params)
@@ -135,48 +149,36 @@
         var secciones = ctx.core.parsearRespuesta(respuesta);
         var total = ctx.core.contarTitulos(secciones);
         var reporte;
-        var candidato;
+        var revisado;
         var elegido;
 
         if (total !== 9) {
           ctx.errores.push({
             proveedor: obtenerId(proveedor),
-            mensaje: 'La revisión no devolvió nuevamente los 9 títulos completos.'
+            mensaje: 'La revisión no devolvió los 9 títulos completos.'
           });
           ctx.indice += 1;
-          return revisarConOtraIA(ctx);
+          return buscarRevisorDisponible(ctx);
         }
 
         reporte = ctx.core.validarYRecomendar(secciones, ctx.params);
-        candidato = crearCandidato(proveedor, reporte, true);
+        revisado = crearCandidato(proveedor, reporte, true);
+        elegido = esMejor(revisado, ctx.base) ? revisado : ctx.base;
 
-        if (esMejor(candidato, ctx.mejor)) ctx.mejor = candidato;
-
-        if (reporte.apto) {
-          elegido = ctx.mejor;
-          return construirResultado(
-            elegido,
-            ctx.base.proveedor,
-            elegido === candidato
-              ? 'Una segunda IA revisó los 9 títulos. Elige uno en cada sección.'
-              : 'Una segunda IA revisó los títulos y se conservó el grupo con mejor evaluación. Elige uno en cada sección.'
-          );
-        }
-
-        ctx.errores.push({
-          proveedor: obtenerId(proveedor),
-          mensaje: resumirReporte(reporte)
-        });
-
-        ctx.indice += 1;
-        return revisarConOtraIA(ctx);
+        return construirResultado(
+          elegido,
+          ctx.base.proveedor,
+          elegido === revisado
+            ? 'Una segunda IA revisó los 9 títulos. Se conservó la versión con mejor evaluación; elige uno en cada sección.'
+            : 'Una segunda IA revisó los títulos, pero la versión original obtuvo mejor evaluación. Elige uno en cada sección.'
+        );
       }, function (errorProveedor) {
         ctx.errores.push({
           proveedor: obtenerId(proveedor),
           mensaje: limpiarError(errorProveedor)
         });
         ctx.indice += 1;
-        return revisarConOtraIA(ctx);
+        return buscarRevisorDisponible(ctx);
       });
   }
 
@@ -184,7 +186,8 @@
     return servicio.generarTexto(proveedor, prompt, {
       timeoutMs: params.timeoutMs,
       temperatura: revision ? 0.15 : 0.3,
-      maxTokens: Math.max(Number(params.maxTokens || 0), 2600)
+      maxTokens: Math.max(Number(params.maxTokens || 0), 2800),
+      modoRevision: revision === true
     });
   }
 
@@ -257,22 +260,16 @@
     return '';
   }
 
-  function resumirReporte(reporte) {
-    var lista = reporte && Array.isArray(reporte.errores) ? reporte.errores : [];
-    if (!lista.length) return 'Los títulos todavía necesitan revisión.';
-    return lista.slice(0, 6).map(function (item) {
-      return 'S' + item.seccion + ' T' + item.titulo + ': ' + item.mensaje;
-    }).join(' ');
-  }
-
   function construirErrorFinal(errores) {
     var mensaje = 'No fue posible obtener los 9 títulos completos con los proveedores IA activos.';
     errores = Array.isArray(errores) ? errores : [];
+
     if (errores.length) {
       mensaje += ' Detalle: ' + errores.map(function (item) {
         return item.proveedor + ': ' + item.mensaje;
       }).join(' | ');
     }
+
     return new Error(mensaje);
   }
 
