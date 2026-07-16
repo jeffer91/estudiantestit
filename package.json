@@ -1,0 +1,13 @@
+{
+  "name": "estudiantestit",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev:ia": "node dev/ia-proxy-server.mjs",
+    "dev:cloudflare": "npx wrangler pages dev . --port 8788"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
