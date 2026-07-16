@@ -183,8 +183,12 @@
       maxProcesos: 3,
       maxTokens: 3000,
       onProgress: function (detalle) {
+        var visible;
+
         if (recomendacion && typeof recomendacion.actualizarProgreso === 'function') {
-          recomendacion.actualizarProgreso(detalle || {});
+          visible = Object.assign({}, detalle || {});
+          delete visible.proveedor;
+          recomendacion.actualizarProgreso(visible);
         }
       }
     })
@@ -325,6 +329,6 @@
     ejecutarGeneracion: ejecutarGeneracion,
     configurarBotones: configurarBotones,
     accion: ACCION,
-    version: '2.0.0'
+    version: '2.0.1'
   });
 })(window, document);
