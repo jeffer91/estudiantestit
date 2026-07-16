@@ -3,6 +3,7 @@
   Ruta: estudiantes-mvp/js/ia.providers.service.js
   Funciones principales:
   - Enviar las solicitudes IA al endpoint interno /api/ia.
+  - Usar el proxy publicado cuando la app se ejecuta desde localhost.
   - Evitar bloqueos CORS de NVIDIA, GitHub Models y otros proveedores.
   - Mantener endpoint, modelo y clave configurados desde el administrador.
   - Devolver únicamente el texto normalizado al motor de titulación.
@@ -29,7 +30,31 @@
       : Number(fallback || 0);
   }
 
+  function esEntornoLocal() {
+    var hostname = String(
+      window.location && window.location.hostname || ''
+    ).toLowerCase();
+
+    return (
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '0.0.0.0' ||
+      hostname === '::1' ||
+      hostname === '[::1]'
+    );
+  }
+
   function proxyUrl() {
+    /*
+      Live Server solamente publica archivos estáticos y no ejecuta
+      Cloudflare Pages Functions ni _worker.js. Durante las pruebas en
+      localhost se usa el proxy publicado. En producción se conserva la
+      ruta del mismo dominio.
+    */
+    if (esEntornoLocal()) {
+      return 'https://titulos.pages.dev/api/ia';
+    }
+
     return new URL('/api/ia', window.location.origin).toString();
   }
 
@@ -117,7 +142,9 @@
     }).catch(function (error) {
       if (error && error.message === 'Failed to fetch') {
         var errorConexion = new Error(
-          'No se pudo conectar con el servicio /api/ia. Verifica que el último despliegue de Cloudflare Pages haya finalizado.'
+          esEntornoLocal()
+            ? 'No se pudo conectar con https://titulos.pages.dev/api/ia. Verifica que el Worker haya sido desplegado en Cloudflare Pages.'
+            : 'No se pudo conectar con el servicio /api/ia. Verifica que el último despliegue de Cloudflare Pages haya finalizado.'
         );
         errorConexion.codigo = 'FAILED_TO_FETCH';
         throw errorConexion;
