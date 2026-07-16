@@ -10,7 +10,7 @@ Función:
   "use strict";
 
   if(window.AD_CONFIG){
-    window.AD_CONFIG.version="1.8.0";
+    window.AD_CONFIG.version="1.9.0";
     window.AD_CONFIG.accionesLog=window.AD_CONFIG.accionesLog||{};
     window.AD_CONFIG.accionesLog.periodoActivado=window.AD_CONFIG.accionesLog.periodoActivado||"ADMIN_PERIODO_ACTIVADO";
     window.AD_CONFIG.accionesLog.periodoDesactivado=window.AD_CONFIG.accionesLog.periodoDesactivado||"ADMIN_PERIODO_DESACTIVADO";
@@ -21,7 +21,7 @@ Función:
     window.AD_CONFIG.accionesLog.titulosEliminados=window.AD_CONFIG.accionesLog.titulosEliminados||"ADMIN_TITULOS_ELIMINADOS";
   }
 
-  var APP_VERSION=window.AD_CONFIG&&window.AD_CONFIG.version?String(window.AD_CONFIG.version):"1.8.0";
+  var APP_VERSION=window.AD_CONFIG&&window.AD_CONFIG.version?String(window.AD_CONFIG.version):"1.9.0";
   function $(id){return document.getElementById(id);}
 
   function agregarCssArchivo(id,ruta){
