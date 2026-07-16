@@ -1,29 +1,25 @@
 /*
-  Archivo: ia.diagnostico.service.js
-  Ruta: estudiantes-mvp/js/ia.diagnostico.service.js
-  Funciones principales:
-  - Mostrar puntos de colores para cada proveedor IA utilizado.
-  - Registrar tiempos y errores sin mostrar datos técnicos sensibles.
-  - Detectar si una respuesta fue descartada por la validación de títulos.
-  - Mostrar etapa y código de soporte cuando la generación termina con error.
-  - Guardar el diagnóstico en la hoja Logs mediante el Apps Script existente.
-  - No modificar el envío normal de títulos del estudiante.
+  Diagnóstico visual del flujo IA 3x3.
+  - Registra los proveedores usados para generar y revisar 9 títulos.
+  - Distingue generación, validación, corrección cruzada y selección disponible.
+  - Muestra código de soporte solo cuando el proceso completo falla.
+  - No modifica el envío normal del estudiante.
 */
 (function (window, document) {
   'use strict';
 
   var servicioOriginal = window.EstudianteMVPIAProviders;
   var ejecucion = null;
-  var observadoresInstalados = false;
   var estilosInstalados = false;
+  var eventosInstalados = false;
 
   if (!servicioOriginal || typeof servicioOriginal.generarTexto !== 'function') {
-    console.warn('[Diagnóstico IA] No se encontró el servicio de proveedores.');
+    console.warn('[Diagnóstico IA 3x3] No se encontró el servicio de proveedores.');
     return;
   }
 
   function texto(valor) {
-    return String(valor === null || valor === undefined ? '' : valor).trim();
+    return String(valor == null ? '' : valor).trim();
   }
 
   function numero(valor, fallback) {
@@ -33,8 +29,8 @@
 
   function instalar() {
     instalarEstilos();
-    instalarContenedores();
-    instalarObservadores();
+    instalarContenedor();
+    instalarEventos();
   }
 
   function instalarEstilos() {
@@ -57,88 +53,63 @@
       '.ia-diagnostico__punto[data-estado="correcto"]{background:#16a34a}',
       '.ia-diagnostico__punto[data-estado="error"]{background:#dc2626}',
       '.ia-diagnostico__punto[data-estado="omitido"]{background:#64748b}',
+      '.ia-diagnostico__etapa-visible{font-size:12px;font-weight:700;color:#52637a;text-align:center}',
       '.ia-diagnostico__soporte{font-size:12px;line-height:1.35;text-align:center;color:#64748b}',
       '.ia-diagnostico__soporte[hidden]{display:none!important}',
       '.ia-diagnostico__codigo{font-weight:800;color:#334155;letter-spacing:.02em}',
-      '.ia-diagnostico__etapa{font-weight:600}',
-      '@media (max-width:600px){.ia-diagnostico__punto{width:8px;height:8px}.ia-diagnostico__soporte{font-size:11px}}'
+      '@media(max-width:600px){.ia-diagnostico__punto{width:8px;height:8px}.ia-diagnostico__soporte,.ia-diagnostico__etapa-visible{font-size:11px}}'
     ].join('');
+
     document.head.appendChild(style);
     estilosInstalados = true;
   }
 
-  function instalarContenedores() {
-    var acciones = document.querySelectorAll('.ai-actions');
+  function instalarContenedor() {
+    var panel = document.querySelector('[data-propuesta-panel="3"]');
+    var acciones = panel ? panel.querySelector('.ai-actions') : null;
+    var bloque;
 
-    Array.prototype.forEach.call(acciones, function (contenedorAcciones) {
-      var articulo = contenedorAcciones.closest('[data-propuesta-panel]');
-      var numeroPropuesta = articulo
-        ? Number(articulo.getAttribute('data-propuesta-panel') || 0)
-        : 0;
-      var bloque;
+    if (!acciones || panel.querySelector('[data-ia-diagnostico="3x3"]')) return;
 
-      if (!numeroPropuesta || articulo.querySelector('[data-ia-diagnostico]')) {
-        return;
-      }
+    bloque = document.createElement('div');
+    bloque.className = 'ia-diagnostico';
+    bloque.setAttribute('data-ia-diagnostico', '3x3');
+    bloque.setAttribute('aria-live', 'polite');
+    bloque.hidden = true;
+    bloque.innerHTML = [
+      '<div class="ia-diagnostico__puntos" data-ia-puntos></div>',
+      '<div class="ia-diagnostico__etapa-visible" data-ia-etapa-visible></div>',
+      '<div class="ia-diagnostico__soporte" data-ia-soporte hidden>',
+      '  <span>Código de soporte: <span class="ia-diagnostico__codigo" data-ia-codigo></span></span>',
+      '</div>'
+    ].join('');
 
-      bloque = document.createElement('div');
-      bloque.className = 'ia-diagnostico';
-      bloque.setAttribute('data-ia-diagnostico', String(numeroPropuesta));
-      bloque.setAttribute('aria-live', 'polite');
-      bloque.hidden = true;
-      bloque.innerHTML = [
-        '<div class="ia-diagnostico__puntos" data-ia-puntos></div>',
-        '<div class="ia-diagnostico__soporte" data-ia-soporte hidden>',
-        '  <span class="ia-diagnostico__etapa" data-ia-etapa></span>',
-        '  <span aria-hidden="true"> · </span>',
-        '  <span>Código de soporte: <span class="ia-diagnostico__codigo" data-ia-codigo></span></span>',
-        '</div>'
-      ].join('');
-
-      contenedorAcciones.insertAdjacentElement('afterend', bloque);
-    });
+    acciones.insertAdjacentElement('afterend', bloque);
   }
 
-  function instalarObservadores() {
-    if (observadoresInstalados || !window.MutationObserver) {
-      observadoresInstalados = true;
-      return;
-    }
+  function instalarEventos() {
+    if (eventosInstalados) return;
 
-    [1, 2, 3].forEach(function (numeroPropuesta) {
-      var estado = document.getElementById('p' + numeroPropuesta + 'EstadoIA');
-      var sugerencias = document.getElementById('p' + numeroPropuesta + 'Sugerencias');
-      var observar = function () {
-        revisarResultadoVisible(numeroPropuesta);
-      };
-      var observer;
-
-      if (estado) {
-        observer = new MutationObserver(observar);
-        observer.observe(estado, {
-          childList: true,
-          subtree: true,
-          characterData: true,
-          attributes: true,
-          attributeFilter: ['class']
-        });
-      }
-
-      if (sugerencias) {
-        observer = new MutationObserver(observar);
-        observer.observe(sugerencias, {
-          childList: true,
-          subtree: true
-        });
-      }
+    document.addEventListener('ia-titulacion:3x3-inicio', function () {
+      iniciarEjecucion();
     });
 
-    observadoresInstalados = true;
+    document.addEventListener('ia-titulacion:3x3-exito', function (evento) {
+      finalizarCorrecto(evento && evento.detail || {});
+    });
+
+    document.addEventListener('ia-titulacion:3x3-error', function (evento) {
+      finalizarError(evento && evento.detail || {});
+    });
+
+    eventosInstalados = true;
   }
 
   function generarTextoConDiagnostico(proveedor, prompt, opciones) {
     var normalizado = normalizarProveedorSeguro(proveedor);
-    var intento = iniciarProveedor(normalizado);
+    var revision = opciones && opciones.modoRevision === true ||
+      /revisor acad[eé]mico final|otra ia gener[oó] exactamente 9/i.test(String(prompt || ''));
+    var intento = iniciarProveedor(normalizado, revision);
 
     return servicioOriginal.generarTexto(proveedor, prompt, opciones)
       .then(function (respuesta) {
@@ -156,7 +127,7 @@
       try {
         return servicioOriginal.normalizarProveedorRuntime(proveedor || {});
       } catch (error) {
-        // Continuar con una normalización mínima.
+        /* Continuar con normalización mínima. */
       }
     }
 
@@ -169,25 +140,16 @@
     };
   }
 
-  function obtenerNumeroPropuestaVisible() {
-    var visible = document.querySelector('[data-propuesta-panel]:not([hidden])');
-    return visible
-      ? Number(visible.getAttribute('data-propuesta-panel') || 0)
-      : 0;
-  }
-
   function iniciarEjecucion() {
-    var numeroPropuesta = obtenerNumeroPropuestaVisible() || 1;
-    var bloque;
+    var bloque = obtenerBloque();
     var puntos;
     var soporte;
 
     ejecucion = {
       codigo: crearCodigoSoporte(),
-      propuesta: numeroPropuesta,
       inicio: new Date().toISOString(),
       inicioMs: Date.now(),
-      etapa: 'Conexión con proveedores',
+      etapa: 'Generación de 9 títulos',
       proveedorActual: '',
       intentos: [],
       puntos: {},
@@ -196,35 +158,24 @@
       registrada: false
     };
 
-    bloque = obtenerBloque(numeroPropuesta);
     if (bloque) {
       bloque.hidden = false;
-      puntos = obtenerElemento(bloque, '[data-ia-puntos]');
-      soporte = obtenerElemento(bloque, '[data-ia-soporte]');
+      puntos = bloque.querySelector('[data-ia-puntos]');
+      soporte = bloque.querySelector('[data-ia-soporte]');
       if (puntos) puntos.innerHTML = '';
       if (soporte) soporte.hidden = true;
+      actualizarEtapaVisible();
     }
 
     return ejecucion;
   }
 
-  function iniciarProveedor(proveedor) {
+  function iniciarProveedor(proveedor, revision) {
     var actual = ejecucion && !ejecucion.finalizada
       ? ejecucion
       : iniciarEjecucion();
     var id = texto(proveedor.id || proveedor.proveedor || 'desconocido');
-    var anterior;
-    var intento;
-
-    if (actual.proveedorActual && actual.proveedorActual !== id) {
-      anterior = actual.puntos[actual.proveedorActual];
-      if (anterior && anterior.estado === 'respuesta') {
-        actual.etapa = 'Validación de títulos';
-        anterior.motivo = 'La respuesta no superó la validación de los tres títulos.';
-      }
-    }
-
-    intento = {
+    var intento = {
       proveedor: id,
       nombre: texto(proveedor.nombre || id),
       modelo: texto(proveedor.modelo || proveedor.model || ''),
@@ -236,146 +187,110 @@
       httpStatus: 0,
       codigoError: '',
       mensaje: '',
-      correccion: actual.proveedorActual === id
+      correccion: revision === true
     };
 
     actual.proveedorActual = id;
-    actual.etapa = intento.correccion
-      ? 'Corrección de la respuesta'
-      : 'Conexión con proveedores';
+    actual.etapa = revision
+      ? 'Corrección con otra IA'
+      : 'Generación de 9 títulos';
     actual.intentos.push(intento);
+
     actualizarPunto(proveedor, 'probando');
+    actualizarEtapaVisible();
 
     return intento;
   }
 
   function proveedorRespondio(intento, respuesta) {
-    if (!ejecucion || ejecucion.finalizada || !intento) {
-      return;
-    }
+    if (!ejecucion || ejecucion.finalizada || !intento) return;
 
     intento.duracionMs = Date.now() - intento.inicioMs;
     intento.httpStatus = 200;
     intento.longitudRespuesta = texto(respuesta).length;
     intento.estado = 'RESPONDIO';
     ejecucion.respondieron += 1;
-    ejecucion.etapa = 'Validación de títulos';
+    ejecucion.etapa = intento.correccion
+      ? 'Validación final de 9 títulos'
+      : 'Validación de 9 títulos';
+
     actualizarPunto({ id: intento.proveedor, nombre: intento.nombre }, 'respuesta');
+    actualizarEtapaVisible();
   }
 
   function proveedorFallo(intento, error) {
-    if (!ejecucion || ejecucion.finalizada || !intento) {
-      return;
-    }
+    if (!ejecucion || ejecucion.finalizada || !intento) return;
 
     intento.duracionMs = Date.now() - intento.inicioMs;
     intento.estado = 'ERROR';
     intento.httpStatus = extraerHttpStatus(error);
     intento.codigoError = deducirCodigoError(error);
     intento.mensaje = limpiarMensajeSeguro(error && error.message || error);
-    ejecucion.etapa = ejecucion.respondieron
-      ? 'Validación de títulos'
-      : 'Conexión con proveedores';
+
     actualizarPunto({ id: intento.proveedor, nombre: intento.nombre }, 'error');
+    actualizarEtapaVisible();
   }
 
-  function revisarResultadoVisible(numeroPropuesta) {
-    var estado;
-    var sugerencias;
-    var mensaje;
-
-    if (!ejecucion || ejecucion.finalizada || ejecucion.propuesta !== numeroPropuesta) {
-      return;
-    }
-
-    estado = document.getElementById('p' + numeroPropuesta + 'EstadoIA');
-    sugerencias = document.getElementById('p' + numeroPropuesta + 'Sugerencias');
-    mensaje = estado ? texto(estado.textContent) : '';
-
-    if (sugerencias && sugerencias.querySelector('.suggestion-card')) {
-      finalizarCorrecto();
-      return;
-    }
-
-    if (estado && estado.classList.contains('is-success')) {
-      finalizarCorrecto();
-      return;
-    }
-
-    if (estado && estado.classList.contains('is-error') && mensaje) {
-      window.setTimeout(function () {
-        var estadoActual = document.getElementById('p' + numeroPropuesta + 'EstadoIA');
-        if (
-          ejecucion &&
-          !ejecucion.finalizada &&
-          estadoActual &&
-          estadoActual.classList.contains('is-error')
-        ) {
-          finalizarError();
-        }
-      }, 100);
-    }
-  }
-
-  function finalizarCorrecto() {
-    var punto;
-
-    if (!ejecucion || ejecucion.finalizada) return;
-    punto = ejecucion.puntos[ejecucion.proveedorActual];
-    if (punto) {
-      actualizarPunto({ id: ejecucion.proveedorActual, nombre: punto.nombre }, 'correcto');
-    }
-    ejecucion.etapa = 'Títulos generados';
-    ejecucion.finalizada = true;
-    ocultarSoporte(ejecucion.propuesta);
-  }
-
-  function finalizarError() {
-    var bloque;
-    var etapa;
-    var etapaElemento;
-    var codigoElemento;
-    var soporte;
+  function finalizarCorrecto(resultado) {
+    var idFinal;
 
     if (!ejecucion || ejecucion.finalizada) return;
 
-    etapa = ejecucion.respondieron
-      ? 'Validación de títulos'
-      : 'Conexión con proveedores';
-    ejecucion.etapa = etapa;
+    idFinal = texto(resultado.proveedor || ejecucion.proveedorActual);
+    if (idFinal) {
+      actualizarPunto({ id: idFinal, nombre: idFinal }, 'correcto');
+    }
+
+    ejecucion.etapa = 'Selección disponible: 9 títulos completos';
     ejecucion.finalizada = true;
     ejecucion.fin = new Date().toISOString();
     ejecucion.duracionTotalMs = Date.now() - ejecucion.inicioMs;
 
-    bloque = obtenerBloque(ejecucion.propuesta);
+    actualizarEtapaVisible();
+    ocultarSoporte();
+  }
+
+  function finalizarError(detalle) {
+    var bloque;
+    var soporte;
+    var codigo;
+
+    if (!ejecucion || ejecucion.finalizada) return;
+
+    ejecucion.etapa = ejecucion.respondieron
+      ? 'Validación o corrección de 9 títulos'
+      : 'Conexión con proveedores';
+    ejecucion.finalizada = true;
+    ejecucion.fin = new Date().toISOString();
+    ejecucion.duracionTotalMs = Date.now() - ejecucion.inicioMs;
+    ejecucion.errorFinal = limpiarMensajeSeguro(detalle.mensaje || detalle.error || '');
+
+    bloque = obtenerBloque();
     if (bloque) {
       bloque.hidden = false;
-      etapaElemento = obtenerElemento(bloque, '[data-ia-etapa]');
-      codigoElemento = obtenerElemento(bloque, '[data-ia-codigo]');
-      soporte = obtenerElemento(bloque, '[data-ia-soporte]');
-      if (etapaElemento) etapaElemento.textContent = 'Etapa: ' + etapa;
-      if (codigoElemento) codigoElemento.textContent = ejecucion.codigo;
+      soporte = bloque.querySelector('[data-ia-soporte]');
+      codigo = bloque.querySelector('[data-ia-codigo]');
+      if (codigo) codigo.textContent = ejecucion.codigo;
       if (soporte) soporte.hidden = false;
     }
 
+    actualizarEtapaVisible();
     registrarEnSheets(ejecucion);
   }
 
   function actualizarPunto(proveedor, estado) {
-    var actual = ejecucion;
-    var bloque;
+    var bloque = obtenerBloque();
     var contenedor;
     var id;
     var punto;
 
-    if (!actual) return;
-    id = texto(proveedor.id || proveedor.proveedor || 'desconocido');
-    bloque = obtenerBloque(actual.propuesta);
-    if (!bloque) return;
-    contenedor = obtenerElemento(bloque, '[data-ia-puntos]');
-    if (!contenedor) return;
-    punto = contenedor.querySelector('[data-ia-proveedor="' + escaparSelector(id) + '"]');
+    if (!ejecucion || !bloque) return;
 
+    id = texto(proveedor.id || proveedor.proveedor || 'desconocido');
+    contenedor = bloque.querySelector('[data-ia-puntos]');
+    if (!contenedor) return;
+
+    punto = contenedor.querySelector('[data-ia-proveedor="' + escaparSelector(id) + '"]');
     if (!punto) {
       punto = document.createElement('span');
       punto.className = 'ia-diagnostico__punto';
@@ -385,27 +300,35 @@
     }
 
     punto.setAttribute('data-estado', estado);
-    punto.setAttribute(
-      'title',
-      texto(proveedor.nombre || id) + ': ' + descripcionEstado(estado)
-    );
-    punto.setAttribute(
-      'aria-label',
-      texto(proveedor.nombre || id) + ': ' + descripcionEstado(estado)
-    );
+    punto.setAttribute('title', texto(proveedor.nombre || id) + ': ' + descripcionEstado(estado));
+    punto.setAttribute('aria-label', texto(proveedor.nombre || id) + ': ' + descripcionEstado(estado));
 
-    actual.puntos[id] = {
+    ejecucion.puntos[id] = {
       id: id,
       nombre: texto(proveedor.nombre || id),
       estado: estado
     };
   }
 
+  function actualizarEtapaVisible() {
+    var bloque = obtenerBloque();
+    var etapa = bloque ? bloque.querySelector('[data-ia-etapa-visible]') : null;
+
+    if (etapa && ejecucion) {
+      etapa.textContent = ejecucion.etapa;
+    }
+  }
+
   function registrarEnSheets(datos) {
     var sheets = window.EstudianteMVPSheets;
     var payload;
 
-    if (!datos || datos.registrada || !sheets || typeof sheets.leerConfiguracion !== 'function') {
+    if (
+      !datos ||
+      datos.registrada ||
+      !sheets ||
+      typeof sheets.leerConfiguracion !== 'function'
+    ) {
       return;
     }
 
@@ -414,15 +337,11 @@
 
     sheets.leerConfiguracion()
       .then(function (configSheets) {
-        if (!configSheets || !configSheets.activo || !configSheets.endpoint) {
-          return null;
-        }
+        if (!configSheets || !configSheets.activo || !configSheets.endpoint) return null;
 
         return fetch(configSheets.endpoint, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'text/plain;charset=utf-8'
-          },
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({
             accion: 'LOG',
             action: 'LOG',
@@ -432,8 +351,8 @@
             idRegistro: datos.codigo,
             datos: {
               nivel: 'ERROR',
-              modulo: 'DiagnosticoIA',
-              mensaje: 'Fallo de generación IA ' + datos.codigo,
+              modulo: 'DiagnosticoIA3x3',
+              mensaje: 'Fallo de generación IA 3x3 ' + datos.codigo,
               detalle: JSON.stringify(payload),
               idRegistro: datos.codigo,
               prueba: false
@@ -442,7 +361,7 @@
         });
       })
       .catch(function () {
-        // Un fallo al guardar el diagnóstico no altera la experiencia del estudiante.
+        /* El registro de diagnóstico nunca bloquea al estudiante. */
       });
   }
 
@@ -452,26 +371,19 @@
       ? state.obtenerEstudiante() || {}
       : {};
     var cedula = texto(
-      estudiante.cedula ||
-      estudiante.numeroIdentificacion ||
-      ''
+      estudiante.cedula || estudiante.numeroIdentificacion || ''
     ).replace(/\D/g, '');
-    var periodo = texto(
-      estudiante.periodoLabel ||
-      estudiante.periodo ||
-      estudiante.periodoId ||
-      ''
-    );
 
     return {
       codigo: datos.codigo,
       fechaInicio: datos.inicio,
       fechaFin: datos.fin,
       cedulaEnmascarada: enmascararCedula(cedula),
-      periodo: periodo,
-      propuesta: datos.propuesta,
+      periodo: texto(estudiante.periodoLabel || estudiante.periodo || estudiante.periodoId || ''),
       etapaFinal: datos.etapa,
+      errorFinal: datos.errorFinal || '',
       duracionTotalMs: datos.duracionTotalMs,
+      totalEsperado: 9,
       intentos: datos.intentos.map(function (intento) {
         return {
           proveedor: intento.proveedor,
@@ -489,17 +401,13 @@
     };
   }
 
-  function obtenerBloque(numeroPropuesta) {
-    return document.querySelector('[data-ia-diagnostico="' + Number(numeroPropuesta || 0) + '"]');
+  function obtenerBloque() {
+    return document.querySelector('[data-ia-diagnostico="3x3"]');
   }
 
-  function obtenerElemento(contenedor, selector) {
-    return contenedor ? contenedor.querySelector(selector) : null;
-  }
-
-  function ocultarSoporte(numeroPropuesta) {
-    var bloque = obtenerBloque(numeroPropuesta);
-    var soporte = obtenerElemento(bloque, '[data-ia-soporte]');
+  function ocultarSoporte() {
+    var bloque = obtenerBloque();
+    var soporte = bloque ? bloque.querySelector('[data-ia-soporte]') : null;
     if (soporte) soporte.hidden = true;
   }
 
@@ -511,6 +419,7 @@
       rellenar(fecha.getDate())
     ].join('');
     var aleatorio = Math.random().toString(36).slice(2, 6).toUpperCase();
+
     return 'IA-' + partes + '-' + aleatorio;
   }
 
@@ -532,12 +441,13 @@
       .replace(/api[_-]?key[^\s&]*/ig, 'apiKey=***')
       .replace(/Bearer\s+[^\s]+/ig, 'Bearer ***')
       .replace(/token[=:][^\s&]+/ig, 'token=***')
-      .slice(0, 300);
+      .slice(0, 350);
   }
 
   function extraerHttpStatus(error) {
     var directo = numero(error && error.httpStatus, 0);
     var coincidencia;
+
     if (directo) return directo;
     coincidencia = texto(error && error.message || error).match(/HTTP\s*(\d{3})/i);
     return coincidencia ? Number(coincidencia[1]) : 0;
@@ -546,22 +456,25 @@
   function deducirCodigoError(error) {
     var mensaje = texto(error && error.message || error).toUpperCase();
     var http = mensaje.match(/HTTP\s*(\d{3})/);
+
     if (http) return 'HTTP_' + http[1];
     if (mensaje.indexOf('TIEMPO') >= 0 || mensaje.indexOf('TIMEOUT') >= 0) return 'TIMEOUT';
     if (mensaje.indexOf('FETCH') >= 0 || mensaje.indexOf('CONECTAR') >= 0) return 'FAILED_TO_FETCH';
     if (mensaje.indexOf('JSON') >= 0 || mensaje.indexOf('FORMATO') >= 0) return 'FORMATO_INVALIDO';
-    if (mensaje.indexOf('TITULO') >= 0 || mensaje.indexOf('SUGERENCIA') >= 0) return 'VALIDACION_TITULOS';
+    if (mensaje.indexOf('TITULO') >= 0 || mensaje.indexOf('SUGERENCIA') >= 0) return 'VALIDACION_9_TITULOS';
+
     return 'ERROR_PROVEEDOR';
   }
 
   function descripcionEstado(estado) {
     var mapa = {
-      probando: 'probando',
-      respuesta: 'respondió; validando títulos',
-      correcto: 'generación correcta',
+      probando: 'consultando',
+      respuesta: 'respondió; validando 9 títulos',
+      correcto: 'entregó el grupo final seleccionado',
       error: 'error',
       omitido: 'no fue necesario'
     };
+
     return mapa[estado] || estado;
   }
 
@@ -579,12 +492,12 @@
   });
 
   window.EstudianteMVPIADiagnostico = Object.freeze({
-    version: '1.0.0',
+    version: '2.0.0',
     instalar: instalar
   });
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', instalar);
+    document.addEventListener('DOMContentLoaded', instalar, { once: true });
   } else {
     instalar();
   }
