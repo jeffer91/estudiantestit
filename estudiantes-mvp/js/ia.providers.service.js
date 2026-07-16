@@ -1,11 +1,8 @@
 /*
-  Archivo: ia.providers.service.js
-  Ruta: estudiantes-mvp/js/ia.providers.service.js
-  Funciones principales:
-  - Enviar solicitudes IA al proxy local durante pruebas con Live Server.
-  - Usar /api/ia del mismo dominio cuando la app esté publicada.
-  - Normalizar proveedores configurados desde el administrador.
-  - Cargar diagnóstico visual y el motor robusto de tres títulos.
+  Servicio de proveedores IA:
+  - Usa proxy local con Live Server.
+  - Usa /api/ia del mismo dominio en Cloudflare.
+  - Carga el flujo completo de 9 títulos, 3 por sección.
 */
 (function (window, document) {
   'use strict';
@@ -28,9 +25,7 @@
 
   function esEntornoLocal() {
     var hostname = String(window.location && window.location.hostname || '').toLowerCase();
-    return [
-      'localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]'
-    ].indexOf(hostname) >= 0;
+    return ['localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]'].indexOf(hostname) >= 0;
   }
 
   function proxyUrl() {
@@ -44,12 +39,8 @@
     var normalizado = normalizarProveedorRuntime(proveedor || {});
     opciones = opciones || {};
 
-    if (!normalizado.id) {
-      return Promise.reject(new Error('Proveedor IA sin identificador.'));
-    }
-    if (!texto(prompt)) {
-      return Promise.reject(new Error('No se recibió prompt para generar con IA.'));
-    }
+    if (!normalizado.id) return Promise.reject(new Error('Proveedor IA sin identificador.'));
+    if (!texto(prompt)) return Promise.reject(new Error('No se recibió prompt para generar con IA.'));
 
     return fetch(proxyUrl(), {
       method: 'POST',
@@ -62,7 +53,7 @@
           temperatura: opciones.temperatura !== undefined
             ? numero(opciones.temperatura, normalizado.temperatura)
             : normalizado.temperatura,
-          maxTokens: numero(opciones.maxTokens || normalizado.maxTokens, 1100)
+          maxTokens: numero(opciones.maxTokens || normalizado.maxTokens, 2800)
         }
       })
     }).then(function (response) {
@@ -123,9 +114,7 @@
       : function (valor) {
           return texto(valor).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
         };
-    var id = normalizar(
-      proveedor.id || proveedor.proveedor || proveedor.provider || ''
-    );
+    var id = normalizar(proveedor.id || proveedor.proveedor || proveedor.provider || '');
     var tipo = normalizar(
       proveedor.tipo || proveedor.protocol || proveedor.protocolo || inferirTipo(id)
     ).replace(/_/g, '-');
@@ -147,10 +136,10 @@
       model: limpiar(proveedor.model || proveedor.modelo || ''),
       modelo: limpiar(proveedor.modelo || proveedor.model || ''),
       timeoutMs: Math.max(5000, numero(proveedor.timeoutMs || proveedor.timeout, 45000)),
-      maxTokens: Math.max(100, numero(proveedor.maxTokens || proveedor.max_tokens, 1100)),
+      maxTokens: Math.max(100, numero(proveedor.maxTokens || proveedor.max_tokens, 2800)),
       temperatura: numero(
         proveedor.temperatura !== undefined ? proveedor.temperatura : proveedor.temperature,
-        0.35
+        0.3
       ),
       raw: proveedor
     };
@@ -185,12 +174,10 @@
 
   function cargarScript(src) {
     var script;
-
     if (document.readyState === 'loading') {
       document.write('<script src="' + src + '"><\/script>');
       return;
     }
-
     script = document.createElement('script');
     script.src = src;
     script.async = false;
@@ -199,10 +186,12 @@
 
   function cargarAuxiliares() {
     if (!window.EstudianteMVPIADiagnostico) {
-      cargarScript('js/ia.diagnostico.service.js?v=1.0.1');
+      cargarScript('js/ia.diagnostico.service.js?v=1.0.2');
     }
-    cargarScript('js/ia.titulacion.robusto.service.js?v=2.0.0');
-    cargarScript('js/ia.recomendacion.ui.js?v=1.0.0');
+    cargarScript('js/ia.nueve.core.js?v=1.0.0');
+    cargarScript('js/ia.titulacion.robusto.service.js?v=3.0.0');
+    cargarScript('js/ia.recomendacion.ui.js?v=2.0.0');
+    cargarScript('js/ia.nueve.integracion.js?v=1.0.0');
   }
 
   window.EstudianteMVPIAProviders = Object.freeze({
