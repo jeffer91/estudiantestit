@@ -2,7 +2,7 @@
   Servicio de proveedores IA:
   - Usa proxy local con Live Server.
   - Usa /api/ia del mismo dominio en Cloudflare.
-  - Carga el flujo completo de 9 títulos, 3 por sección.
+  - Carga el flujo de 9 títulos internos y 3 opciones finales por propuesta.
 */
 (function (window, document) {
   'use strict';
@@ -53,7 +53,7 @@
           temperatura: opciones.temperatura !== undefined
             ? numero(opciones.temperatura, normalizado.temperatura)
             : normalizado.temperatura,
-          maxTokens: numero(opciones.maxTokens || normalizado.maxTokens, 2800)
+          maxTokens: numero(opciones.maxTokens || normalizado.maxTokens, 3000)
         }
       })
     }).then(function (response) {
@@ -136,7 +136,7 @@
       model: limpiar(proveedor.model || proveedor.modelo || ''),
       modelo: limpiar(proveedor.modelo || proveedor.model || ''),
       timeoutMs: Math.max(5000, numero(proveedor.timeoutMs || proveedor.timeout, 45000)),
-      maxTokens: Math.max(100, numero(proveedor.maxTokens || proveedor.max_tokens, 2800)),
+      maxTokens: Math.max(100, numero(proveedor.maxTokens || proveedor.max_tokens, 3000)),
       temperatura: numero(
         proveedor.temperatura !== undefined ? proveedor.temperatura : proveedor.temperature,
         0.3
@@ -177,15 +177,15 @@
 
     function flujoIndividualDesactivado() {
       return Promise.reject(new Error(
-        'El flujo individual de tres títulos fue desactivado. Utiliza la generación 3×3.'
+        'El flujo individual antiguo fue desactivado. Utiliza la generación IA por propuesta.'
       ));
     }
 
     window.EstudianteMVPIATitulacion = Object.freeze({
       generarTitulosPorPropuesta: flujoIndividualDesactivado,
       generarTresTitulos: flujoIndividualDesactivado,
-      modo: 'esperando_motor_3x3',
-      version: '3.0.1-base-cargador'
+      modo: 'esperando_motor_por_propuesta',
+      version: '4.0.0-base-cargador'
     });
   }
 
@@ -205,13 +205,13 @@
     asegurarBaseTitulacion();
 
     if (!window.EstudianteMVPIADiagnostico) {
-      cargarScript('js/ia.diagnostico.service.js?v=2.0.1');
+      cargarScript('js/ia.diagnostico.service.js?v=3.0.0');
     }
     cargarScript('js/ia.nueve.core.js?v=1.1.0');
     cargarScript('js/ia.nueve.ajustes.js?v=1.1.0');
-    cargarScript('js/ia.titulacion.robusto.service.js?v=3.1.0');
-    cargarScript('js/ia.recomendacion.ui.js?v=2.1.0');
-    cargarScript('js/ia.nueve.integracion.js?v=1.2.0');
+    cargarScript('js/ia.titulacion.robusto.service.js?v=4.0.0');
+    cargarScript('js/ia.recomendacion.ui.js?v=3.0.0');
+    cargarScript('js/ia.nueve.integracion.js?v=2.0.0');
   }
 
   window.EstudianteMVPIAProviders = Object.freeze({
