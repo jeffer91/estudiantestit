@@ -136,6 +136,7 @@
         var total = ctx.core.contarTitulos(secciones);
         var reporte;
         var candidato;
+        var elegido;
 
         if (total !== 9) {
           ctx.errores.push({
@@ -152,10 +153,13 @@
         if (esMejor(candidato, ctx.mejor)) ctx.mejor = candidato;
 
         if (reporte.apto) {
+          elegido = ctx.mejor;
           return construirResultado(
-            candidato,
+            elegido,
             ctx.base.proveedor,
-            'Una segunda IA revisó los 9 títulos. Elige uno en cada sección.'
+            elegido === candidato
+              ? 'Una segunda IA revisó los 9 títulos. Elige uno en cada sección.'
+              : 'Una segunda IA revisó los títulos y se conservó el grupo con mejor evaluación. Elige uno en cada sección.'
           );
         }
 
