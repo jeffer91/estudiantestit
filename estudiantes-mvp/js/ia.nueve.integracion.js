@@ -1,9 +1,9 @@
 /*
-  Integración directa de IA 3x3 con estudiante.html.
-  - Deja un único botón al final de la propuesta 3.
-  - Usa una acción exclusiva y no depende del motor antiguo.
-  - Genera 9 títulos para las 3 propuestas.
-  - Cuando se usa la IA, exige elegir una alternativa por sección.
+  Integración IA por propuesta:
+  - Cada propuesta conserva su propio botón.
+  - Cada clic genera 9 títulos internos para esa propuesta.
+  - Solo se muestran 3 opciones validadas: diagnóstico, proceso y análisis final.
+  - El estudiante elige una opción y puede continuar normalmente.
 */
 (function (window, document) {
   'use strict';
@@ -13,7 +13,7 @@
   var enCurso = false;
   var ACCION = 'generar-ia-9';
   var MENSAJE_PUBLICO =
-    'No te preocupes. No fue posible generar las sugerencias en este momento. ' +
+    'No te preocupes. No fue posible preparar las sugerencias en este momento. ' +
     'Puedes intentarlo nuevamente. Si el inconveniente continúa, comunícate con tu coordinador para recibir apoyo.';
 
   function instalar() {
@@ -24,15 +24,15 @@
       !window.EstudianteMVPState ||
       !window.EstudianteMVPUI ||
       !window.EstudianteMVPIATitulacion ||
-      typeof window.EstudianteMVPIATitulacion.generarNueveTitulos !== 'function'
+      typeof window.EstudianteMVPIATitulacion.generarOpcionesParaPropuesta !== 'function'
     ) {
       intentos += 1;
-      if (intentos < 240) window.setTimeout(instalar, 25);
+      if (intentos < 260) window.setTimeout(instalar, 25);
       return;
     }
 
     instalarValidacionSeleccion();
-    configurarUnicoBoton();
+    configurarBotones();
     document.addEventListener('click', manejarClickGeneracion);
     instalado = true;
   }
@@ -85,7 +85,7 @@
 
         return {
           ok: true,
-          mensaje: 'Las 3 propuestas están completas y tienen un título seleccionado.'
+          mensaje: 'Las 3 propuestas están completas.'
         };
       },
       __validacionIA3x3Instalada: true
@@ -94,106 +94,126 @@
     window.EstudianteMVPState = Object.freeze(reemplazo);
   }
 
-  function configurarUnicoBoton() {
-    var panel1 = document.querySelector('[data-propuesta-panel="1"]');
-    var panel2 = document.querySelector('[data-propuesta-panel="2"]');
-    var panel3 = document.querySelector('[data-propuesta-panel="3"]');
-    var boton;
+  function configurarBotones() {
+    Array.prototype.forEach.call(
+      document.querySelectorAll('[data-propuesta-panel]'),
+      function (panel) {
+        var numero = Number(panel.getAttribute('data-propuesta-panel') || 0);
+        var boton = panel.querySelector(
+          '[data-accion="generar-ia"], [data-accion="' + ACCION + '"]'
+        );
 
-    retirarAccionIA(panel1);
-    retirarAccionIA(panel2);
+        if (!numero || !boton) return;
 
-    if (!panel3) return;
-
-    boton = panel3.querySelector('[data-accion="generar-ia"], [data-accion="' + ACCION + '"]');
-    if (!boton) return;
-
-    boton.setAttribute('data-accion', ACCION);
-    boton.removeAttribute('data-propuesta');
-    boton.textContent = 'Generar 9 títulos con IA (3 por sección)';
-    boton.setAttribute(
-      'title',
-      'Genera tres alternativas para cada una de las tres propuestas completas.'
+        boton.setAttribute('data-accion', ACCION);
+        boton.setAttribute('data-propuesta', String(numero));
+        boton.textContent = 'Generar sugerencias con IA de Titulación';
+        boton.setAttribute(
+          'title',
+          'Analiza 9 títulos internamente y muestra las 3 mejores opciones para esta propuesta.'
+        );
+      }
     );
-  }
-
-  function retirarAccionIA(panel) {
-    var acciones;
-    var diagnostico;
-
-    if (!panel) return;
-
-    acciones = panel.querySelector('.ai-actions');
-    diagnostico = panel.querySelector('[data-ia-diagnostico]');
-
-    if (acciones && acciones.parentNode) acciones.parentNode.removeChild(acciones);
-    if (diagnostico && diagnostico.parentNode) diagnostico.parentNode.removeChild(diagnostico);
   }
 
   function manejarClickGeneracion(evento) {
     var boton = evento.target && evento.target.closest
       ? evento.target.closest('[data-accion="' + ACCION + '"]')
       : null;
+    var numero;
 
     if (!boton) return;
 
     evento.preventDefault();
-    if (enCurso) return;
+    numero = Number(boton.getAttribute('data-propuesta') || 0);
 
-    ejecutarGeneracion();
+    if (!numero || enCurso) return;
+    ejecutarGeneracion(numero);
   }
 
-  function ejecutarGeneracion() {
+  function ejecutarGeneracion(numeroPropuesta) {
     var state = window.EstudianteMVPState;
     var ui = window.EstudianteMVPUI;
     var ia = window.EstudianteMVPIATitulacion;
-    var modales = window.EstudianteMVPModales || null;
-    var propuestas = guardarPropuestasDesdeFormulario();
-    var validacion = validarTresPropuestas();
-    var estudiante = state.obtenerEstudiante();
+    var recomendacion = window.EstudianteMVPIARecomendacion || null;
+    var propuesta;
+    var validacion;
+    var estudiante;
+
+    numeroPropuesta = Number(numeroPropuesta || 0);
+    propuesta = guardarPropuestaDesdeFormulario(numeroPropuesta);
+    validacion = state.validarPropuestaParaIA(numeroPropuesta);
+    estudiante = state.obtenerEstudiante();
 
     if (!validacion.ok) {
-      mostrarErrorValidacion(validacion);
+      mostrarErrorValidacion(numeroPropuesta, validacion);
       return;
     }
 
     enCurso = true;
+
+    if (recomendacion && typeof recomendacion.mostrarProgreso === 'function') {
+      recomendacion.mostrarProgreso({
+        numeroPropuesta: numeroPropuesta,
+        maxProcesos: 3
+      });
+    }
+
     emitir('ia-titulacion:3x3-inicio', {
+      numeroPropuesta: numeroPropuesta,
       totalEsperado: 9,
-      secciones: 3
+      opcionesFinales: 3,
+      maxProcesos: 3
     });
 
-    mostrarEstadoTodas('Generando 9 títulos: 3 para cada sección...', 'info');
+    ui.mostrarEstado(
+      '#p' + numeroPropuesta + 'EstadoIA',
+      'Analizando la propuesta y preparando las mejores opciones...',
+      'info'
+    );
 
-    if (modales && typeof modales.mostrarGenerandoIA === 'function') {
-      modales.mostrarGenerandoIA();
-    }
     if (ui && typeof ui.setCargando === 'function') {
-      ui.setCargando(true, 'Generando y revisando 9 títulos con IA...');
+      ui.setCargando(true, 'La IA está analizando esta propuesta...');
     }
 
-    ia.generarNueveTitulos({
+    ia.generarOpcionesParaPropuesta({
       estudiante: estudiante,
-      propuestas: propuestas,
-      numeroPropuestaOrigen: 3,
-      maxTokens: 2800
+      propuesta: propuesta,
+      numeroPropuesta: numeroPropuesta,
+      maxProcesos: 3,
+      maxTokens: 3000,
+      onProgress: function (detalle) {
+        if (recomendacion && typeof recomendacion.actualizarProgreso === 'function') {
+          recomendacion.actualizarProgreso(detalle || {});
+        }
+      }
     })
       .then(function (resultado) {
-        aplicarResultado(resultado);
-        emitir('ia-titulacion:3x3-exito', resultado || {});
+        aplicarResultado(numeroPropuesta, resultado);
+        emitir('ia-titulacion:3x3-exito', Object.assign({
+          numeroPropuesta: numeroPropuesta
+        }, resultado || {}));
       })
       .catch(function (error) {
-        console.warn('[IA Titulación 3x3] Detalle interno:', error);
-        mostrarEstadoTodas(MENSAJE_PUBLICO, 'error');
+        console.warn('[IA Titulación por propuesta] Detalle interno:', error);
+
+        if (recomendacion && typeof recomendacion.cerrarProgreso === 'function') {
+          recomendacion.cerrarProgreso();
+        }
+
+        ui.mostrarEstado(
+          '#p' + numeroPropuesta + 'EstadoIA',
+          MENSAJE_PUBLICO,
+          'error'
+        );
+
         emitir('ia-titulacion:3x3-error', {
+          numeroPropuesta: numeroPropuesta,
           error: error,
           mensaje: error && error.message ? error.message : String(error || '')
         });
       })
       .then(function () {
-        if (modales && typeof modales.cerrarGenerandoIA === 'function') {
-          modales.cerrarGenerandoIA();
-        }
         if (ui && typeof ui.setCargando === 'function') {
           ui.setCargando(false);
         }
@@ -201,106 +221,85 @@
       });
   }
 
-  function guardarPropuestasDesdeFormulario() {
+  function guardarPropuestaDesdeFormulario(numero) {
     var state = window.EstudianteMVPState;
     var ui = window.EstudianteMVPUI;
-    var propuestas = [];
-    var i;
+    var propuesta = ui.leerPropuestaDesdeFormulario(numero);
 
-    for (i = 1; i <= 3; i += 1) {
-      state.setPropuesta(i, ui.leerPropuestaDesdeFormulario(i));
-      propuestas.push(state.obtenerPropuesta(i));
-    }
-
-    return propuestas;
+    state.setPropuesta(numero, propuesta);
+    return state.obtenerPropuesta(numero);
   }
 
-  function validarTresPropuestas() {
-    var state = window.EstudianteMVPState;
-    var i;
-    var validacion;
-
-    for (i = 1; i <= 3; i += 1) {
-      validacion = state.validarPropuestaParaIA(i);
-      if (!validacion.ok) {
-        validacion.numeroPropuesta = i;
-        return validacion;
-      }
-    }
-
-    return { ok: true };
-  }
-
-  function mostrarErrorValidacion(validacion) {
+  function mostrarErrorValidacion(numero, validacion) {
     var ui = window.EstudianteMVPUI;
-    var paginacion = window.EstudianteMVPPropuestasPaginacion || null;
-    var numero = Number(validacion.numeroPropuesta || 1);
 
-    if (paginacion && typeof paginacion.mostrar === 'function') {
-      paginacion.mostrar(numero);
-    }
+    ui.mostrarEstado(
+      '#p' + numero + 'EstadoIA',
+      validacion.mensaje,
+      'error'
+    );
 
-    ui.mostrarEstado('#p' + numero + 'EstadoIA', validacion.mensaje, 'error');
     if (validacion.selector && typeof ui.marcarCampoInvalido === 'function') {
       ui.marcarCampoInvalido(validacion.selector);
     }
   }
 
-  function aplicarResultado(resultado) {
+  function aplicarResultado(numeroPropuesta, resultado) {
     var state = window.EstudianteMVPState;
     var ui = window.EstudianteMVPUI;
     var recomendacion = window.EstudianteMVPIARecomendacion || null;
-    var secciones = resultado && Array.isArray(resultado.secciones)
-      ? resultado.secciones
+    var opciones = resultado && Array.isArray(resultado.opcionesFinales)
+      ? resultado.opcionesFinales
       : [];
     var proveedor = resultado.proveedor || resultado.proveedorNombre || '';
 
-    if (secciones.length !== 3) {
-      throw new Error('El resultado no contiene las tres secciones esperadas.');
+    if (opciones.length !== 3) {
+      throw new Error('El resultado no contiene exactamente tres opciones finales.');
     }
 
-    secciones.forEach(function (seccion) {
-      var numero = Number(seccion.seccion || 0);
-      var titulos = Array.isArray(seccion.titulos) ? seccion.titulos : [];
-
-      if (!numero || titulos.length !== 3) {
-        throw new Error('Una sección no contiene exactamente tres títulos.');
-      }
-
-      state.setSugerenciasIA(numero, titulos, proveedor);
-      ui.pintarSugerencias(numero, titulos);
-      ui.mostrarEstado(
-        '#p' + numero + 'EstadoIA',
-        'Se generaron 3 alternativas para ' + seccion.nombreEtapa + '. Elige una.',
-        'success'
-      );
+    opciones = opciones.map(function (item, index) {
+      return Object.assign({}, item, {
+        numero: index + 1
+      });
     });
+
+    state.setSugerenciasIA(numeroPropuesta, opciones, proveedor);
+    ui.pintarSugerencias(numeroPropuesta, opciones);
 
     if (recomendacion && typeof recomendacion.marcarPagina === 'function') {
-      recomendacion.marcarPagina(secciones);
+      recomendacion.marcarPagina(numeroPropuesta, opciones);
     }
 
-    guardarAvance();
+    ui.mostrarEstado(
+      '#p' + numeroPropuesta + 'EstadoIA',
+      'Se prepararon 3 opciones validadas. Elige la que más te convenga.',
+      'success'
+    );
 
+    guardarAvance(numeroPropuesta);
+
+    if (recomendacion && typeof recomendacion.cerrarProgreso === 'function') {
+      recomendacion.cerrarProgreso();
+    }
     if (recomendacion && typeof recomendacion.mostrarResultado === 'function') {
-      recomendacion.mostrarResultado(resultado);
+      recomendacion.mostrarResultado({
+        numeroPropuesta: numeroPropuesta,
+        opcionesFinales: opciones,
+        mensaje: resultado.mensaje || '',
+        procesoUsado: resultado.procesoUsado || 1,
+        maxProcesos: resultado.maxProcesos || 3,
+        mejorDisponible: resultado.mejorDisponible === true
+      });
     }
   }
 
-  function mostrarEstadoTodas(mensaje, tipo) {
-    var ui = window.EstudianteMVPUI;
-    [1, 2, 3].forEach(function (numero) {
-      ui.mostrarEstado('#p' + numero + 'EstadoIA', mensaje, tipo);
-    });
-  }
-
-  function guardarAvance() {
+  function guardarAvance(numeroPropuesta) {
     var memoria = window.EstudianteMVPMemoria || null;
 
     if (memoria && typeof memoria.guardarDesdeState === 'function') {
       memoria.guardarDesdeState({
         pasoActual: 'propuestas',
-        propuestaActual: 3
+        propuestaActual: Number(numeroPropuesta || 1)
       });
     }
   }
@@ -324,7 +323,8 @@
 
   window.EstudianteMVPIANueveIntegracion = Object.freeze({
     ejecutarGeneracion: ejecutarGeneracion,
-    configurarUnicoBoton: configurarUnicoBoton,
-    accion: ACCION
+    configurarBotones: configurarBotones,
+    accion: ACCION,
+    version: '2.0.0'
   });
 })(window, document);
