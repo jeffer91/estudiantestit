@@ -7,7 +7,7 @@
   - Mantener endpoint, modelo y clave configurados desde el administrador.
   - Devolver únicamente el texto normalizado al motor de titulación.
 */
-(function (window) {
+(function (window, document) {
   'use strict';
 
   function obtenerUtils() {
@@ -71,38 +71,56 @@
     }).then(function (response) {
       return response.text().then(function (body) {
         var json;
+        var errorRespuesta;
 
         try {
           json = body ? JSON.parse(body) : {};
         } catch (errorJson) {
           if (response.status === 404 || /<!doctype|<html/i.test(body)) {
-            throw new Error(
+            errorRespuesta = new Error(
               'El servicio IA todavía no está desplegado. Espera el despliegue de Cloudflare Pages y recarga la página.'
             );
+            errorRespuesta.httpStatus = response.status;
+            throw errorRespuesta;
           }
 
-          throw new Error('El servicio IA respondió en un formato no válido.');
+          errorRespuesta = new Error('El servicio IA respondió en un formato no válido.');
+          errorRespuesta.httpStatus = response.status;
+          throw errorRespuesta;
         }
 
         if (!response.ok || json.ok === false) {
-          throw new Error(
+          errorRespuesta = new Error(
             json.error ||
             json.message ||
             ('El servicio IA respondió HTTP ' + response.status)
           );
+          errorRespuesta.httpStatus = Number(
+            json.httpStatus ||
+            json.upstreamStatus ||
+            response.status ||
+            0
+          );
+          errorRespuesta.codigo = json.code || json.codigo || ('HTTP_' + response.status);
+          throw errorRespuesta;
         }
 
         if (!texto(json.text)) {
-          throw new Error('El proveedor IA respondió sin texto utilizable.');
+          errorRespuesta = new Error('El proveedor IA respondió sin texto utilizable.');
+          errorRespuesta.httpStatus = response.status;
+          errorRespuesta.codigo = 'RESPUESTA_SIN_TEXTO';
+          throw errorRespuesta;
         }
 
         return json.text;
       });
     }).catch(function (error) {
       if (error && error.message === 'Failed to fetch') {
-        throw new Error(
+        var errorConexion = new Error(
           'No se pudo conectar con el servicio /api/ia. Verifica que el último despliegue de Cloudflare Pages haya finalizado.'
         );
+        errorConexion.codigo = 'FAILED_TO_FETCH';
+        throw errorConexion;
       }
 
       throw error;
@@ -232,9 +250,30 @@
     return mapa[String(id || '').toLowerCase()] || 999;
   }
 
+  function cargarDiagnostico() {
+    var src = 'js/ia.diagnostico.service.js?v=1.0.0';
+    var script;
+
+    if (window.EstudianteMVPIADiagnostico) {
+      return;
+    }
+
+    if (document.readyState === 'loading') {
+      document.write('<script src="' + src + '"><\/script>');
+      return;
+    }
+
+    script = document.createElement('script');
+    script.src = src;
+    script.async = false;
+    document.head.appendChild(script);
+  }
+
   window.EstudianteMVPIAProviders = Object.freeze({
     generarTexto: generarTexto,
     normalizarProveedorRuntime: normalizarProveedorRuntime,
     proxyUrl: proxyUrl
   });
-})(window);
+
+  cargarDiagnostico();
+})(window, document);
