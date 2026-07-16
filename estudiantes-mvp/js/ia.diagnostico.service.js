@@ -1,9 +1,8 @@
 /*
-  Diagnóstico visual del flujo IA 3x3.
-  - Registra los proveedores usados para generar y revisar 9 títulos.
-  - Distingue generación, validación, corrección cruzada y selección disponible.
-  - Muestra código de soporte solo cuando el proceso completo falla.
-  - No modifica el envío normal del estudiante.
+  Diagnóstico visual del flujo IA por propuesta.
+  - Cada propuesta tiene su propio bloque de puntos.
+  - Registra generación, revisión y resultado final.
+  - Muestra código de soporte solo cuando todos los procesos fallan.
 */
 (function (window, document) {
   'use strict';
@@ -14,22 +13,13 @@
   var eventosInstalados = false;
 
   if (!servicioOriginal || typeof servicioOriginal.generarTexto !== 'function') {
-    console.warn('[Diagnóstico IA 3x3] No se encontró el servicio de proveedores.');
+    console.warn('[Diagnóstico IA] No se encontró el servicio de proveedores.');
     return;
-  }
-
-  function texto(valor) {
-    return String(valor == null ? '' : valor).trim();
-  }
-
-  function numero(valor, fallback) {
-    var parsed = Number(valor);
-    return Number.isFinite(parsed) ? parsed : Number(fallback || 0);
   }
 
   function instalar() {
     instalarEstilos();
-    instalarContenedor();
+    instalarContenedores();
     instalarEventos();
   }
 
@@ -52,7 +42,6 @@
       '.ia-diagnostico__punto[data-estado="respuesta"]{background:#2563eb}',
       '.ia-diagnostico__punto[data-estado="correcto"]{background:#16a34a}',
       '.ia-diagnostico__punto[data-estado="error"]{background:#dc2626}',
-      '.ia-diagnostico__punto[data-estado="omitido"]{background:#64748b}',
       '.ia-diagnostico__etapa-visible{font-size:12px;font-weight:700;color:#52637a;text-align:center}',
       '.ia-diagnostico__soporte{font-size:12px;line-height:1.35;text-align:center;color:#64748b}',
       '.ia-diagnostico__soporte[hidden]{display:none!important}',
@@ -64,34 +53,43 @@
     estilosInstalados = true;
   }
 
-  function instalarContenedor() {
-    var panel = document.querySelector('[data-propuesta-panel="3"]');
-    var acciones = panel ? panel.querySelector('.ai-actions') : null;
-    var bloque;
+  function instalarContenedores() {
+    Array.prototype.forEach.call(
+      document.querySelectorAll('[data-propuesta-panel]'),
+      function (panel) {
+        var numero = Number(panel.getAttribute('data-propuesta-panel') || 0);
+        var acciones = panel.querySelector('.ai-actions');
+        var bloque;
 
-    if (!acciones || panel.querySelector('[data-ia-diagnostico="3x3"]')) return;
+        if (!numero || !acciones || panel.querySelector('[data-ia-diagnostico="' + numero + '"]')) return;
 
-    bloque = document.createElement('div');
-    bloque.className = 'ia-diagnostico';
-    bloque.setAttribute('data-ia-diagnostico', '3x3');
-    bloque.setAttribute('aria-live', 'polite');
-    bloque.hidden = true;
-    bloque.innerHTML = [
-      '<div class="ia-diagnostico__puntos" data-ia-puntos></div>',
-      '<div class="ia-diagnostico__etapa-visible" data-ia-etapa-visible></div>',
-      '<div class="ia-diagnostico__soporte" data-ia-soporte hidden>',
-      '  <span>Código de soporte: <span class="ia-diagnostico__codigo" data-ia-codigo></span></span>',
-      '</div>'
-    ].join('');
+        bloque = document.createElement('div');
+        bloque.className = 'ia-diagnostico';
+        bloque.setAttribute('data-ia-diagnostico', String(numero));
+        bloque.setAttribute('aria-live', 'polite');
+        bloque.hidden = true;
+        bloque.innerHTML = [
+          '<div class="ia-diagnostico__puntos" data-ia-puntos></div>',
+          '<div class="ia-diagnostico__etapa-visible" data-ia-etapa-visible></div>',
+          '<div class="ia-diagnostico__soporte" data-ia-soporte hidden>',
+          '  <span>Código de soporte: <span class="ia-diagnostico__codigo" data-ia-codigo></span></span>',
+          '</div>'
+        ].join('');
 
-    acciones.insertAdjacentElement('afterend', bloque);
+        acciones.insertAdjacentElement('afterend', bloque);
+      }
+    );
   }
 
   function instalarEventos() {
     if (eventosInstalados) return;
 
-    document.addEventListener('ia-titulacion:3x3-inicio', function () {
-      iniciarEjecucion();
+    document.addEventListener('ia-titulacion:3x3-inicio', function (evento) {
+      iniciarEjecucion(evento && evento.detail || {});
+    });
+
+    document.addEventListener('ia-titulacion:progreso', function (evento) {
+      actualizarProgreso(evento && evento.detail || {});
     });
 
     document.addEventListener('ia-titulacion:3x3-exito', function (evento) {
@@ -107,9 +105,7 @@
 
   function generarTextoConDiagnostico(proveedor, prompt, opciones) {
     var normalizado = normalizarProveedorSeguro(proveedor);
-    var revision = opciones && opciones.modoRevision === true ||
-      /revisor acad[eé]mico final|otra ia gener[oó] exactamente 9/i.test(String(prompt || ''));
-    var intento = iniciarProveedor(normalizado, revision);
+    var intento = iniciarProveedor(normalizado, opciones && opciones.modoRevision === true);
 
     return servicioOriginal.generarTexto(proveedor, prompt, opciones)
       .then(function (respuesta) {
@@ -122,34 +118,20 @@
       });
   }
 
-  function normalizarProveedorSeguro(proveedor) {
-    if (typeof servicioOriginal.normalizarProveedorRuntime === 'function') {
-      try {
-        return servicioOriginal.normalizarProveedorRuntime(proveedor || {});
-      } catch (error) {
-        /* Continuar con normalización mínima. */
-      }
-    }
-
-    proveedor = proveedor || {};
-    return {
-      id: texto(proveedor.id || proveedor.proveedor || proveedor.provider || 'desconocido'),
-      nombre: texto(proveedor.nombre || proveedor.name || proveedor.id || 'IA'),
-      modelo: texto(proveedor.modelo || proveedor.model || ''),
-      tipo: texto(proveedor.tipo || proveedor.protocol || '')
-    };
-  }
-
-  function iniciarEjecucion() {
-    var bloque = obtenerBloque();
+  function iniciarEjecucion(detalle) {
+    var numeroPropuesta = Number(detalle.numeroPropuesta || 1);
+    var bloque = obtenerBloque(numeroPropuesta);
     var puntos;
     var soporte;
 
     ejecucion = {
       codigo: crearCodigoSoporte(),
+      propuesta: numeroPropuesta,
       inicio: new Date().toISOString(),
       inicioMs: Date.now(),
-      etapa: 'Generación de 9 títulos',
+      etapa: 'Preparando el proceso',
+      proceso: 1,
+      maxProcesos: Number(detalle.maxProcesos || 3),
       proveedorActual: '',
       intentos: [],
       puntos: {},
@@ -166,21 +148,26 @@
       if (soporte) soporte.hidden = true;
       actualizarEtapaVisible();
     }
+  }
 
-    return ejecucion;
+  function actualizarProgreso(detalle) {
+    if (!ejecucion || ejecucion.finalizada) return;
+    if (detalle.numeroPropuesta && Number(detalle.numeroPropuesta) !== ejecucion.propuesta) return;
+
+    ejecucion.proceso = Number(detalle.proceso || ejecucion.proceso || 1);
+    ejecucion.maxProcesos = Number(detalle.maxProcesos || ejecucion.maxProcesos || 3);
+    ejecucion.etapa = detalle.mensaje || detalle.etapa || ejecucion.etapa;
+    actualizarEtapaVisible();
   }
 
   function iniciarProveedor(proveedor, revision) {
-    var actual = ejecucion && !ejecucion.finalizada
-      ? ejecucion
-      : iniciarEjecucion();
+    var actual = ejecucion || iniciarEjecucion({ numeroPropuesta: 1 });
     var id = texto(proveedor.id || proveedor.proveedor || 'desconocido');
     var intento = {
       proveedor: id,
       nombre: texto(proveedor.nombre || id),
       modelo: texto(proveedor.modelo || proveedor.model || ''),
       tipo: texto(proveedor.tipo || ''),
-      inicio: new Date().toISOString(),
       inicioMs: Date.now(),
       duracionMs: 0,
       estado: 'PROBANDO',
@@ -191,14 +178,8 @@
     };
 
     actual.proveedorActual = id;
-    actual.etapa = revision
-      ? 'Corrección con otra IA'
-      : 'Generación de 9 títulos';
     actual.intentos.push(intento);
-
     actualizarPunto(proveedor, 'probando');
-    actualizarEtapaVisible();
-
     return intento;
   }
 
@@ -210,12 +191,7 @@
     intento.longitudRespuesta = texto(respuesta).length;
     intento.estado = 'RESPONDIO';
     ejecucion.respondieron += 1;
-    ejecucion.etapa = intento.correccion
-      ? 'Validación final de 9 títulos'
-      : 'Validación de 9 títulos';
-
     actualizarPunto({ id: intento.proveedor, nombre: intento.nombre }, 'respuesta');
-    actualizarEtapaVisible();
   }
 
   function proveedorFallo(intento, error) {
@@ -226,9 +202,7 @@
     intento.httpStatus = extraerHttpStatus(error);
     intento.codigoError = deducirCodigoError(error);
     intento.mensaje = limpiarMensajeSeguro(error && error.message || error);
-
     actualizarPunto({ id: intento.proveedor, nombre: intento.nombre }, 'error');
-    actualizarEtapaVisible();
   }
 
   function finalizarCorrecto(resultado) {
@@ -237,15 +211,12 @@
     if (!ejecucion || ejecucion.finalizada) return;
 
     idFinal = texto(resultado.proveedor || ejecucion.proveedorActual);
-    if (idFinal) {
-      actualizarPunto({ id: idFinal, nombre: idFinal }, 'correcto');
-    }
+    if (idFinal) actualizarPunto({ id: idFinal, nombre: idFinal }, 'correcto');
 
-    ejecucion.etapa = 'Selección disponible: 9 títulos completos';
+    ejecucion.etapa = 'Tres opciones listas para elegir';
     ejecucion.finalizada = true;
     ejecucion.fin = new Date().toISOString();
     ejecucion.duracionTotalMs = Date.now() - ejecucion.inicioMs;
-
     actualizarEtapaVisible();
     ocultarSoporte();
   }
@@ -258,14 +229,14 @@
     if (!ejecucion || ejecucion.finalizada) return;
 
     ejecucion.etapa = ejecucion.respondieron
-      ? 'Validación o corrección de 9 títulos'
-      : 'Conexión con proveedores';
+      ? 'No se obtuvieron tres opciones válidas'
+      : 'No fue posible conectar con los proveedores';
     ejecucion.finalizada = true;
     ejecucion.fin = new Date().toISOString();
     ejecucion.duracionTotalMs = Date.now() - ejecucion.inicioMs;
     ejecucion.errorFinal = limpiarMensajeSeguro(detalle.mensaje || detalle.error || '');
 
-    bloque = obtenerBloque();
+    bloque = obtenerBloque(ejecucion.propuesta);
     if (bloque) {
       bloque.hidden = false;
       soporte = bloque.querySelector('[data-ia-soporte]');
@@ -279,7 +250,7 @@
   }
 
   function actualizarPunto(proveedor, estado) {
-    var bloque = obtenerBloque();
+    var bloque = ejecucion ? obtenerBloque(ejecucion.propuesta) : null;
     var contenedor;
     var id;
     var punto;
@@ -311,11 +282,11 @@
   }
 
   function actualizarEtapaVisible() {
-    var bloque = obtenerBloque();
+    var bloque = ejecucion ? obtenerBloque(ejecucion.propuesta) : null;
     var etapa = bloque ? bloque.querySelector('[data-ia-etapa-visible]') : null;
 
     if (etapa && ejecucion) {
-      etapa.textContent = ejecucion.etapa;
+      etapa.textContent = 'Proceso ' + ejecucion.proceso + ' de ' + ejecucion.maxProcesos + ' · ' + ejecucion.etapa;
     }
   }
 
@@ -323,14 +294,7 @@
     var sheets = window.EstudianteMVPSheets;
     var payload;
 
-    if (
-      !datos ||
-      datos.registrada ||
-      !sheets ||
-      typeof sheets.leerConfiguracion !== 'function'
-    ) {
-      return;
-    }
+    if (!datos || datos.registrada || !sheets || typeof sheets.leerConfiguracion !== 'function') return;
 
     datos.registrada = true;
     payload = construirPayloadSeguro(datos);
@@ -351,8 +315,8 @@
             idRegistro: datos.codigo,
             datos: {
               nivel: 'ERROR',
-              modulo: 'DiagnosticoIA3x3',
-              mensaje: 'Fallo de generación IA 3x3 ' + datos.codigo,
+              modulo: 'DiagnosticoIAPropuesta',
+              mensaje: 'Fallo de generación IA ' + datos.codigo,
               detalle: JSON.stringify(payload),
               idRegistro: datos.codigo,
               prueba: false
@@ -360,9 +324,7 @@
           })
         });
       })
-      .catch(function () {
-        /* El registro de diagnóstico nunca bloquea al estudiante. */
-      });
+      .catch(function () {});
   }
 
   function construirPayloadSeguro(datos) {
@@ -370,9 +332,7 @@
     var estudiante = state && typeof state.obtenerEstudiante === 'function'
       ? state.obtenerEstudiante() || {}
       : {};
-    var cedula = texto(
-      estudiante.cedula || estudiante.numeroIdentificacion || ''
-    ).replace(/\D/g, '');
+    var cedula = texto(estudiante.cedula || estudiante.numeroIdentificacion || '').replace(/\D/g, '');
 
     return {
       codigo: datos.codigo,
@@ -380,33 +340,35 @@
       fechaFin: datos.fin,
       cedulaEnmascarada: enmascararCedula(cedula),
       periodo: texto(estudiante.periodoLabel || estudiante.periodo || estudiante.periodoId || ''),
+      propuesta: datos.propuesta,
+      procesoFinal: datos.proceso,
       etapaFinal: datos.etapa,
       errorFinal: datos.errorFinal || '',
       duracionTotalMs: datos.duracionTotalMs,
-      totalEsperado: 9,
-      intentos: datos.intentos.map(function (intento) {
-        return {
-          proveedor: intento.proveedor,
-          modelo: intento.modelo,
-          tipo: intento.tipo,
-          estado: intento.estado,
-          correccion: intento.correccion === true,
-          duracionMs: intento.duracionMs,
-          httpStatus: intento.httpStatus,
-          codigoError: intento.codigoError,
-          mensaje: intento.mensaje,
-          longitudRespuesta: intento.longitudRespuesta || 0
-        };
-      })
+      intentos: datos.intentos
     };
   }
 
-  function obtenerBloque() {
-    return document.querySelector('[data-ia-diagnostico="3x3"]');
+  function normalizarProveedorSeguro(proveedor) {
+    if (typeof servicioOriginal.normalizarProveedorRuntime === 'function') {
+      try { return servicioOriginal.normalizarProveedorRuntime(proveedor || {}); } catch (error) {}
+    }
+
+    proveedor = proveedor || {};
+    return {
+      id: texto(proveedor.id || proveedor.proveedor || proveedor.provider || 'desconocido'),
+      nombre: texto(proveedor.nombre || proveedor.name || proveedor.id || 'IA'),
+      modelo: texto(proveedor.modelo || proveedor.model || ''),
+      tipo: texto(proveedor.tipo || proveedor.protocol || '')
+    };
+  }
+
+  function obtenerBloque(numeroPropuesta) {
+    return document.querySelector('[data-ia-diagnostico="' + Number(numeroPropuesta || 0) + '"]');
   }
 
   function ocultarSoporte() {
-    var bloque = obtenerBloque();
+    var bloque = ejecucion ? obtenerBloque(ejecucion.propuesta) : null;
     var soporte = bloque ? bloque.querySelector('[data-ia-soporte]') : null;
     if (soporte) soporte.hidden = true;
   }
@@ -435,6 +397,10 @@
     return new Array(cantidad + 1).join('*') + cedula.slice(-2);
   }
 
+  function texto(valor) {
+    return String(valor == null ? '' : valor).trim();
+  }
+
   function limpiarMensajeSeguro(valor) {
     return texto(valor)
       .replace(/key=[^\s&]+/ig, 'key=***')
@@ -445,9 +411,8 @@
   }
 
   function extraerHttpStatus(error) {
-    var directo = numero(error && error.httpStatus, 0);
+    var directo = Number(error && error.httpStatus || 0);
     var coincidencia;
-
     if (directo) return directo;
     coincidencia = texto(error && error.message || error).match(/HTTP\s*(\d{3})/i);
     return coincidencia ? Number(coincidencia[1]) : 0;
@@ -461,27 +426,21 @@
     if (mensaje.indexOf('TIEMPO') >= 0 || mensaje.indexOf('TIMEOUT') >= 0) return 'TIMEOUT';
     if (mensaje.indexOf('FETCH') >= 0 || mensaje.indexOf('CONECTAR') >= 0) return 'FAILED_TO_FETCH';
     if (mensaje.indexOf('JSON') >= 0 || mensaje.indexOf('FORMATO') >= 0) return 'FORMATO_INVALIDO';
-    if (mensaje.indexOf('TITULO') >= 0 || mensaje.indexOf('SUGERENCIA') >= 0) return 'VALIDACION_9_TITULOS';
-
     return 'ERROR_PROVEEDOR';
   }
 
   function descripcionEstado(estado) {
     var mapa = {
       probando: 'consultando',
-      respuesta: 'respondió; validando 9 títulos',
-      correcto: 'entregó el grupo final seleccionado',
-      error: 'error',
-      omitido: 'no fue necesario'
+      respuesta: 'respondió; validando títulos',
+      correcto: 'entregó las opciones finales',
+      error: 'error'
     };
-
     return mapa[estado] || estado;
   }
 
   function escaparSelector(valor) {
-    if (window.CSS && typeof window.CSS.escape === 'function') {
-      return window.CSS.escape(valor);
-    }
+    if (window.CSS && typeof window.CSS.escape === 'function') return window.CSS.escape(valor);
     return String(valor).replace(/(["\\])/g, '\\$1');
   }
 
@@ -492,7 +451,7 @@
   });
 
   window.EstudianteMVPIADiagnostico = Object.freeze({
-    version: '2.0.0',
+    version: '3.0.0',
     instalar: instalar
   });
 
