@@ -3,6 +3,7 @@
   - Muestra 9 títulos agrupados en 3 secciones.
   - Marca una recomendación por sección.
   - No aplica títulos automáticamente.
+  - Aplica la elección del estudiante directamente al estado y al formulario.
 */
 (function (window, document) {
   'use strict';
@@ -42,14 +43,17 @@
       '.ia9-title.is-selected .ia9-title__button{background:#168a4b}',
       '.ia9-modal__footer{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:22px;padding-top:18px;border-top:1px solid #dbe4f0}',
       '.ia9-modal__summary{color:#52637a;font-weight:700}',
-      '.ia9-modal__done{border:0;border-radius:999px;padding:12px 22px;background:#dfe7f2;color:#10213d;font-weight:900;cursor:pointer}',
+      '.ia9-modal__done{border:0;border-radius:999px;padding:12px 22px;background:#163a67;color:#fff;font-weight:900;cursor:pointer}',
+      '.ia9-modal__done:disabled{background:#dfe7f2;color:#64748b;cursor:not-allowed}',
       '@media(max-width:850px){.ia9-section__titles{grid-template-columns:1fr}.ia9-modal__card{padding:22px 16px}.ia9-modal__footer{align-items:stretch;flex-direction:column}.ia9-modal__done{width:100%}}'
     ].join('');
+
     document.head.appendChild(style);
   }
 
   function marcarPagina(secciones) {
     instalarEstilos();
+
     (Array.isArray(secciones) ? secciones : []).forEach(function (seccion) {
       (Array.isArray(seccion.titulos) ? seccion.titulos : []).forEach(function (item, index) {
         var numero = Number(item.numero || index + 1);
@@ -59,9 +63,15 @@
         var cabecera;
 
         if (!tarjeta) return;
+
         tarjeta.classList.toggle('is-recommended', item.recomendada === true);
         cabecera = tarjeta.querySelector('.suggestion-card__head');
-        if (cabecera && item.recomendada === true && !cabecera.querySelector('.ia-recommended-badge')) {
+
+        if (
+          cabecera &&
+          item.recomendada === true &&
+          !cabecera.querySelector('.ia-recommended-badge')
+        ) {
           cabecera.appendChild(crearBadge());
         }
       });
@@ -126,14 +136,20 @@
 
     footer = document.createElement('div');
     footer.className = 'ia9-modal__footer';
+
     summary = document.createElement('div');
     summary.className = 'ia9-modal__summary';
     summary.setAttribute('data-ia9-resumen', '');
+
     done = document.createElement('button');
     done.type = 'button';
     done.className = 'ia9-modal__done';
-    done.textContent = 'Cerrar';
-    done.addEventListener('click', cerrar);
+    done.setAttribute('data-ia9-finalizar', '');
+    done.textContent = 'Selecciona 3 títulos';
+    done.disabled = true;
+    done.addEventListener('click', function () {
+      if (!done.disabled) cerrar();
+    });
 
     footer.appendChild(summary);
     footer.appendChild(done);
@@ -175,6 +191,7 @@
     head.appendChild(state);
     bloque.appendChild(head);
     bloque.appendChild(titles);
+
     return bloque;
   }
 
@@ -188,30 +205,66 @@
 
     card.className = 'ia9-title' + (item.recomendada === true ? ' is-recommended' : '');
     card.setAttribute('data-ia9-titulo', seccion + '-' + numero);
+
     head.className = 'ia9-title__head';
     head.textContent = 'Título ' + numero;
     if (item.recomendada === true) head.appendChild(crearBadge());
 
     text.className = 'ia9-title__text';
     text.textContent = item.titulo;
+
     why.className = 'ia9-title__why';
     why.textContent = item.justificacion || 'Alternativa para esta sección.';
 
     button.type = 'button';
     button.className = 'ia9-title__button';
     button.textContent = 'Usar este título';
-    button.setAttribute('data-accion', 'usar-sugerencia');
-    button.setAttribute('data-propuesta', String(seccion));
-    button.setAttribute('data-sugerencia', String(numero));
-    button.addEventListener('click', function () {
-      window.setTimeout(actualizarSeleccionModal, 50);
+    button.addEventListener('click', function (evento) {
+      evento.preventDefault();
+      evento.stopPropagation();
+      seleccionarTitulo(seccion, numero);
     });
 
     card.appendChild(head);
     card.appendChild(text);
     card.appendChild(why);
     card.appendChild(button);
+
     return card;
+  }
+
+  function seleccionarTitulo(seccion, numero) {
+    var state = window.EstudianteMVPState;
+    var ui = window.EstudianteMVPUI;
+    var memoria = window.EstudianteMVPMemoria || null;
+    var propuesta;
+
+    if (!state || typeof state.seleccionarSugerencia !== 'function') return;
+
+    propuesta = state.seleccionarSugerencia(seccion, numero);
+    if (!propuesta) return;
+
+    if (ui && typeof ui.escribirPropuestaEnFormulario === 'function') {
+      ui.escribirPropuestaEnFormulario(propuesta);
+    }
+    if (ui && typeof ui.marcarSugerenciaUsada === 'function') {
+      ui.marcarSugerenciaUsada(seccion, numero);
+    }
+    if (ui && typeof ui.mostrarEstado === 'function') {
+      ui.mostrarEstado(
+        '#p' + seccion + 'EstadoIA',
+        'Título seleccionado para la propuesta ' + seccion + '.',
+        'success'
+      );
+    }
+    if (memoria && typeof memoria.guardarDesdeState === 'function') {
+      memoria.guardarDesdeState({
+        pasoActual: 'propuestas',
+        propuestaActual: seccion
+      });
+    }
+
+    actualizarSeleccionModal();
   }
 
   function actualizarSeleccionModal() {
@@ -219,6 +272,7 @@
     var state = window.EstudianteMVPState;
     var seleccionadas = 0;
     var resumen;
+    var done;
 
     if (!modal || !state || typeof state.obtenerPropuesta !== 'function') return;
 
@@ -232,6 +286,7 @@
         function (tarjeta) {
           var activa = tarjeta.getAttribute('data-ia9-titulo') === numero + '-' + seleccion;
           var boton = tarjeta.querySelector('button');
+
           tarjeta.classList.toggle('is-selected', activa);
           if (boton) boton.textContent = activa ? 'Título seleccionado' : 'Usar este título';
         }
@@ -242,10 +297,19 @@
     });
 
     resumen = modal.querySelector('[data-ia9-resumen]');
+    done = modal.querySelector('[data-ia9-finalizar]');
+
     if (resumen) {
       resumen.textContent = seleccionadas === 3
         ? 'Listo: elegiste un título en cada sección.'
         : 'Selecciones realizadas: ' + seleccionadas + ' de 3.';
+    }
+
+    if (done) {
+      done.disabled = seleccionadas !== 3;
+      done.textContent = seleccionadas === 3
+        ? 'Guardar selecciones y cerrar'
+        : 'Selecciona ' + (3 - seleccionadas) + ' título' + (3 - seleccionadas === 1 ? '' : 's');
     }
   }
 
@@ -265,6 +329,7 @@
     marcarPagina: marcarPagina,
     mostrarResultado: mostrarResultado,
     actualizarSeleccionModal: actualizarSeleccionModal,
-    cerrar: cerrar
+    cerrar: cerrar,
+    version: '2.1.0'
   });
 })(window, document);
