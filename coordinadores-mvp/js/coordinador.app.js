@@ -3,9 +3,8 @@ Archivo: coordinador.app.js
 Ruta: /coordinadores-mvp/js/coordinador.app.js
 Función:
 - Inicializar Coordinadores usando Google Sheets como fuente principal.
-- No bloquear toda la pantalla si falla solo un catálogo.
-- Mostrar el error real de configuración o de Apps Script.
-- Consultar el envío por cédula antes de abrir el modal para recuperar Preferido.
+- Cargar coordinadores antes de construir períodos reales desde Envios.
+- Consultar títulos sin depender de coincidencias rígidas del servidor.
 - Aprobar y devolver directamente en Google Sheets.
 ========================================================= */
 (function(window,document){
@@ -20,8 +19,9 @@ Función:
   function sheetsService(){return window.CoordinadorMVPSheetsPrimary||null;}
   function config(){return window.CoordinadorMVPConfig||null;}
   function $(id){return document.getElementById(id);}
+  function texto(valor){return String(valor===null||valor===undefined?'':valor).trim();}
   function textoError(error){
-    if(!error)return 'Error desconocido.';
+    if(!error)return'Error desconocido.';
     if(typeof error==='string')return error;
     if(error.message)return textoError(error.message);
     if(error.mensaje)return textoError(error.mensaje);
@@ -44,7 +44,27 @@ Función:
       id=config().obtener('periodos.fallbackId',id);
       label=config().obtener('periodos.fallbackLabel',label);
     }
-    return {id:id,label:label,activo:true,fallback:true};
+    return{id:id,label:label,activo:true,principal:true,fallback:true};
+  }
+  function carrerasUnicas(coordinadores){
+    var mapa={};var salida=[];
+    (Array.isArray(coordinadores)?coordinadores:[]).forEach(function(coordinador){
+      (coordinador&&Array.isArray(coordinador.carreras)?coordinador.carreras:[]).forEach(function(carrera){
+        var clave=texto(carrera).toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Z0-9]+/g,' ').trim();
+        if(!clave||mapa[clave])return;
+        mapa[clave]=true;salida.push(carrera);
+      });
+    });
+    return salida;
+  }
+  function construirPeriodos(envios){
+    var servicio=sheetsService();
+    if(servicio&&typeof servicio.construirPeriodosDesdeEnvios==='function'){
+      var construidos=servicio.construirPeriodosDesdeEnvios(envios||[]);
+      if(construidos&&Array.isArray(construidos.periodos)&&construidos.periodos.length)return construidos;
+    }
+    var fb=periodoFallback();
+    return{periodos:[fb],principal:fb,envios:Array.isArray(envios)?envios:[]};
   }
 
   function cargarCatalogos(){
@@ -52,88 +72,76 @@ Función:
     state().setCargando(true);
     mostrarFuente('Validando la configuración directa de Google Sheets...','info');
 
-    return sheetsService().leerConfiguracion(true).then(function(cfg){
-      if(!cfg||!cfg.endpoint)throw new Error('No hay una URL de Apps Script guardada para Coordinadores. Abre Administrador → Google Sheets, guarda la URL y vuelve a esta pantalla.');
-      if(cfg.activo===false)throw new Error('Google Sheets está desactivado en Administrador → Google Sheets.');
-
-      mostrarFuente('Conectando con Google Sheets mediante '+cfg.origen+'...','info');
-      return Promise.allSettled([
-        sheetsService().listarPeriodos(),
-        sheetsService().listarCoordinadores()
-      ]).then(function(resultados){
-        var resultadoPeriodos=resultados[0];
-        var resultadoCoordinadores=resultados[1];
-        var errores=[];
-        var periodos={periodos:[],principal:null};
-        var coordinadores=[];
-
-        if(resultadoPeriodos.status==='fulfilled'){
-          periodos=resultadoPeriodos.value||periodos;
-        }else{
-          errores.push('Períodos: '+textoError(resultadoPeriodos.reason));
-          var fb=periodoFallback();
-          periodos={periodos:[fb],principal:fb};
-        }
-
-        if(resultadoCoordinadores.status==='fulfilled'){
-          coordinadores=resultadoCoordinadores.value||[];
-        }else{
-          errores.push('Coordinadores: '+textoError(resultadoCoordinadores.reason));
-        }
-
+    return sheetsService().leerConfiguracion(true)
+      .then(function(cfg){
+        if(!cfg||!cfg.endpoint)throw new Error('No hay una URL de Apps Script guardada para Coordinadores. Abre Administrador → Google Sheets, guarda la URL y vuelve a esta pantalla.');
+        if(cfg.activo===false)throw new Error('Google Sheets está desactivado en Administrador → Google Sheets.');
+        mostrarFuente('Cargando coordinadores y envíos reales desde Google Sheets...','info');
+        return sheetsService().listarCoordinadores();
+      })
+      .then(function(coordinadores){
+        coordinadores=Array.isArray(coordinadores)?coordinadores:[];
+        var carreras=carrerasUnicas(coordinadores);
+        return sheetsService().listarEnvios({carreras:carreras,incluirTodos:true,catalogo:true})
+          .then(function(envios){return{coordinadores:coordinadores,envios:envios||[],errorEnvios:null};})
+          .catch(function(error){return{coordinadores:coordinadores,envios:[],errorEnvios:error};});
+      })
+      .then(function(resultado){
+        var periodos=construirPeriodos(resultado.envios);
         state().setPeriodos(periodos.periodos||[],periodos.principal||null);
-        state().setCoordinadores(coordinadores);
+        state().setCoordinadores(resultado.coordinadores||[]);
+        state().setEnvios(resultado.envios||[]);
         fuenteActual='google-sheets';
 
-        if(errores.length){
-          var errorCombinado=new Error(errores.join(' | '));
-          state().setError(errorCombinado);
-          mostrarFuente(errores.join(' | '),'error');
-          return {ok:false,errores:errores,periodos:periodos,coordinadores:coordinadores};
+        if(resultado.errorEnvios){
+          var mensaje='Los coordinadores se cargaron, pero no fue posible leer Envios: '+textoError(resultado.errorEnvios);
+          state().setError(new Error(mensaje));
+          mostrarFuente(mensaje,'error');
+          return{ok:false,error:mensaje,coordinadores:resultado.coordinadores,periodos:periodos};
         }
 
         state().limpiarError();
-        mostrarFuente('Google Sheets conectado. Períodos y coordinadores cargados correctamente.','success');
-        return cargarTitulos().then(function(){return {ok:true,periodos:periodos,coordinadores:coordinadores};});
-      });
-    }).catch(function(error){
-      var mensaje=textoError(error);
-      state().setPeriodos([],null);
-      state().setCoordinadores([]);
-      state().setEnvios([]);
-      state().setError(new Error(mensaje));
-      mostrarFuente(mensaje,'error');
-      return {ok:false,error:mensaje};
-    }).finally(function(){state().setCargando(false);});
+        if(state().obtenerCoordinadorActual()){
+          mostrarFuente('Datos cargados. Aplicando período, carreras y estado del coordinador seleccionado.','success');
+        }else{
+          mostrarFuente('Google Sheets conectado. Selecciona un coordinador para ver sus estudiantes.','info');
+        }
+        return{ok:true,coordinadores:resultado.coordinadores,periodos:periodos,envios:resultado.envios};
+      })
+      .catch(function(error){
+        var mensaje=textoError(error);
+        state().setPeriodos([],null);state().setCoordinadores([]);state().setEnvios([]);
+        state().setError(new Error(mensaje));mostrarFuente(mensaje,'error');
+        return{ok:false,error:mensaje};
+      })
+      .finally(function(){state().setCargando(false);});
   }
 
   function cargarTitulos(){
     var periodo=state().obtenerPeriodoActual();
     var coordinador=state().obtenerCoordinadorActual();
     if(!periodo){state().setEnvios([]);return Promise.resolve([]);}
+    if(!coordinador){state().setEnvios([]);mostrarFuente('Selecciona un coordinador para filtrar sus carreras.','info');return Promise.resolve([]);}
 
-    state().limpiarError();
-    state().setCargando(true);
+    state().limpiarError();state().setCargando(true);
     return sheetsService().listarEnvios({
       periodo:periodo,
       coordinador:coordinador,
-      carreras:coordinador&&coordinador.carreras||[],
+      carreras:coordinador.carreras||[],
       vista:state().obtenerVistaActual()
     }).then(function(lista){
       fuenteActual='google-sheets';
       state().setEnvios(lista||[]);
-      if(coordinador){
-        mostrarFuente('Datos cargados desde Google Sheets. Preferido se valida al abrir cada estudiante.','success');
+      var diagnostico=state().obtenerDiagnosticoFiltros?state().obtenerDiagnosticoFiltros():{};
+      if(diagnostico.mostrados){
+        mostrarFuente('Se encontraron '+diagnostico.mostrados+' estudiante(s) para este coordinador.','success');
       }else{
-        mostrarFuente('Google Sheets conectado. Selecciona un coordinador para filtrar sus carreras.','info');
+        mostrarFuente('No hay coincidencias en la vista actual. La pantalla muestra el detalle de filtros para identificar la causa.','warning');
       }
       return lista||[];
     }).catch(function(error){
-      var mensaje=textoError(error);
-      state().setEnvios([]);
-      state().setError(new Error(mensaje));
-      mostrarFuente('No se pudieron cargar los envíos: '+mensaje,'error');
-      return [];
+      var mensaje=textoError(error);state().setEnvios([]);state().setError(new Error(mensaje));
+      mostrarFuente('No se pudieron cargar los envíos: '+mensaje,'error');return[];
     }).finally(function(){state().setCargando(false);});
   }
 
@@ -148,9 +156,7 @@ Función:
     sheetsService().consultarEnvioPorCedula(envio.cedula,periodo)
       .then(function(actual){
         var combinado=Object.assign({},envio,actual,{id:envio.id||actual.id,_clave:envio._clave||actual._clave,fila:actual.fila||envio.fila,fuente:'google-sheets-consulta-directa'});
-        state().actualizarEnvioLocal(envio.id||envio.cedula,combinado);
-        state().setEstudianteSeleccionado(combinado);
-        modal().abrir(combinado);
+        state().actualizarEnvioLocal(envio.id||envio.cedula,combinado);state().setEstudianteSeleccionado(combinado);modal().abrir(combinado);
       })
       .catch(function(error){ui().mostrarEstado('estadoPrincipal','No se abrió el detalle: '+textoError(error),'error');})
       .finally(function(){state().setCargando(false);});
@@ -177,23 +183,19 @@ Función:
   function mostrarDiagnostico(){
     ui().mostrarDiagnostico();
     ui().escribirDiagnostico({estado:'probando',fuentePrincipal:'Google Sheets',fecha:new Date().toISOString()});
-    Promise.allSettled([
-      sheetsService().leerConfiguracion(true),
-      sheetsService().diagnostico(),
-      sheetsService().listarCoordinadores(),
-      sheetsService().listarPeriodos()
-    ]).then(function(partes){
-      ui().escribirDiagnostico({
-        fuentePrincipal:'Google Sheets',
-        fuenteActual:fuenteActual,
-        configuracion:partes[0].status==='fulfilled'?partes[0].value:{error:textoError(partes[0].reason)},
-        ping:partes[1].status==='fulfilled'?partes[1].value:{error:textoError(partes[1].reason)},
-        coordinadores:partes[2].status==='fulfilled'?{ok:true,total:partes[2].value.length}:{ok:false,error:textoError(partes[2].reason)},
-        periodos:partes[3].status==='fulfilled'?{ok:true,total:partes[3].value.periodos.length,datos:partes[3].value.periodos}:{ok:false,error:textoError(partes[3].reason)},
-        firebaseRespaldo:{omitido:true,motivo:'No se consulta para evitar la cuota.'},
-        fecha:new Date().toISOString()
+    Promise.allSettled([sheetsService().leerConfiguracion(true),sheetsService().diagnostico(),sheetsService().listarCoordinadores()])
+      .then(function(partes){
+        ui().escribirDiagnostico({
+          fuentePrincipal:'Google Sheets',fuenteActual:fuenteActual,
+          configuracion:partes[0].status==='fulfilled'?partes[0].value:{error:textoError(partes[0].reason)},
+          ping:partes[1].status==='fulfilled'?partes[1].value:{error:textoError(partes[1].reason)},
+          coordinadores:partes[2].status==='fulfilled'?{ok:true,total:partes[2].value.length}:{ok:false,error:textoError(partes[2].reason)},
+          consultaEnvios:sheetsService().obtenerDiagnosticoConsulta?sheetsService().obtenerDiagnosticoConsulta():{},
+          filtros:state().obtenerDiagnosticoFiltros?state().obtenerDiagnosticoFiltros():{},
+          periodoActual:state().obtenerPeriodoActual(),coordinadorActual:state().obtenerCoordinadorActual(),
+          firebaseRespaldo:{omitido:true,motivo:'No se consulta para evitar la cuota.'},fecha:new Date().toISOString()
+        });
       });
-    });
   }
 
   function conectarEventos(){
