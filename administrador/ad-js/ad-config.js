@@ -5,6 +5,7 @@ Función:
 - Configuración central del módulo administrador.
 - Define nombres de colecciones, documentos, campos y reglas base.
 - La configuración Firebase queda aquí para que el administrador sea independiente.
+- Redirige /api/ia al proxy local únicamente durante pruebas con Live Server.
 ========================================================= */
 
 (function(window){
@@ -12,7 +13,7 @@ Función:
 
   var AD_CONFIG = {
     nombreApp: "Administrador Titulación",
-    version: "1.2.1",
+    version: "1.2.2",
     entorno: "produccion",
     administrador: "administrador",
 
@@ -161,6 +162,50 @@ Función:
       second: "2-digit"
     });
   }
+
+  function esEntornoLocal(){
+    var hostname = String(window.location && window.location.hostname || "").toLowerCase();
+    return ["localhost", "127.0.0.1", "0.0.0.0", "::1", "[::1]"].indexOf(hostname) >= 0;
+  }
+
+  function instalarProxyIALocal(){
+    var fetchOriginal;
+
+    if (!esEntornoLocal() || typeof window.fetch !== "function") return;
+    if (window.__AD_PROXY_IA_LOCAL_INSTALADO === true) return;
+
+    fetchOriginal = window.fetch.bind(window);
+
+    window.fetch = function(input, init){
+      var urlOriginal = typeof input === "string"
+        ? input
+        : input && input.url;
+      var url;
+      var destino;
+
+      try {
+        url = new URL(urlOriginal || "", window.location.href);
+
+        if (url.origin === window.location.origin && url.pathname === "/api/ia") {
+          destino = "http://127.0.0.1:8787/api/ia" + (url.search || "");
+
+          if (typeof Request !== "undefined" && input instanceof Request) {
+            input = new Request(destino, input);
+          } else {
+            input = destino;
+          }
+        }
+      } catch(errorUrl) {
+        // Si la URL no puede normalizarse, se conserva la solicitud original.
+      }
+
+      return fetchOriginal(input, init);
+    };
+
+    window.__AD_PROXY_IA_LOCAL_INSTALADO = true;
+  }
+
+  instalarProxyIALocal();
 
   window.AD_CONFIG = AD_CONFIG;
   window.AD_UTILS = {
