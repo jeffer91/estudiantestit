@@ -189,7 +189,8 @@
       cargarScript('js/ia.diagnostico.service.js?v=1.0.2');
     }
     cargarScript('js/ia.nueve.core.js?v=1.0.0');
-    cargarScript('js/ia.titulacion.robusto.service.js?v=3.0.0');
+    cargarScript('js/ia.nueve.ajustes.js?v=1.0.0');
+    cargarScript('js/ia.titulacion.robusto.service.js?v=3.0.1');
     cargarScript('js/ia.recomendacion.ui.js?v=2.0.0');
     cargarScript('js/ia.nueve.integracion.js?v=1.0.0');
   }
