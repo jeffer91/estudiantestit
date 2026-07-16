@@ -2,14 +2,16 @@
   Archivo: ia.providers.service.js
   Ruta: estudiantes-mvp/js/ia.providers.service.js
   Funciones principales:
-  - Enviar las solicitudes IA al endpoint interno /api/ia.
-  - Usar el proxy publicado cuando la app se ejecuta desde localhost.
-  - Evitar bloqueos CORS de NVIDIA, GitHub Models y otros proveedores.
+  - Enviar solicitudes IA al proxy local durante pruebas con Live Server.
+  - Usar /api/ia del mismo dominio cuando la app esté publicada.
+  - Evitar bloqueos CORS de proveedores externos.
   - Mantener endpoint, modelo y clave configurados desde el administrador.
   - Devolver únicamente el texto normalizado al motor de titulación.
 */
 (function (window, document) {
   'use strict';
+
+  var URL_PROXY_LOCAL = 'http://127.0.0.1:8787/api/ia';
 
   function obtenerUtils() {
     return window.EstudianteMVPUtils || null;
@@ -45,14 +47,14 @@
   }
 
   function proxyUrl() {
-    /*
-      Live Server solamente publica archivos estáticos y no ejecuta
-      Cloudflare Pages Functions ni _worker.js. Durante las pruebas en
-      localhost se usa el proxy publicado. En producción se conserva la
-      ruta del mismo dominio.
-    */
+    var urlForzada = texto(window.ESTUDIANTE_IA_PROXY_URL || '');
+
+    if (urlForzada) {
+      return urlForzada;
+    }
+
     if (esEntornoLocal()) {
-      return 'https://titulos.pages.dev/api/ia';
+      return URL_PROXY_LOCAL;
     }
 
     return new URL('/api/ia', window.location.origin).toString();
@@ -103,7 +105,9 @@
         } catch (errorJson) {
           if (response.status === 404 || /<!doctype|<html/i.test(body)) {
             errorRespuesta = new Error(
-              'El servicio IA todavía no está desplegado. Espera el despliegue de Cloudflare Pages y recarga la página.'
+              esEntornoLocal()
+                ? 'El proxy IA local no está disponible. Ejecuta npm run dev:ia y vuelve a intentar.'
+                : 'El servicio IA todavía no está desplegado. Espera el despliegue de Cloudflare Pages y recarga la página.'
             );
             errorRespuesta.httpStatus = response.status;
             throw errorRespuesta;
@@ -143,8 +147,8 @@
       if (error && error.message === 'Failed to fetch') {
         var errorConexion = new Error(
           esEntornoLocal()
-            ? 'No se pudo conectar con https://titulos.pages.dev/api/ia. Verifica que el Worker haya sido desplegado en Cloudflare Pages.'
-            : 'No se pudo conectar con el servicio /api/ia. Verifica que el último despliegue de Cloudflare Pages haya finalizado.'
+            ? 'No se pudo conectar con el proxy IA local. Ejecuta npm run dev:ia en la raíz del proyecto.'
+            : 'No se pudo conectar con /api/ia. Verifica la publicación de Cloudflare Pages.'
         );
         errorConexion.codigo = 'FAILED_TO_FETCH';
         throw errorConexion;
