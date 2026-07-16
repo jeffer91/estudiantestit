@@ -47,13 +47,20 @@ function number(value, fallback) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function providerError(message, httpStatus = 0, code = "PROVIDER_ERROR") {
+  const error = new Error(text(message) || "Error del proveedor IA.");
+  error.httpStatus = number(httpStatus, 0);
+  error.code = text(code) || "PROVIDER_ERROR";
+  return error;
+}
+
 function safeEndpoint(value) {
   const raw = text(value);
-  if (!raw) throw new Error("El proveedor no tiene endpoint configurado.");
+  if (!raw) throw providerError("El proveedor no tiene endpoint configurado.", 0, "ENDPOINT_MISSING");
 
   const url = new URL(raw);
   if (url.protocol !== "https:") {
-    throw new Error("El endpoint debe utilizar HTTPS.");
+    throw providerError("El endpoint debe utilizar HTTPS.", 0, "ENDPOINT_NOT_HTTPS");
   }
 
   const hostname = url.hostname.toLowerCase();
@@ -62,7 +69,7 @@ function safeEndpoint(value) {
     hostname.endsWith(".pages.dev");
 
   if (!allowed) {
-    throw new Error("El dominio del endpoint no está permitido por el proxy IA.");
+    throw providerError("El dominio del endpoint no está permitido por el proxy IA.", 0, "ENDPOINT_NOT_ALLOWED");
   }
 
   return url.toString();
@@ -85,7 +92,7 @@ function geminiEndpoint(provider, apiKey) {
   if (configured) return safeEndpoint(configured);
 
   const model = text(provider.modelo || provider.model || "gemini-2.0-flash");
-  if (!apiKey) throw new Error("Gemini no tiene API key configurada.");
+  if (!apiKey) throw providerError("Gemini no tiene API key configurada.", 0, "API_KEY_MISSING");
 
   return "https://generativelanguage.googleapis.com/v1beta/models/" +
     encodeURIComponent(model) +
@@ -94,7 +101,7 @@ function geminiEndpoint(provider, apiKey) {
 }
 
 function openAiHeaders(provider, apiKey) {
-  if (!apiKey) throw new Error("El proveedor no tiene API key o token configurado.");
+  if (!apiKey) throw providerError("El proveedor no tiene API key o token configurado.", 0, "API_KEY_MISSING");
 
   const headers = {
     "Content-Type": "application/json",
@@ -160,7 +167,11 @@ async function readUpstream(response) {
     const detail = data && data.error && (data.error.message || data.error) ||
       data && (data.message || data.mensaje || data.detail) ||
       "HTTP " + response.status;
-    throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+    throw providerError(
+      typeof detail === "string" ? detail : JSON.stringify(detail),
+      response.status,
+      "HTTP_" + response.status
+    );
   }
 
   return data;
@@ -177,7 +188,10 @@ async function fetchWithTimeout(endpoint, options, timeoutMs) {
     });
   } catch (error) {
     if (error && error.name === "AbortError") {
-      throw new Error("El proveedor superó el tiempo máximo de espera.");
+      throw providerError("El proveedor superó el tiempo máximo de espera.", 0, "TIMEOUT");
+    }
+    if (error && error.message === "Failed to fetch") {
+      throw providerError("No fue posible conectar con el proveedor.", 0, "FAILED_TO_FETCH");
     }
     throw error;
   } finally {
@@ -211,7 +225,7 @@ async function callProvider(provider, prompt, options) {
     };
   } else if (type === "openai-compatible") {
     endpoint = safeEndpoint(provider.endpoint);
-    if (!model) throw new Error("El proveedor no tiene modelo configurado.");
+    if (!model) throw providerError("El proveedor no tiene modelo configurado.", 0, "MODEL_MISSING");
     headers = openAiHeaders(provider, apiKey);
     body = {
       model,
@@ -267,42 +281,61 @@ async function callProvider(provider, prompt, options) {
   else output = extractGeneric(data);
 
   if (!text(output)) {
-    throw new Error("El proveedor respondió correctamente, pero no devolvió texto utilizable.");
+    throw providerError(
+      "El proveedor respondió correctamente, pero no devolvió texto utilizable.",
+      response.status,
+      "EMPTY_OUTPUT"
+    );
   }
 
   return {
     text: output,
-    status: response.status
+    status: response.status,
+    type,
+    model
   };
 }
 
 async function handlePost(request) {
   const contentType = request.headers.get("Content-Type") || "";
   if (!contentType.toLowerCase().includes("application/json")) {
-    return json(request, { ok: false, error: "Se esperaba application/json." }, 415);
+    return json(request, { ok: false, error: "Se esperaba application/json.", code: "INVALID_CONTENT_TYPE" }, 415);
   }
 
   const payload = await request.json();
   const provider = payload && payload.provider || {};
+  const providerId = text(provider.id || provider.proveedor);
+  const model = text(provider.modelo || provider.model);
   const prompt = text(payload && payload.prompt);
   const options = payload && payload.options || {};
 
-  if (!text(provider.id || provider.proveedor)) {
-    return json(request, { ok: false, error: "Falta el ID del proveedor." }, 400);
+  if (!providerId) {
+    return json(request, { ok: false, error: "Falta el ID del proveedor.", code: "PROVIDER_ID_MISSING" }, 400);
   }
   if (!prompt) {
-    return json(request, { ok: false, error: "Falta el prompt." }, 400);
+    return json(request, { ok: false, error: "Falta el prompt.", code: "PROMPT_MISSING" }, 400);
   }
 
   const startedAt = Date.now();
-  const result = await callProvider(provider, prompt, options);
 
-  return json(request, {
-    ok: true,
-    provider: text(provider.id || provider.proveedor),
-    text: result.text,
-    latencyMs: Date.now() - startedAt
-  });
+  try {
+    const result = await callProvider(provider, prompt, options);
+
+    return json(request, {
+      ok: true,
+      provider: providerId,
+      model: result.model || model,
+      type: result.type,
+      text: result.text,
+      latencyMs: Date.now() - startedAt,
+      httpStatus: result.status
+    });
+  } catch (error) {
+    error.providerId = providerId;
+    error.model = model;
+    error.latencyMs = Date.now() - startedAt;
+    throw error;
+  }
 }
 
 export async function onRequest(context) {
@@ -323,7 +356,7 @@ export async function onRequest(context) {
     return json(request, {
       ok: true,
       service: "IA proxy",
-      version: "1.2.0",
+      version: "1.3.0",
       message: "Utiliza POST para ejecutar un proveedor IA."
     });
   }
@@ -331,7 +364,8 @@ export async function onRequest(context) {
   if (method !== "POST") {
     return json(request, {
       ok: false,
-      error: "Método no permitido. Utiliza POST."
+      error: "Método no permitido. Utiliza POST.",
+      code: "METHOD_NOT_ALLOWED"
     }, 405);
   }
 
@@ -340,7 +374,12 @@ export async function onRequest(context) {
   } catch (error) {
     return json(request, {
       ok: false,
-      error: error && error.message ? error.message : String(error)
+      provider: text(error && error.providerId),
+      model: text(error && error.model),
+      error: error && error.message ? error.message : String(error),
+      code: text(error && error.code || "PROVIDER_ERROR"),
+      httpStatus: number(error && error.httpStatus, 0),
+      latencyMs: number(error && error.latencyMs, 0)
     }, 502);
   }
 }
