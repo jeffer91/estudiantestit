@@ -1,6 +1,8 @@
 /*
-  Integración de IA 3x3 con estudiante.html.
-  Intercepta los botones actuales de IA y genera 9 títulos para las 3 propuestas.
+  Integración directa de IA 3x3 con estudiante.html.
+  - Deja un único botón al final de la propuesta 3.
+  - No intercepta ni cancela el flujo antiguo: usa una acción exclusiva.
+  - Genera 9 títulos para las 3 propuestas.
 */
 (function (window, document) {
   'use strict';
@@ -8,6 +10,7 @@
   var instalado = false;
   var intentos = 0;
   var enCurso = false;
+  var ACCION = 'generar-ia-9';
   var MENSAJE_PUBLICO =
     'No te preocupes. No fue posible generar las sugerencias en este momento. ' +
     'Puedes intentarlo nuevamente. Si el inconveniente continúa, comunícate con tu coordinador para recibir apoyo.';
@@ -23,41 +26,65 @@
       typeof window.EstudianteMVPIATitulacion.generarNueveTitulos !== 'function'
     ) {
       intentos += 1;
-      if (intentos < 200) window.setTimeout(instalar, 25);
+      if (intentos < 240) window.setTimeout(instalar, 25);
       return;
     }
 
-    document.addEventListener('click', interceptarGeneracion, true);
-    actualizarBotones();
+    configurarUnicoBoton();
+    document.addEventListener('click', manejarClickGeneracion);
     instalado = true;
   }
 
-  function actualizarBotones() {
-    Array.prototype.forEach.call(
-      document.querySelectorAll('[data-accion="generar-ia"]'),
-      function (boton) {
-        boton.textContent = 'Generar 9 títulos con IA (3 por sección)';
-        boton.setAttribute('title', 'Genera tres alternativas para cada una de las tres propuestas.');
-      }
+  function configurarUnicoBoton() {
+    var panel1 = document.querySelector('[data-propuesta-panel="1"]');
+    var panel2 = document.querySelector('[data-propuesta-panel="2"]');
+    var panel3 = document.querySelector('[data-propuesta-panel="3"]');
+    var boton;
+
+    retirarAccionIA(panel1);
+    retirarAccionIA(panel2);
+
+    if (!panel3) return;
+
+    boton = panel3.querySelector('[data-accion="generar-ia"], [data-accion="' + ACCION + '"]');
+    if (!boton) return;
+
+    boton.setAttribute('data-accion', ACCION);
+    boton.removeAttribute('data-propuesta');
+    boton.textContent = 'Generar 9 títulos con IA (3 por sección)';
+    boton.setAttribute(
+      'title',
+      'Genera tres alternativas para cada una de las tres propuestas completas.'
     );
   }
 
-  function interceptarGeneracion(evento) {
+  function retirarAccionIA(panel) {
+    var acciones;
+    var diagnostico;
+
+    if (!panel) return;
+
+    acciones = panel.querySelector('.ai-actions');
+    diagnostico = panel.querySelector('[data-ia-diagnostico]');
+
+    if (acciones && acciones.parentNode) acciones.parentNode.removeChild(acciones);
+    if (diagnostico && diagnostico.parentNode) diagnostico.parentNode.removeChild(diagnostico);
+  }
+
+  function manejarClickGeneracion(evento) {
     var boton = evento.target && evento.target.closest
-      ? evento.target.closest('[data-accion="generar-ia"]')
+      ? evento.target.closest('[data-accion="' + ACCION + '"]')
       : null;
 
     if (!boton) return;
 
     evento.preventDefault();
-    evento.stopPropagation();
-    evento.stopImmediatePropagation();
-
     if (enCurso) return;
-    ejecutarGeneracion(Number(boton.getAttribute('data-propuesta') || 1));
+
+    ejecutarGeneracion();
   }
 
-  function ejecutarGeneracion(numeroOrigen) {
+  function ejecutarGeneracion() {
     var state = window.EstudianteMVPState;
     var ui = window.EstudianteMVPUI;
     var ia = window.EstudianteMVPIATitulacion;
@@ -72,6 +99,11 @@
     }
 
     enCurso = true;
+    emitir('ia-titulacion:3x3-inicio', {
+      totalEsperado: 9,
+      secciones: 3
+    });
+
     mostrarEstadoTodas('Generando 9 títulos: 3 para cada sección...', 'info');
 
     if (modales && typeof modales.mostrarGenerandoIA === 'function') {
@@ -84,15 +116,20 @@
     ia.generarNueveTitulos({
       estudiante: estudiante,
       propuestas: propuestas,
-      numeroPropuestaOrigen: numeroOrigen,
+      numeroPropuestaOrigen: 3,
       maxTokens: 2800
     })
       .then(function (resultado) {
         aplicarResultado(resultado);
+        emitir('ia-titulacion:3x3-exito', resultado || {});
       })
       .catch(function (error) {
         console.warn('[IA Titulación 3x3] Detalle interno:', error);
         mostrarEstadoTodas(MENSAJE_PUBLICO, 'error');
+        emitir('ia-titulacion:3x3-error', {
+          error: error,
+          mensaje: error && error.message ? error.message : String(error || '')
+        });
       })
       .then(function () {
         if (modales && typeof modales.cerrarGenerandoIA === 'function') {
@@ -200,11 +237,23 @@
 
   function guardarAvance() {
     var memoria = window.EstudianteMVPMemoria || null;
+
     if (memoria && typeof memoria.guardarDesdeState === 'function') {
       memoria.guardarDesdeState({
         pasoActual: 'propuestas',
-        propuestaActual: 1
+        propuestaActual: 3
       });
+    }
+  }
+
+  function emitir(nombre, detalle) {
+    var evento;
+
+    try {
+      evento = new CustomEvent(nombre, { detail: detalle || {} });
+      document.dispatchEvent(evento);
+    } catch (error) {
+      /* Navegadores antiguos: el diagnóstico no debe bloquear la generación. */
     }
   }
 
@@ -216,6 +265,7 @@
 
   window.EstudianteMVPIANueveIntegracion = Object.freeze({
     ejecutarGeneracion: ejecutarGeneracion,
-    actualizarBotones: actualizarBotones
+    configurarUnicoBoton: configurarUnicoBoton,
+    accion: ACCION
   });
 })(window, document);
