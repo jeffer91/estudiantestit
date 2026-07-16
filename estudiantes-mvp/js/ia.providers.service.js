@@ -172,6 +172,23 @@
     return mapa[String(id || '').toLowerCase()] || 999;
   }
 
+  function asegurarBaseTitulacion() {
+    if (window.EstudianteMVPIATitulacion) return;
+
+    function flujoIndividualDesactivado() {
+      return Promise.reject(new Error(
+        'El flujo individual de tres títulos fue desactivado. Utiliza la generación 3×3.'
+      ));
+    }
+
+    window.EstudianteMVPIATitulacion = Object.freeze({
+      generarTitulosPorPropuesta: flujoIndividualDesactivado,
+      generarTresTitulos: flujoIndividualDesactivado,
+      modo: 'esperando_motor_3x3',
+      version: '3.0.1-base-cargador'
+    });
+  }
+
   function cargarScript(src) {
     var script;
     if (document.readyState === 'loading') {
@@ -185,14 +202,16 @@
   }
 
   function cargarAuxiliares() {
+    asegurarBaseTitulacion();
+
     if (!window.EstudianteMVPIADiagnostico) {
-      cargarScript('js/ia.diagnostico.service.js?v=2.0.0');
+      cargarScript('js/ia.diagnostico.service.js?v=2.0.1');
     }
     cargarScript('js/ia.nueve.core.js?v=1.1.0');
     cargarScript('js/ia.nueve.ajustes.js?v=1.1.0');
     cargarScript('js/ia.titulacion.robusto.service.js?v=3.1.0');
-    cargarScript('js/ia.recomendacion.ui.js?v=2.0.1');
-    cargarScript('js/ia.nueve.integracion.js?v=1.1.0');
+    cargarScript('js/ia.recomendacion.ui.js?v=2.1.0');
+    cargarScript('js/ia.nueve.integracion.js?v=1.2.0');
   }
 
   window.EstudianteMVPIAProviders = Object.freeze({
