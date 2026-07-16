@@ -30,7 +30,7 @@
       generarTitulos3x3: generarOpcionesParaPropuesta,
       __flujoNueveTitulos: true,
       modo: '9-internos-3-finales-por-propuesta',
-      version: '4.0.0'
+      version: '4.0.1'
     }));
 
     instalado = true;
@@ -143,8 +143,7 @@
         }
 
         return revisarMismoGrupo(ctx, base, revisor);
-      })
-      .catch(function (errorProveedor) {
+      }, function (errorProveedor) {
         ctx.errores.push({
           proceso: ctx.proceso,
           proveedor: obtenerId(generador),
@@ -217,8 +216,7 @@
         });
 
         return siguienteProceso(ctx);
-      })
-      .catch(function (errorProveedor) {
+      }, function (errorProveedor) {
         ctx.errores.push({
           proceso: ctx.proceso,
           proveedor: obtenerId(revisor),
