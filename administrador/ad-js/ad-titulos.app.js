@@ -5,12 +5,13 @@ Función:
 - Transformar las vistas antiguas en Estudiantes.
 - Integrar Google Sheets e IA en el menú lateral.
 - Cargar módulos administrativos complementarios.
+- Presentar Mantenimiento de datos con Google Sheets como base principal.
 ========================================================= */
 (function(window,document){
   "use strict";
 
   if(window.AD_CONFIG){
-    window.AD_CONFIG.version="1.9.0";
+    window.AD_CONFIG.version="1.10.0";
     window.AD_CONFIG.accionesLog=window.AD_CONFIG.accionesLog||{};
     window.AD_CONFIG.accionesLog.periodoActivado=window.AD_CONFIG.accionesLog.periodoActivado||"ADMIN_PERIODO_ACTIVADO";
     window.AD_CONFIG.accionesLog.periodoDesactivado=window.AD_CONFIG.accionesLog.periodoDesactivado||"ADMIN_PERIODO_DESACTIVADO";
@@ -21,11 +22,11 @@ Función:
     window.AD_CONFIG.accionesLog.titulosEliminados=window.AD_CONFIG.accionesLog.titulosEliminados||"ADMIN_TITULOS_ELIMINADOS";
   }
 
-  var APP_VERSION=window.AD_CONFIG&&window.AD_CONFIG.version?String(window.AD_CONFIG.version):"1.9.0";
+  var APP_VERSION=window.AD_CONFIG&&window.AD_CONFIG.version?String(window.AD_CONFIG.version):"1.10.0";
   function $(id){return document.getElementById(id);}
 
   function agregarCssArchivo(id,ruta){
-    if(document.getElementById(id)) return;
+    if(document.getElementById(id))return;
     var link=document.createElement("link");
     link.id=id;
     link.rel="stylesheet";
@@ -47,7 +48,7 @@ Función:
       var script=document.createElement("script");
       script.src=src;
       script.async=false;
-      if(id) script.id=id;
+      if(id)script.id=id;
       script.onload=resolve;
       script.onerror=function(){reject(new Error("No se pudo cargar "+src));};
       document.body.appendChild(script);
@@ -55,7 +56,7 @@ Función:
   }
 
   function htmlEstudiantes(){
-    return [
+    return[
       '<div class="ad-section-head"><div><p class="ad-eyebrow">Seguimiento</p><h3>Estudiantes</h3><p class="ad-muted">Selecciona un período y utiliza los filtros para consultar el estado de las propuestas.</p></div></div>',
       '<div class="ad-card">',
       '<div class="ad-estudiantes-filtros">',
@@ -72,7 +73,7 @@ Función:
   }
 
   function agregarModal(){
-    if($("ad-estudiante-modal")) return;
+    if($("ad-estudiante-modal"))return;
     var modal=document.createElement("section");
     modal.className="ad-modal";
     modal.id="ad-estudiante-modal";
@@ -96,7 +97,7 @@ Función:
       enlace.href="#"+id;
       enlace.setAttribute("data-ad-view-target",id);
       enlace.textContent=label;
-      if(referenciaNav&&referenciaNav.parentNode===nav) nav.insertBefore(enlace,referenciaNav);
+      if(referenciaNav&&referenciaNav.parentNode===nav)nav.insertBefore(enlace,referenciaNav);
       else nav.appendChild(enlace);
     }
 
@@ -107,37 +108,54 @@ Función:
       seccion.hidden=true;
       seccion.setAttribute("data-ad-view","");
       seccion.innerHTML='<div class="ad-card"><div class="ad-empty">Cargando '+label+'...</div></div>';
-      if(referenciaSeccion&&referenciaSeccion.parentNode) referenciaSeccion.parentNode.insertBefore(seccion,referenciaSeccion);
-      else if(document.querySelector(".ad-main")) document.querySelector(".ad-main").appendChild(seccion);
+      if(referenciaSeccion&&referenciaSeccion.parentNode)referenciaSeccion.parentNode.insertBefore(seccion,referenciaSeccion);
+      else if(document.querySelector(".ad-main"))document.querySelector(".ad-main").appendChild(seccion);
     }
   }
 
   function activarModuloVista(id){
     window.setTimeout(function(){
-      if(id==="ad-seccion-carreras"&&window.ADCoordinadoresApp&&typeof window.ADCoordinadoresApp.cargarDatosCarreras==="function") window.ADCoordinadoresApp.cargarDatosCarreras(false).catch(function(){});
+      if(id==="ad-seccion-carreras"&&window.ADCoordinadoresApp&&typeof window.ADCoordinadoresApp.cargarDatosCarreras==="function")window.ADCoordinadoresApp.cargarDatosCarreras(false).catch(function(){});
       if(id==="ad-seccion-estudiantes"&&window.ADEstudiantesRuntime&&typeof window.ADEstudiantesRuntime.cargarPeriodos==="function"){
         var selector=$("ad-estudiantes-periodo");
-        if(!selector||!selector.options||selector.options.length<=1) window.ADEstudiantesRuntime.cargarPeriodos();
+        if(!selector||!selector.options||selector.options.length<=1)window.ADEstudiantesRuntime.cargarPeriodos();
       }
-      if(id==="ad-seccion-periodos"&&window.ADPeriodosApp&&typeof window.ADPeriodosApp.cargarPeriodos==="function") window.ADPeriodosApp.cargarPeriodos();
-      if(id==="ad-seccion-estadisticas"&&window.ADEstadisticasApp&&typeof window.ADEstadisticasApp.cargarPeriodos==="function") window.ADEstadisticasApp.cargarPeriodos();
-      if(id==="ad-seccion-sheets"&&window.ADSheetsApp&&typeof window.ADSheetsApp.instalar==="function") window.ADSheetsApp.instalar();
-      if(id==="ad-seccion-ia"&&window.ADIAApp){if(typeof window.ADIAApp.instalar==="function") window.ADIAApp.instalar();else if(typeof window.ADIAApp.cargar==="function") window.ADIAApp.cargar();}
-      if(id==="ad-seccion-reparar"&&window.ADRepararApp&&typeof window.ADRepararApp.instalarNormalizador==="function") window.ADRepararApp.instalarNormalizador();
+      if(id==="ad-seccion-periodos"&&window.ADPeriodosApp&&typeof window.ADPeriodosApp.cargarPeriodos==="function")window.ADPeriodosApp.cargarPeriodos();
+      if(id==="ad-seccion-estadisticas"&&window.ADEstadisticasApp&&typeof window.ADEstadisticasApp.cargarPeriodos==="function")window.ADEstadisticasApp.cargarPeriodos();
+      if(id==="ad-seccion-sheets"&&window.ADSheetsApp&&typeof window.ADSheetsApp.instalar==="function")window.ADSheetsApp.instalar();
+      if(id==="ad-seccion-ia"&&window.ADIAApp){
+        if(typeof window.ADIAApp.instalar==="function")window.ADIAApp.instalar();
+        else if(typeof window.ADIAApp.cargar==="function")window.ADIAApp.cargar();
+      }
+      if(id==="ad-seccion-reparar"&&window.ADRepararApp){
+        if(typeof window.ADRepararApp.instalarMantenimiento==="function")window.ADRepararApp.instalarMantenimiento();
+        else if(typeof window.ADRepararApp.instalarNormalizador==="function")window.ADRepararApp.instalarNormalizador();
+      }
     },0);
   }
 
   function mostrarVista(id){
-    document.querySelectorAll("[data-ad-view]").forEach(function(vista){var activa=vista.id===id;vista.hidden=!activa;vista.classList.toggle("is-active",activa);});
-    document.querySelectorAll("[data-ad-view-target]").forEach(function(enlace){var activo=enlace.getAttribute("data-ad-view-target")===id;enlace.classList.toggle("is-active",activo);if(activo) enlace.setAttribute("aria-current","page");else enlace.removeAttribute("aria-current");});
+    document.querySelectorAll("[data-ad-view]").forEach(function(vista){
+      var activa=vista.id===id;
+      vista.hidden=!activa;
+      vista.classList.toggle("is-active",activa);
+    });
+    document.querySelectorAll("[data-ad-view-target]").forEach(function(enlace){
+      var activo=enlace.getAttribute("data-ad-view-target")===id;
+      enlace.classList.toggle("is-active",activo);
+      if(activo)enlace.setAttribute("aria-current","page");
+      else enlace.removeAttribute("aria-current");
+    });
     window.dispatchEvent(new CustomEvent("ad:vista-cambiada",{detail:{id:id}}));
     activarModuloVista(id);
   }
 
   function instalarNavegacion(){
+    if(document.documentElement.getAttribute("data-ad-navigation-installed")==="1")return;
+    document.documentElement.setAttribute("data-ad-navigation-installed","1");
     document.addEventListener("click",function(evento){
       var enlace=evento.target&&evento.target.closest?evento.target.closest("[data-ad-view-target]"):null;
-      if(!enlace) return;
+      if(!enlace)return;
       evento.preventDefault();
       mostrarVista(enlace.getAttribute("data-ad-view-target"));
     },true);
@@ -148,38 +166,98 @@ Función:
     var seccionTitulos=$("ad-seccion-titulos");
     var enlaceDevolver=document.querySelector('[data-ad-view-target="ad-seccion-devolver"]');
     var seccionDevolver=$("ad-seccion-devolver");
+    var enlaceReparar=document.querySelector('[data-ad-view-target="ad-seccion-reparar"]');
     var tituloPrincipal=document.querySelector(".ad-header h2");
     var descripcionPrincipal=document.querySelector(".ad-header .ad-muted");
 
-    if(enlaceTitulos){enlaceTitulos.textContent="Estudiantes";enlaceTitulos.setAttribute("href","#ad-seccion-estudiantes");enlaceTitulos.setAttribute("data-ad-view-target","ad-seccion-estudiantes");}
-    if(seccionTitulos){seccionTitulos.id="ad-seccion-estudiantes";seccionTitulos.classList.remove("ad-danger-zone");seccionTitulos.innerHTML=htmlEstudiantes();}
-    if(enlaceDevolver) enlaceDevolver.remove();
-    if(seccionDevolver) seccionDevolver.remove();
+    if(enlaceTitulos){
+      enlaceTitulos.textContent="Estudiantes";
+      enlaceTitulos.setAttribute("href","#ad-seccion-estudiantes");
+      enlaceTitulos.setAttribute("data-ad-view-target","ad-seccion-estudiantes");
+    }
+    if(seccionTitulos){
+      seccionTitulos.id="ad-seccion-estudiantes";
+      seccionTitulos.classList.remove("ad-danger-zone");
+      seccionTitulos.innerHTML=htmlEstudiantes();
+    }
+    if(enlaceDevolver)enlaceDevolver.remove();
+    if(seccionDevolver)seccionDevolver.remove();
 
     agregarSeccionDinamica("ad-seccion-sheets","Google Sheets","ad-seccion-ia");
     agregarSeccionDinamica("ad-seccion-ia","IA","ad-seccion-reparar");
 
-    if(tituloPrincipal) tituloPrincipal.textContent="Administrador de titulación";
-    if(descripcionPrincipal) descripcionPrincipal.textContent="Gestión de períodos, coordinadores, carreras, estudiantes, Google Sheets, IA y diagnóstico.";
-    if($("ad-badge-version")) $("ad-badge-version").textContent="v"+APP_VERSION;
-    if($("ad-footer-version")) $("ad-footer-version").textContent="Versión "+APP_VERSION;
+    enlaceReparar=document.querySelector('[data-ad-view-target="ad-seccion-reparar"]');
+    if(enlaceReparar){
+      enlaceReparar.textContent="Mantenimiento de datos";
+      enlaceReparar.setAttribute("href","#ad-seccion-reparar");
+    }
+
+    if(tituloPrincipal)tituloPrincipal.textContent="Administrador de titulación";
+    if(descripcionPrincipal)descripcionPrincipal.textContent="Gestión de períodos, coordinadores, carreras, estudiantes, Google Sheets, IA, mantenimiento y diagnóstico.";
+    if($("ad-badge-version"))$("ad-badge-version").textContent="v"+APP_VERSION;
+    if($("ad-footer-version"))$("ad-footer-version").textContent="Versión "+APP_VERSION;
 
     agregarCss();
     agregarModal();
     instalarNavegacion();
 
-    if(window.location.hash==="#ad-seccion-sheets") window.setTimeout(function(){mostrarVista("ad-seccion-sheets");},0);
-    if(window.location.hash==="#ad-seccion-ia") window.setTimeout(function(){mostrarVista("ad-seccion-ia");},0);
+    if(window.location.hash==="#ad-seccion-sheets")window.setTimeout(function(){mostrarVista("ad-seccion-sheets");},0);
+    if(window.location.hash==="#ad-seccion-ia")window.setTimeout(function(){mostrarVista("ad-seccion-ia");},0);
+    if(window.location.hash==="#ad-seccion-reparar")window.setTimeout(function(){mostrarVista("ad-seccion-reparar");},0);
+  }
+
+  function instalarMantenimientoSiDisponible(){
+    if(window.ADRepararApp){
+      if(typeof window.ADRepararApp.instalarMantenimiento==="function")window.ADRepararApp.instalarMantenimiento();
+      else if(typeof window.ADRepararApp.instalarNormalizador==="function")window.ADRepararApp.instalarNormalizador();
+    }
   }
 
   transformar();
 
-  cargarScript("./ad-js/ad-periodos.app.js?v="+encodeURIComponent(APP_VERSION),"ad-periodos-app-script").catch(function(error){var seccion=$("ad-seccion-periodos");if(seccion) seccion.innerHTML='<div class="ad-card"><div class="ad-empty">'+(error.message||String(error))+'</div></div>';});
-  cargarScript("./ad-js/ad-base-repair.service.js?v="+encodeURIComponent(APP_VERSION),"ad-base-repair-service-script").then(function(){if(window.ADRepararApp&&typeof window.ADRepararApp.instalarNormalizador==="function") window.ADRepararApp.instalarNormalizador();}).catch(function(error){console.error("No se pudo cargar el analizador de base:",error);});
-  cargarScript("./ad-js/ad-estudiantes.service.js?v="+encodeURIComponent(APP_VERSION),"ad-estudiantes-service-script").then(function(){return cargarScript("./ad-js/ad-estudiantes.actions.service.js?v="+encodeURIComponent(APP_VERSION),"ad-estudiantes-actions-script");}).then(function(){return cargarScript("./ad-js/ad-estudiantes.runtime.js?v="+encodeURIComponent(APP_VERSION),"ad-estudiantes-runtime-script");}).then(function(){return cargarScript("./ad-js/ad-estadisticas.app.js?v="+encodeURIComponent(APP_VERSION),"ad-estadisticas-app-script");}).catch(function(error){var estado=$("ad-estado-estudiantes");if(estado){estado.classList.add("is-error");estado.textContent=error.message||String(error);}});
+  cargarScript("./ad-js/ad-periodos.app.js?v="+encodeURIComponent(APP_VERSION),"ad-periodos-app-script")
+    .catch(function(error){
+      var seccion=$("ad-seccion-periodos");
+      if(seccion)seccion.innerHTML='<div class="ad-card"><div class="ad-empty">'+(error.message||String(error))+'</div></div>';
+    });
 
-  cargarScript("./ad-js/ad-sheets.service.js?v="+encodeURIComponent(APP_VERSION),"ad-sheets-service-script").then(function(){return cargarScript("./ad-js/ad-sheets.app.js?v="+encodeURIComponent(APP_VERSION),"ad-sheets-app-script");}).catch(function(error){var seccion=$("ad-seccion-sheets");if(seccion) seccion.innerHTML='<div class="ad-card"><div class="ad-empty">No se pudo cargar Google Sheets: '+(error.message||String(error))+'</div></div>';});
-  cargarScript("./ad-js/ad-ia.service.js?v="+encodeURIComponent(APP_VERSION),"ad-ia-service-script").then(function(){return cargarScript("./ad-js/ad-ia.app.js?v="+encodeURIComponent(APP_VERSION),"ad-ia-app-script");}).catch(function(error){var seccion=$("ad-seccion-ia");if(seccion) seccion.innerHTML='<div class="ad-card"><div class="ad-empty">No se pudo cargar IA: '+(error.message||String(error))+'</div></div>';});
+  cargarScript("./ad-js/ad-base-repair.service.js?v="+encodeURIComponent(APP_VERSION),"ad-base-repair-service-script")
+    .then(instalarMantenimientoSiDisponible)
+    .catch(function(error){console.error("No se pudo cargar el mantenimiento de Firebase:",error);});
 
-  window.ADTitulosApp={mostrarVista:mostrarVista,transformar:transformar,activarModuloVista:activarModuloVista};
+  cargarScript("./ad-js/ad-estudiantes.service.js?v="+encodeURIComponent(APP_VERSION),"ad-estudiantes-service-script")
+    .then(function(){return cargarScript("./ad-js/ad-estudiantes.actions.service.js?v="+encodeURIComponent(APP_VERSION),"ad-estudiantes-actions-script");})
+    .then(function(){return cargarScript("./ad-js/ad-estudiantes.runtime.js?v="+encodeURIComponent(APP_VERSION),"ad-estudiantes-runtime-script");})
+    .then(function(){return cargarScript("./ad-js/ad-estadisticas.app.js?v="+encodeURIComponent(APP_VERSION),"ad-estadisticas-app-script");})
+    .catch(function(error){
+      var estado=$("ad-estado-estudiantes");
+      if(estado){estado.classList.add("is-error");estado.textContent=error.message||String(error);}
+    });
+
+  cargarScript("./ad-js/ad-sheets.service.js?v="+encodeURIComponent(APP_VERSION),"ad-sheets-service-script")
+    .then(function(){
+      return cargarScript("./ad-js/ad-sheets-repair.service.js?v="+encodeURIComponent(APP_VERSION),"ad-sheets-repair-service-script");
+    })
+    .then(function(){
+      instalarMantenimientoSiDisponible();
+      return cargarScript("./ad-js/ad-sheets.app.js?v="+encodeURIComponent(APP_VERSION),"ad-sheets-app-script");
+    })
+    .catch(function(error){
+      var seccion=$("ad-seccion-sheets");
+      if(seccion)seccion.innerHTML='<div class="ad-card"><div class="ad-empty">No se pudo cargar Google Sheets: '+(error.message||String(error))+'</div></div>';
+      console.error("No se pudo cargar el mantenimiento de Google Sheets:",error);
+    });
+
+  cargarScript("./ad-js/ad-ia.service.js?v="+encodeURIComponent(APP_VERSION),"ad-ia-service-script")
+    .then(function(){return cargarScript("./ad-js/ad-ia.app.js?v="+encodeURIComponent(APP_VERSION),"ad-ia-app-script");})
+    .catch(function(error){
+      var seccion=$("ad-seccion-ia");
+      if(seccion)seccion.innerHTML='<div class="ad-card"><div class="ad-empty">No se pudo cargar IA: '+(error.message||String(error))+'</div></div>';
+    });
+
+  window.ADTitulosApp={
+    mostrarVista:mostrarVista,
+    transformar:transformar,
+    activarModuloVista:activarModuloVista
+  };
 })(window,document);
