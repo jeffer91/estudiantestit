@@ -4,8 +4,8 @@ Ruta: /administrador/ad-js/ad-sheets-repair.service.js
 Función:
 - Analizar Google Sheets como base principal.
 - Ejecutar únicamente correcciones seguras autorizadas por Apps Script.
-- Mantener una lectura de compatibilidad cuando el Apps Script aún no expone
-  las acciones de mantenimiento, sin modificar datos.
+- Usar un análisis compatible de solo lectura cuando el Apps Script todavía
+  no expone las acciones nuevas de mantenimiento.
 ========================================================= */
 (function(window){
   "use strict";
@@ -61,7 +61,8 @@ Función:
       data.pendientes,
       data.casos,
       data.resultado,
-      data.result
+      data.result,
+      data.data
     ];
     for(var i=0;i<candidatos.length;i+=1){
       if(Array.isArray(candidatos[i])) return candidatos[i];
@@ -117,15 +118,18 @@ Función:
     };
   }
 
-  function mensajeNoSoportado(error){
-    var mensaje=texto(error&&error.message?error.message:error).toLowerCase();
-    return mensaje.indexOf("acción")>=0&&(
-      mensaje.indexOf("no válida")>=0||
+  function mensajeAccionNoDisponible(error){
+    var mensaje=normal(error&&error.message?error.message:error);
+    var mencionaAccion=mensaje.indexOf("accion")>=0||mensaje.indexOf("lectura")>=0;
+    var noDisponible=
+      mensaje.indexOf("no disponible")>=0||
+      mensaje.indexOf("no esta disponible")>=0||
       mensaje.indexOf("no valida")>=0||
       mensaje.indexOf("desconocida")>=0||
       mensaje.indexOf("no soportada")>=0||
-      mensaje.indexOf("no existe")>=0
-    );
+      mensaje.indexOf("no existe")>=0||
+      mensaje.indexOf("sin implementar")>=0;
+    return mencionaAccion&&noDisponible;
   }
 
   function valorCampo(item,nombres){
@@ -151,23 +155,21 @@ Función:
   }
 
   function titulos(item){
-    var candidatos=[
+    return [
       valorCampo(item,["titulo1","Titulo1","propuesta1"]),
       valorCampo(item,["titulo2","Titulo2","propuesta2"]),
       valorCampo(item,["titulo3","Titulo3","propuesta3"])
     ].filter(Boolean);
-    return candidatos;
   }
 
   function analizarEnviosCompatibilidad(lista,casos){
     var grupos={};
     (lista||[]).forEach(function(item,indice){
       var clave=claveEnvio(item);
-      var hoja="Envios";
       var fila=numero(item._fila||item.fila||item.numeroFila,indice+2);
-      var ts=titulos(item);
+      var propuestas=titulos(item);
       var vistos={};
-      var repetidos=ts.filter(function(titulo){
+      var repetidos=propuestas.filter(function(titulo){
         var n=normal(titulo);
         if(!n) return false;
         if(vistos[n]) return true;
@@ -177,8 +179,8 @@ Función:
 
       if(repetidos.length){
         casos.push(normalizarCaso({
-          id:hoja+"__"+fila+"__titulos",
-          hoja:hoja,
+          id:"Envios__"+fila+"__titulos",
+          hoja:"Envios",
           fila:fila,
           idRegistro:valorCampo(item,["idRegistro","id","_id","envioId"]),
           cedula:valorCampo(item,["cedula","numeroIdentificacion"]),
@@ -192,7 +194,7 @@ Función:
 
       if(clave){
         if(!grupos[clave]) grupos[clave]=[];
-        grupos[clave].push({item:item,indice:indice,fila:fila,firma:firmaSimple(item)});
+        grupos[clave].push({item:item,fila:fila,firma:firmaSimple(item)});
       }
     });
 
@@ -210,7 +212,7 @@ Función:
           periodo:valorCampo(entry.item,["periodo","periodoId","periodoLabel"]),
           problema:exactos?"Registro duplicado exacto":"Registros diferentes para la misma cédula y período",
           correccionPropuesta:exactos
-            ?"Apps Script debe conservar una fila y respaldar la copia antes de retirarla"
+            ?"Desplegar el módulo de mantenimiento para respaldar y retirar la copia de forma segura"
             :"Comparar manualmente las filas antes de fusionar o eliminar",
           seguro:false,
           tipo:exactos?"DUPLICADO_EXACTO":"DUPLICADO_CONFLICTO"
@@ -253,19 +255,25 @@ Función:
     (pendientes||[]).forEach(function(item,indice){
       var clave=claveEnvio(item);
       if(!clave||!existentes[clave]) return;
+      var fila=numero(item._fila||item.fila,indice+2);
       casos.push(normalizarCaso({
-        id:"PendientesSync__"+numero(item._fila||item.fila,indice+2)+"__resuelto",
+        id:"PendientesSync__"+fila+"__resuelto",
         hoja:"PendientesSync",
-        fila:numero(item._fila||item.fila,indice+2),
+        fila:fila,
         idRegistro:valorCampo(item,["idRegistro","id","_id","envioId"]),
         cedula:valorCampo(item,["cedula","numeroIdentificacion"]),
         periodo:valorCampo(item,["periodo","periodoId","periodoLabel"]),
         problema:"El registro pendiente ya existe en Envios",
-        correccionPropuesta:"Respaldar y retirar el pendiente ya sincronizado",
+        correccionPropuesta:"Desplegar el módulo de mantenimiento para respaldar y retirar el pendiente sincronizado",
         seguro:false,
         tipo:"PENDIENTE_YA_SINCRONIZADO"
       },casos.length));
     });
+  }
+
+  function detalleError(parte){
+    if(!parte||parte.status!=="rejected") return "";
+    return texto(parte.reason&&parte.reason.message?parte.reason.message:parte.reason);
   }
 
   function analizarLecturasDisponibles(){
@@ -275,10 +283,28 @@ Función:
       servicio.enviarGet("LISTAR_COORDINADORES",{incluirInactivos:true}),
       servicio.enviarGet("LISTAR_PENDIENTES_SYNC",{})
     ]).then(function(partes){
+      var exitos=partes.filter(function(parte){return parte.status==="fulfilled";}).length;
+      if(!exitos){
+        var errores=partes.map(detalleError).filter(Boolean);
+        throw new Error(
+          "El Apps Script conectado no permite las acciones de mantenimiento ni las lecturas compatibles"+
+          (errores.length?": "+errores[0]:".")
+        );
+      }
+
       var envios=partes[0].status==="fulfilled"?extraerLista(partes[0].value):[];
       var coordinadores=partes[1].status==="fulfilled"?extraerLista(partes[1].value):[];
       var pendientes=partes[2].status==="fulfilled"?extraerLista(partes[2].value):[];
       var casos=[];
+      var hojas=[];
+      var advertencias=[];
+
+      if(partes[0].status==="fulfilled") hojas.push("Envios");
+      else advertencias.push("No se pudo leer Envios");
+      if(partes[1].status==="fulfilled") hojas.push("Coordinadores");
+      else advertencias.push("No se pudo leer Coordinadores");
+      if(partes[2].status==="fulfilled") hojas.push("PendientesSync");
+      else advertencias.push("No se pudo leer PendientesSync");
 
       analizarEnviosCompatibilidad(envios,casos);
       analizarCoordinadoresCompatibilidad(coordinadores,casos);
@@ -288,14 +314,15 @@ Función:
         ok:true,
         fuente:"lectura-compatible",
         capacidadCorreccion:false,
-        totalHojas:3,
+        totalHojas:hojas.length,
         totalRegistros:envios.length+coordinadores.length+pendientes.length,
         totalCasos:casos.length,
         seguros:0,
         manuales:casos.length,
-        hojas:["Envios","Coordinadores","PendientesSync"],
+        hojas:hojas,
         casos:casos,
-        mensaje:"El Apps Script actual todavía no expone las acciones de mantenimiento. Se realizó un análisis de solo lectura; no se habilitaron correcciones automáticas."
+        mensaje:"El Apps Script actual todavía no incluye el módulo de mantenimiento. Se realizó un análisis de solo lectura y las correcciones automáticas permanecen desactivadas."+
+          (advertencias.length?" "+advertencias.join(". ")+".":"")
       };
     });
   }
@@ -306,7 +333,7 @@ Función:
       modo:"SEGURO",
       incluirDetalles:true
     }).then(normalizarAnalisis).catch(function(error){
-      if(mensajeNoSoportado(error)) return analizarLecturasDisponibles();
+      if(mensajeAccionNoDisponible(error)) return analizarLecturasDisponibles();
       throw error;
     });
   }
