@@ -1,5 +1,87 @@
-/* Analizador seguro de títulos y duplicados */
+/* Mantenimiento seguro de Google Sheets y respaldo Firebase */
+.ad-maintenance-root{display:block}
 .ad-base-repair-card{margin-top:18px}
+
+.ad-repair-source-tabs{
+  display:flex;
+  flex-wrap:wrap;
+  gap:12px;
+  margin:0 0 18px
+}
+
+.ad-repair-source-tab{
+  display:inline-flex;
+  align-items:center;
+  gap:9px;
+  min-height:46px;
+  padding:10px 15px;
+  border:1px solid #cbd5e1;
+  border-radius:12px;
+  background:#fff;
+  color:#334155;
+  font:inherit;
+  font-weight:750;
+  cursor:pointer;
+  transition:border-color .16s ease,background .16s ease,color .16s ease,box-shadow .16s ease
+}
+
+.ad-repair-source-tab:hover{
+  border-color:#7aa7d8;
+  box-shadow:0 4px 14px rgba(15,56,100,.08)
+}
+
+.ad-repair-source-tab.is-active{
+  border-color:#184878;
+  background:#184878;
+  color:#fff;
+  box-shadow:0 6px 16px rgba(24,72,120,.18)
+}
+
+.ad-repair-source-tab:focus-visible{
+  outline:3px solid rgba(37,99,235,.28);
+  outline-offset:2px
+}
+
+.ad-repair-source-label{
+  display:inline-flex;
+  align-items:center;
+  border-radius:999px;
+  padding:3px 8px;
+  font-size:.72rem;
+  line-height:1.2;
+  font-weight:800;
+  white-space:nowrap
+}
+
+.ad-repair-source-label--primary{
+  background:#e8f1ff;
+  color:#1556a0
+}
+
+.ad-repair-source-label--backup{
+  background:#eef2f6;
+  color:#526174
+}
+
+.ad-repair-source-tab.is-active .ad-repair-source-label{
+  background:rgba(255,255,255,.18);
+  color:#fff
+}
+
+.ad-repair-source-panel[hidden]{display:none!important}
+
+.ad-repair-warning{
+  margin:0 0 16px;
+  padding:13px 15px;
+  border:1px solid #efd58e;
+  border-radius:12px;
+  background:#fff8e7;
+  color:#6f5314;
+  line-height:1.5
+}
+
+#ad-firebase-original-content:empty{display:none}
+#ad-firebase-original-content>.ad-section-head:first-child{margin-top:0}
 
 .ad-base-repair-actions{
   display:flex;
@@ -9,8 +91,14 @@
 }
 
 .ad-base-repair-table{min-width:1180px}
+.ad-sheets-repair-table{min-width:1580px}
+
 .ad-base-repair-table th:first-child,
-.ad-base-repair-table td:first-child{text-align:center;width:86px}
+.ad-base-repair-table td:first-child{
+  width:86px;
+  text-align:center
+}
+
 .ad-base-repair-table code{
   display:inline-block;
   max-width:220px;
@@ -23,7 +111,18 @@
 .ad-base-repair-table tr.is-safe{background:#fbfffc}
 .ad-base-repair-table input[type="checkbox"]{width:18px;height:18px}
 
+.ad-sheets-repair-table th:nth-child(2),
+.ad-sheets-repair-table td:nth-child(2){min-width:145px}
+.ad-sheets-repair-table th:nth-child(3),
+.ad-sheets-repair-table td:nth-child(3){width:74px;text-align:center}
+.ad-sheets-repair-table th:nth-child(7),
+.ad-sheets-repair-table td:nth-child(7),
+.ad-sheets-repair-table th:nth-child(8),
+.ad-sheets-repair-table td:nth-child(8){min-width:250px}
+
 @media(max-width:760px){
+  .ad-repair-source-tabs{display:grid;grid-template-columns:1fr}
+  .ad-repair-source-tab{justify-content:space-between;width:100%}
   .ad-base-repair-actions{width:100%;justify-content:stretch}
   .ad-base-repair-actions .ad-btn{flex:1 1 210px}
 }
