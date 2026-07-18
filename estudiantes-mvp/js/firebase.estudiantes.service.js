@@ -6,6 +6,7 @@
   - Buscar primero en la colección Estudiantes usando la cédula como ID del documento.
   - Normalizar datos académicos para la pantalla del estudiante.
   - Dejar lista la información para el flujo de paginación.
+  - Cargar la consulta tolerante y la pantalla visible de títulos en revisión.
 */
 (function (window) {
   'use strict';
@@ -205,9 +206,37 @@
     return utils.ok(estudiante, 'Datos académicos válidos.');
   }
 
+  function cargarComplementosConsulta() {
+    var document = window.document;
+    var estilo;
+    var script;
+
+    if (!document || !document.head) {
+      return;
+    }
+
+    if (!document.querySelector('link[data-estudiante-revision="true"]')) {
+      estilo = document.createElement('link');
+      estilo.rel = 'stylesheet';
+      estilo.href = 'css/estudiante.consulta.revision.css?v=1.1.0';
+      estilo.setAttribute('data-estudiante-revision', 'true');
+      document.head.appendChild(estilo);
+    }
+
+    if (!document.querySelector('script[data-estudiante-revision="true"]')) {
+      script = document.createElement('script');
+      script.src = 'js/estudiante.consulta.revision.js?v=1.1.0';
+      script.async = false;
+      script.setAttribute('data-estudiante-revision', 'true');
+      document.head.appendChild(script);
+    }
+  }
+
   window.EstudianteMVPFirebaseEstudiantes = Object.freeze({
     buscarPorCedula: buscarPorCedula,
     normalizarEstudiante: normalizarEstudiante,
     validarEstudianteParaContinuar: validarEstudianteParaContinuar
   });
+
+  cargarComplementosConsulta();
 })(window);
