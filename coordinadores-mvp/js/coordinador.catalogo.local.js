@@ -3,8 +3,8 @@ Archivo: coordinador.catalogo.local.js
 Ruta: /coordinadores-mvp/js/coordinador.catalogo.local.js
 Función:
 - Usar Google Sheets como primera fuente del catálogo de coordinadores.
-- Si la hoja Coordinadores está vacía, leer el último catálogo compartido por Administrador.
-- Reemplazar el servicio congelado por una copia compatible con el fallback local.
+- Guardar el último catálogo válido en este navegador.
+- Usar ese catálogo local únicamente si Google Sheets no responde.
 - Evitar consultas a Firebase cuando su cuota está agotada.
 ========================================================= */
 (function(window){
@@ -41,7 +41,7 @@ Función:
     return (Array.isArray(lista)?lista:[]).map(function(item,indice){
       var salida=typeof normalizar==='function'?normalizar(item,indice):Object.assign({},item||{});
       if(!salida)return null;
-      salida.fuente='administrador-local';
+      salida.fuente='catalogo-local';
       salida.id=texto(salida.id||salida._docId||salida.nombre||('coordinador_'+indice));
       return salida;
     }).filter(function(item){return item&&item.nombre&&item.activo!==false;});
@@ -68,8 +68,8 @@ Función:
           var listaLocal=normalizarListaLocal(leerCatalogo(),normalizar);
           if(listaLocal.length)return listaLocal;
           throw new Error(
-            'La hoja Coordinadores está vacía y aún no existe un catálogo local. ' +
-            'Abre Administrador → Carreras una vez para compartir los coordinadores. Error Sheets: ' +
+            'La hoja Coordinadores no respondió y todavía no existe un catálogo local en este navegador. ' +
+            'Vuelve a actualizar cuando Google Sheets esté disponible. Error: ' +
             (errorSheets&&errorSheets.message?errorSheets.message:String(errorSheets))
           );
         });
