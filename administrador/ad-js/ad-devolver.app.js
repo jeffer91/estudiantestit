@@ -115,7 +115,7 @@ Función:
     if (document.getElementById("ad-coordinadores-eliminar-script")) return;
     var script = document.createElement("script");
     script.id = "ad-coordinadores-eliminar-script";
-    script.src = "./ad-js/ad-coordinadores.eliminar.patch.js?v=1.1.0";
+    script.src = "./ad-js/ad-coordinadores.eliminar.patch.js?v=1.2.0";
     script.async = true;
     document.body.appendChild(script);
   }
