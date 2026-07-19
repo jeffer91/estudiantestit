@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Coordinadores de Titulación</title>
-  <link rel="stylesheet" href="css/coordinador.css?v=2.4.6" />
+  <link rel="stylesheet" href="css/coordinador.css?v=2.5.0" />
 </head>
 <body>
   <header class="app-header">
@@ -15,7 +15,7 @@
         <h1>Coordinadores de titulación</h1>
         <p>Revisión y aprobación de propuestas académicas.</p>
       </div>
-      <span class="version-badge">v2.4.6</span>
+      <span class="version-badge">v2.5.0</span>
     </div>
   </header>
 
@@ -36,7 +36,7 @@
         <strong id="coordinadorNombre">-</strong>
         <span id="coordinadorCarreras">Sin carreras asignadas</span>
       </div>
-      <div id="estadoPrincipal" class="status-message is-info">Inicializando conexión directa con Google Sheets...</div>
+      <div id="estadoPrincipal" class="status-message is-info">Inicializando conexión...</div>
     </section>
 
     <section class="card content-card">
@@ -62,7 +62,7 @@
 
     <section class="card diagnostico-card is-hidden" id="diagnosticoPanel" hidden>
       <div class="diagnostic-head">
-        <div><p class="section-kicker">Diagnóstico</p><h2>Estado de Google Sheets</h2></div>
+        <div><p class="section-kicker">Diagnóstico</p><h2>Estado de la conexión</h2></div>
         <button type="button" class="btn btn--ghost" data-accion="ocultar-diagnostico">Cerrar</button>
       </div>
       <pre id="diagnosticoResultado" class="result-box">Diagnóstico pendiente.</pre>
@@ -115,14 +115,9 @@
     </div>
   </section>
 
-  <script src="js/coordinador.config.js?v=2.4.6"></script>
-  <script src="js/coordinador.utils.js?v=2.4.6"></script>
-  <script src="js/coordinador.state.js?v=2.4.6"></script>
-  <script src="js/coordinador.sheets.primary.js?v=2.4.6"></script>
-  <script src="js/coordinador.catalogo.local.js?v=2.4.6"></script>
-  <script src="js/coordinador.envios.carreras.js?v=2.4.6"></script>
-  <script src="js/coordinador.ui.js?v=2.4.6"></script>
-  <script src="js/coordinador.modal.js?v=2.4.6"></script>
-  <script src="js/coordinador.app.js?v=2.4.6"></script>
+  <script src="js/coordinador.config.js?v=2.5.0"></script>
+  <script src="js/coordinador.utils.js?v=2.5.0"></script>
+  <script src="js/coordinador.state.js?v=2.5.0"></script>
+  <script src="js/coordinador.bootstrap.independiente.js?v=2.5.0"></script>
 </body>
 </html>
