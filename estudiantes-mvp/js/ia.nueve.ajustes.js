@@ -9,6 +9,23 @@
     'opciones', 'propuestas', 'alternativas'
   ];
 
+  function cargarModalProcesoEnvio() {
+    var document = window.document;
+    var script;
+
+    if (!document || document.getElementById('estudiante-envio-modal-script')) {
+      return;
+    }
+
+    script = document.createElement('script');
+    script.id = 'estudiante-envio-modal-script';
+    script.src = 'js/estudiante.envio.modal.js?v=1.0.0';
+    script.async = false;
+    document.head.appendChild(script);
+  }
+
+  cargarModalProcesoEnvio();
+
   if (!original) return;
 
   function contar(valor) {
