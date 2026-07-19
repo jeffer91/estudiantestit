@@ -98,14 +98,25 @@
   }
   function mostrarError(error){
     var estado=document.getElementById('estadoPrincipal');
+    var periodo=document.getElementById('periodoSelect');
+    var coordinador=document.getElementById('coordinadorSelect');
+    if(periodo)periodo.innerHTML='<option value="">No disponible</option>';
+    if(coordinador){coordinador.innerHTML='<option value="">No disponible</option>';coordinador.disabled=true;}
     if(estado){
       estado.className='status-message is-error';
-      estado.textContent='No se pudo iniciar la aplicación. Actualiza la página e intenta nuevamente.';
+      estado.textContent='No se pudo obtener la configuración de conexión. Actualiza la página e intenta nuevamente.';
     }
     console.error('[Coordinadores] Error de inicio:',error);
   }
 
-  resolverConfiguracion().then(cargarAplicacion).catch(mostrarError);
+  resolverConfiguracion()
+    .then(function(configuracion){
+      if(!configuracion||!configuracion.endpoint){
+        throw window.__COORDINADOR_CONFIG_ERROR||new Error('Configuración no disponible.');
+      }
+      return cargarAplicacion();
+    })
+    .catch(mostrarError);
 
   window.CoordinadorMVPBootstrapIndependiente=Object.freeze({
     version:VERSION,
