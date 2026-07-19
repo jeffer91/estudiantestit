@@ -132,7 +132,7 @@ function conectar(){var b=el("ad-btn-devolver-titulo");if(b)b.addEventListener("
 function cargarComplementos(){
   cargarScript("ad-ia-proxy-override-script","./ad-js/ad-ia.proxy.override.js?v=1.7.2").catch(function(){});
   cargarScript("ad-coordinadores-eliminar-script","./ad-js/ad-coordinadores.eliminar.patch.js?v=1.2.0").catch(function(){});
-  cargarScript("ad-fuente-principal-script","./ad-js/ad-fuente-principal.patch.js?v=1.0.0").catch(function(error){console.error(error);});
+  cargarScript("ad-fuente-principal-script","./ad-js/ad-fuente-principal.patch.js?v=1.1.0").catch(function(error){console.error(error);});
 }
 document.addEventListener("DOMContentLoaded",conectar);
 cargarComplementos();
