@@ -4,6 +4,7 @@
   - Normalizar estudiante y propuesta para el motor IA 3x3.
   - Mantener las definiciones académicas de las tres etapas.
   - Permitir un nuevo envío cuando Firebase marque un registro como devuelto o eliminado.
+  - Mostrar inmediatamente el modal de reglas al consultar una cédula válida.
 
   La generación individual de tres títulos y la selección automática fueron retiradas.
 */
@@ -190,6 +191,51 @@
     window.EstudianteMVPSheets = Object.freeze(reemplazo);
   }
 
+  function instalarModalConsultaInmediato() {
+    var documento = window.document;
+
+    if (!documento || documento.__modalConsultaInmediatoInstalado === true) {
+      return;
+    }
+
+    documento.__modalConsultaInmediatoInstalado = true;
+
+    documento.addEventListener(
+      'submit',
+      function (evento) {
+        var formulario = evento.target;
+        var input;
+        var utils;
+        var cedula;
+        var modales;
+
+        if (!formulario || formulario.id !== 'formConsulta') {
+          return;
+        }
+
+        input = documento.getElementById('cedulaInput');
+        utils = obtenerUtils();
+        cedula = utils && typeof utils.limpiarCedula === 'function'
+          ? utils.limpiarCedula(input ? input.value : '')
+          : String(input ? input.value : '').replace(/\D/g, '');
+
+        if (!cedula) {
+          return;
+        }
+
+        modales = window.EstudianteMVPModales || null;
+
+        if (
+          modales &&
+          typeof modales.mostrarConsulta === 'function'
+        ) {
+          modales.mostrarConsulta();
+        }
+      },
+      true
+    );
+  }
+
   window.EstudianteMVPIAPrompt = Object.freeze({
     normalizarContexto: normalizarContexto,
     obtenerEtapas: function () {
@@ -201,4 +247,5 @@
   });
 
   instalarPermisoReenvio();
+  instalarModalConsultaInmediato();
 })(window);
