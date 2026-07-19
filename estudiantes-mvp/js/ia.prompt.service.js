@@ -3,8 +3,10 @@
   Funciones vigentes:
   - Normalizar estudiante y propuesta para el motor IA 3x3.
   - Mantener las definiciones académicas de las tres etapas.
-  - Permitir un nuevo envío cuando Firebase marque un registro como devuelto o eliminado.
-  - Mostrar inmediatamente el modal de reglas al consultar una cédula válida.
+  - Usar Google Sheets como única fuente de decisión sobre envíos previos.
+  - Mantener Firebase como respaldo de escritura, sin autoridad para bloquear reenvíos.
+  - Impedir que una falla de Google Sheets permita continuar sin verificación.
+  - Mostrar el modal de reglas después de validar la consulta en Google Sheets.
 
   La generación individual de tres títulos y la selección automática fueron retiradas.
 */
@@ -32,6 +34,10 @@
     }
   ]);
 
+  var consultaSheetsOriginal = null;
+  var consultaSheetsCache = null;
+  var reenviandoConsulta = false;
+
   function obtenerUtils() {
     return window.EstudianteMVPUtils || null;
   }
@@ -43,6 +49,14 @@
       : String(valor == null ? '' : valor).replace(/\s+/g, ' ').trim();
 
     return limpio || 'No especificado';
+  }
+
+  function limpiarCedula(valor) {
+    var utils = obtenerUtils();
+
+    return utils && typeof utils.limpiarCedula === 'function'
+      ? utils.limpiarCedula(valor)
+      : String(valor || '').replace(/\D/g, '');
   }
 
   function obtenerEtapaPropuesta(numero) {
@@ -95,7 +109,7 @@
     estado = String(
       registro.estado ||
       registro.estadoFinal ||
-      registro.estadoFirebase ||
+      registro.estadoGoogleSheets ||
       registro.estadoProceso ||
       ''
     ).toUpperCase().trim();
@@ -109,80 +123,68 @@
     ].indexOf(estado) >= 0;
   }
 
-  function consultarPermisoFirebase(cedula) {
-    var firebaseCore = window.EstudianteMVPFirebaseCore || null;
-    var config = window.EstudianteMVPConfig || null;
-    var coleccion = config && typeof config.obtenerColeccion === 'function'
-      ? config.obtenerColeccion('titulos') || 'titulos'
-      : 'titulos';
-    var cedulaLimpia = String(cedula || '').replace(/\D/g, '');
+  function normalizarDecisionSheets(resultado, cedula) {
+    var salida = Object.assign({}, resultado || {});
 
-    if (!firebaseCore || !cedulaLimpia) return Promise.resolve(false);
+    salida.cedula = salida.cedula || limpiarCedula(cedula);
+    salida.origenDecision = 'google-sheets';
 
-    return firebaseCore.leerDocumento(coleccion, cedulaLimpia)
-      .then(function (documento) {
-        if (documento && estadoPermiteReenvio(documento)) return true;
-        if (documento) return false;
+    if (
+      salida.encontrado === true &&
+      estadoPermiteReenvio(salida.envio || salida)
+    ) {
+      salida.encontrado = false;
+      salida.reenvioPermitido = true;
+      salida.mensaje = 'Google Sheets permite un nuevo envío.';
+    }
 
-        return firebaseCore.consultarPorCampo(
-          coleccion,
-          'cedula',
-          '==',
-          cedulaLimpia,
-          5
-        ).then(function (lista) {
-          return (lista || []).some(estadoPermiteReenvio);
-        });
-      })
-      .catch(function () {
-        return false;
-      });
+    return salida;
   }
 
-  function instalarPermisoReenvio() {
+  function instalarSheetsComoFuentePrincipal() {
     var sheets = window.EstudianteMVPSheets || null;
-    var consultaOriginal;
     var reemplazo;
 
     if (
       !sheets ||
-      sheets.__permisoReenvioInstalado ||
+      sheets.__googleSheetsFuentePrincipal === true ||
       typeof sheets.consultarEnvioPorCedula !== 'function'
     ) {
       return;
     }
 
-    consultaOriginal = sheets.consultarEnvioPorCedula.bind(sheets);
+    consultaSheetsOriginal = sheets.consultarEnvioPorCedula.bind(sheets);
+
     reemplazo = Object.assign({}, sheets, {
       consultarEnvioPorCedula: function (cedula) {
-        return consultarPermisoFirebase(cedula).then(function (permitido) {
-          if (permitido) {
-            return {
-              ok: true,
-              encontrado: false,
-              reenvioPermitido: true,
-              cedula: String(cedula || '').replace(/\D/g, ''),
-              mensaje: 'Firebase permite un nuevo envío.'
-            };
-          }
+        var cedulaLimpia = limpiarCedula(cedula);
+        var resultadoCache;
 
-          return consultaOriginal(cedula).then(function (resultado) {
-            resultado = resultado || {};
+        if (
+          consultaSheetsCache &&
+          consultaSheetsCache.cedula === cedulaLimpia
+        ) {
+          resultadoCache = consultaSheetsCache.resultado;
+          consultaSheetsCache = null;
+          return Promise.resolve(resultadoCache);
+        }
 
-            if (
-              resultado.encontrado &&
-              estadoPermiteReenvio(resultado.envio || resultado)
-            ) {
-              resultado.encontrado = false;
-              resultado.reenvioPermitido = true;
-            }
-
-            return resultado;
+        return consultaSheetsOriginal(cedulaLimpia)
+          .then(function (resultado) {
+            return normalizarDecisionSheets(resultado, cedulaLimpia);
           });
-        });
       }
     });
 
+    Object.defineProperty(reemplazo, '__googleSheetsFuentePrincipal', {
+      value: true,
+      enumerable: false
+    });
+
+    /*
+      Compatibilidad con versiones anteriores del archivo: evita que otro
+      módulo vuelva a instalar el permiso de reenvío basado en Firebase.
+    */
     Object.defineProperty(reemplazo, '__permisoReenvioInstalado', {
       value: true,
       enumerable: false
@@ -191,46 +193,223 @@
     window.EstudianteMVPSheets = Object.freeze(reemplazo);
   }
 
-  function instalarModalConsultaInmediato() {
-    var documento = window.document;
+  function obtenerColeccionTitulos() {
+    var config = window.EstudianteMVPConfig || null;
 
-    if (!documento || documento.__modalConsultaInmediatoInstalado === true) {
+    return config && typeof config.obtenerColeccion === 'function'
+      ? config.obtenerColeccion('titulos') || 'titulos'
+      : 'titulos';
+  }
+
+  function esColeccionTitulos(coleccion) {
+    return String(coleccion || '').trim().toLowerCase() ===
+      String(obtenerColeccionTitulos()).trim().toLowerCase();
+  }
+
+  function instalarFirebaseTitulosSoloRespaldo() {
+    var firebase = window.EstudianteMVPFirebaseCore || null;
+    var leerDocumentoOriginal;
+    var consultarPorCampoOriginal;
+    var reemplazo;
+
+    if (!firebase || firebase.__titulosSoloRespaldo === true) {
       return;
     }
 
-    documento.__modalConsultaInmediatoInstalado = true;
+    leerDocumentoOriginal = typeof firebase.leerDocumento === 'function'
+      ? firebase.leerDocumento.bind(firebase)
+      : null;
+
+    consultarPorCampoOriginal = typeof firebase.consultarPorCampo === 'function'
+      ? firebase.consultarPorCampo.bind(firebase)
+      : null;
+
+    reemplazo = Object.assign({}, firebase);
+
+    if (leerDocumentoOriginal) {
+      reemplazo.leerDocumento = function (coleccion, documento) {
+        if (esColeccionTitulos(coleccion)) {
+          return Promise.resolve(null);
+        }
+
+        return leerDocumentoOriginal(coleccion, documento);
+      };
+    }
+
+    if (consultarPorCampoOriginal) {
+      reemplazo.consultarPorCampo = function (
+        coleccion,
+        campo,
+        operador,
+        valor,
+        limite
+      ) {
+        if (esColeccionTitulos(coleccion)) {
+          return Promise.resolve([]);
+        }
+
+        return consultarPorCampoOriginal(
+          coleccion,
+          campo,
+          operador,
+          valor,
+          limite
+        );
+      };
+    }
+
+    Object.defineProperty(reemplazo, '__titulosSoloRespaldo', {
+      value: true,
+      enumerable: false
+    });
+
+    window.EstudianteMVPFirebaseCore = Object.freeze(reemplazo);
+  }
+
+  function mostrarModalConsulta() {
+    var modales = window.EstudianteMVPModales || null;
+
+    if (
+      modales &&
+      typeof modales.mostrarConsulta === 'function'
+    ) {
+      modales.mostrarConsulta();
+    }
+  }
+
+  function mostrarErrorSheets(error) {
+    var ui = window.EstudianteMVPUI || null;
+    var mensaje =
+      'No fue posible verificar tu envío en Google Sheets. ' +
+      'Intenta nuevamente en unos minutos.';
+    var estado;
+
+    console.error(
+      '[Estudiantes MVP] No se pudo validar el envío en Google Sheets:',
+      error
+    );
+
+    if (ui && typeof ui.setCargando === 'function') {
+      ui.setCargando(false);
+    }
+
+    if (ui && typeof ui.mostrarEstado === 'function') {
+      ui.mostrarEstado('#estadoPrincipal', mensaje, 'error');
+
+      if (typeof ui.enfocar === 'function') {
+        ui.enfocar('#cedulaInput');
+      }
+
+      return;
+    }
+
+    estado = window.document &&
+      window.document.getElementById('estadoPrincipal');
+
+    if (estado) {
+      estado.textContent = mensaje;
+      estado.classList.remove('is-info', 'is-warning', 'is-success');
+      estado.classList.add('is-error');
+    }
+  }
+
+  function mostrarConsultandoSheets() {
+    var ui = window.EstudianteMVPUI || null;
+
+    if (!ui) return;
+
+    if (typeof ui.setCargando === 'function') {
+      ui.setCargando(true, 'Consultando estado en Google Sheets...');
+    }
+
+    if (typeof ui.mostrarEstado === 'function') {
+      ui.mostrarEstado(
+        '#estadoPrincipal',
+        'Verificando tu registro en Google Sheets...',
+        'info'
+      );
+    }
+  }
+
+  function instalarConsultaConAutoridadSheets() {
+    var documento = window.document;
+
+    if (
+      !documento ||
+      documento.__consultaConAutoridadSheetsInstalada === true
+    ) {
+      return;
+    }
+
+    documento.__consultaConAutoridadSheetsInstalada = true;
 
     documento.addEventListener(
       'submit',
       function (evento) {
         var formulario = evento.target;
         var input;
-        var utils;
         var cedula;
-        var modales;
 
         if (!formulario || formulario.id !== 'formConsulta') {
           return;
         }
 
-        input = documento.getElementById('cedulaInput');
-        utils = obtenerUtils();
-        cedula = utils && typeof utils.limpiarCedula === 'function'
-          ? utils.limpiarCedula(input ? input.value : '')
-          : String(input ? input.value : '').replace(/\D/g, '');
+        if (reenviandoConsulta) {
+          reenviandoConsulta = false;
+          mostrarModalConsulta();
+          return;
+        }
 
+        input = documento.getElementById('cedulaInput');
+        cedula = limpiarCedula(input ? input.value : '');
+
+        /* La validación de campo vacío sigue a cargo de estudiante.app.js. */
         if (!cedula) {
           return;
         }
 
-        modales = window.EstudianteMVPModales || null;
+        evento.preventDefault();
+        evento.stopImmediatePropagation();
 
-        if (
-          modales &&
-          typeof modales.mostrarConsulta === 'function'
-        ) {
-          modales.mostrarConsulta();
+        mostrarConsultandoSheets();
+
+        if (typeof consultaSheetsOriginal !== 'function') {
+          mostrarErrorSheets(
+            new Error('La consulta de Google Sheets no está disponible.')
+          );
+          return;
         }
+
+        consultaSheetsOriginal(cedula)
+          .then(function (resultado) {
+            resultado = normalizarDecisionSheets(resultado, cedula);
+
+            if (resultado.ok === false) {
+              throw new Error(
+                resultado.mensaje ||
+                'Google Sheets no pudo verificar el envío.'
+              );
+            }
+
+            consultaSheetsCache = {
+              cedula: cedula,
+              resultado: resultado
+            };
+
+            reenviandoConsulta = true;
+
+            formulario.dispatchEvent(
+              new window.Event('submit', {
+                bubbles: true,
+                cancelable: true
+              })
+            );
+          })
+          .catch(function (error) {
+            consultaSheetsCache = null;
+            reenviandoConsulta = false;
+            mostrarErrorSheets(error);
+          });
       },
       true
     );
@@ -243,9 +422,11 @@
     },
     obtenerEtapaPropuesta: obtenerEtapaPropuesta,
     estadoPermiteReenvio: estadoPermiteReenvio,
+    fuentePrincipalEnvios: 'google-sheets',
     modo: '3x3'
   });
 
-  instalarPermisoReenvio();
-  instalarModalConsultaInmediato();
+  instalarSheetsComoFuentePrincipal();
+  instalarFirebaseTitulosSoloRespaldo();
+  instalarConsultaConAutoridadSheets();
 })(window);
