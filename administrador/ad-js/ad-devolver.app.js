@@ -5,6 +5,7 @@ Función:
 - Devolver título enviado para que el estudiante pueda enviar nuevamente.
 - Copia el documento a historial, registra log y elimina el original.
 - Cargar la corrección del proxy IA del administrador.
+- Cargar la opción segura para eliminar coordinadores.
 ========================================================= */
 (function(window, document){
   "use strict";
@@ -110,7 +111,17 @@ Función:
     document.body.appendChild(script);
   }
 
+  function cargarCorreccionEliminarCoordinadores(){
+    if (document.getElementById("ad-coordinadores-eliminar-script")) return;
+    var script = document.createElement("script");
+    script.id = "ad-coordinadores-eliminar-script";
+    script.src = "./ad-js/ad-coordinadores.eliminar.patch.js?v=1.0.0";
+    script.async = true;
+    document.body.appendChild(script);
+  }
+
   document.addEventListener("DOMContentLoaded", conectar);
   cargarCorreccionProxyIA();
+  cargarCorreccionEliminarCoordinadores();
   window.ADDevolverApp = { devolverTitulo: devolverTitulo, ejecutar: ejecutar };
 })(window, document);
