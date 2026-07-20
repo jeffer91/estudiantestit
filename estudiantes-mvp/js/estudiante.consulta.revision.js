@@ -1,8 +1,8 @@
 /*
-  Consulta pública reforzada:
-  - acepta cédulas oficiales de 10 dígitos;
-  - busca también la variante antigua de 9 dígitos sin cero inicial;
-  - muestra una pantalla personalizada cuando ya existen títulos enviados.
+  Consulta pública del estudiante usando únicamente Google Sheets:
+  - REQUISITOS_BDLOCAL_SYNC para validar identidad y datos académicos;
+  - RESPALDO TITULOS APP para comprobar envíos anteriores.
+  No consulta Firebase.
 */
 (function (window, document) {
   'use strict';
@@ -49,60 +49,12 @@
       .replace(/'/g, '&#039;');
   }
 
-  function coleccion(nombre, fallback) {
-    var config = get('EstudianteMVPConfig');
-    return config && typeof config.obtenerColeccion === 'function'
-      ? config.obtenerColeccion(nombre) || fallback
-      : fallback;
-  }
-
-  function consultasCedula(nombreColeccion, cedula, incluirDocumento) {
-    var firebase = get('EstudianteMVPFirebaseCore');
-    var variantes = variantesCedula(cedula);
-    var consultas = [];
-
-    if (!firebase) return consultas;
-
-    if (incluirDocumento && typeof firebase.leerDocumento === 'function') {
-      variantes.forEach(function (variante) {
-        consultas.push(firebase.leerDocumento(nombreColeccion, variante).catch(function () { return null; }));
-      });
-    }
-
-    if (typeof firebase.consultarPorCampo === 'function') {
-      ['numeroIdentificacion', 'cedula'].forEach(function (nombreCampo) {
-        variantes.forEach(function (variante) {
-          consultas.push(
-            firebase.consultarPorCampo(nombreColeccion, nombreCampo, '==', variante, 5)
-              .catch(function () { return []; })
-          );
-
-          if (Number.isSafeInteger(Number(variante))) {
-            consultas.push(
-              firebase.consultarPorCampo(nombreColeccion, nombreCampo, '==', Number(variante), 5)
-                .catch(function () { return []; })
-            );
-          }
-        });
-      });
-    }
-
-    return consultas;
-  }
-
-  function aLista(resultados) {
-    var lista = [];
-    (resultados || []).forEach(function (resultado) {
-      if (Array.isArray(resultado)) lista = lista.concat(resultado);
-      else if (resultado && resultado.estudiante) lista.push(resultado.estudiante);
-      else if (resultado) lista.push(resultado);
-    });
-    return lista;
+  function servicioRequisitos() {
+    return get('EstudianteMVPRequisitosEstudiantes') || get('EstudianteMVPFirebaseEstudiantes');
   }
 
   function normalizarEstudiante(data, cedulaOficial) {
-    var servicio = get('EstudianteMVPFirebaseEstudiantes');
-    var config = get('EstudianteMVPConfig');
+    var servicio = servicioRequisitos();
     var normalizado = servicio && typeof servicio.normalizarEstudiante === 'function'
       ? servicio.normalizarEstudiante(data || {}, cedulaOficial)
       : data || {};
@@ -114,9 +66,11 @@
       if (clave !== 'raw') estudiante[clave] = normalizado[clave];
     });
 
-    estudiante.cedula = cedulaOficial;
-    estudiante.numeroIdentificacion = cedulaOficial;
-    estudiante.identificacion = cedulaOficial;
+    estudiante.cedula = normalizarCedula(
+      campo(estudiante, ['cedula', 'numeroIdentificacion', 'identificacion']) || cedulaOficial
+    );
+    estudiante.numeroIdentificacion = estudiante.cedula;
+    estudiante.identificacion = estudiante.cedula;
     estudiante.nombres = texto(campo(estudiante, [
       'nombres', 'Nombres', 'nombreCompleto', 'NombreCompleto', 'nombre', 'Nombre'
     ]));
@@ -129,11 +83,7 @@
     ]));
     estudiante.periodoLabel = texto(campo(estudiante, [
       'periodoLabel', 'PeriodoLabel', 'periodoTexto', 'PeriodoTexto', 'periodo', 'Periodo'
-    ]));
-
-    if (!estudiante.periodoLabel && config && typeof config.obtenerPeriodoFallback === 'function') {
-      estudiante.periodoLabel = config.obtenerPeriodoFallback().periodoLabel || '';
-    }
+    ])) || estudiante.periodoId;
 
     return estudiante;
   }
@@ -146,24 +96,43 @@
   }
 
   function buscarEstudiante(cedula) {
-    var consultas = consultasCedula(coleccion('estudiantes', 'Estudiantes'), cedula, true);
-    var servicio = get('EstudianteMVPFirebaseEstudiantes');
+    var servicio = servicioRequisitos();
 
-    if (!consultas.length && servicio && typeof servicio.buscarPorCedula === 'function') {
-      consultas.push(servicio.buscarPorCedula(cedula).catch(function () { return null; }));
+    if (!servicio || typeof servicio.buscarPorCedula !== 'function') {
+      return Promise.reject(new Error('El servicio REQUISITOS_BDLOCAL_SYNC no está disponible.'));
     }
 
-    return Promise.all(consultas).then(function (resultados) {
-      var candidatos = aLista(resultados);
-      for (var i = 0; i < candidatos.length; i += 1) {
-        var estudiante = normalizarEstudiante(candidatos[i], cedula);
-        if (estudianteValido(estudiante)) return estudiante;
+    return servicio.buscarPorCedula(cedula).then(function (resultado) {
+      var data = resultado && (
+        resultado.estudiante || resultado.registro || resultado.data
+      );
+      var estudiante;
+      var validacion;
+
+      if (!resultado || resultado.encontrado === false || !data) {
+        throw new Error(
+          resultado && resultado.mensaje
+            ? resultado.mensaje
+            : 'No encontramos un estudiante con esa cédula. Revisa el número e intenta nuevamente.'
+        );
       }
-      throw new Error('No encontramos un estudiante con esa cédula. Revisa el número e intenta nuevamente.');
+
+      estudiante = normalizarEstudiante(data, cedula);
+
+      if (typeof servicio.validarEstudianteParaContinuar === 'function') {
+        validacion = servicio.validarEstudianteParaContinuar(estudiante);
+        if (!validacion || validacion.ok !== true) {
+          throw new Error(validacion && validacion.mensaje || 'No se pudo validar el estudiante.');
+        }
+      } else if (!estudianteValido(estudiante)) {
+        throw new Error('El registro encontrado no contiene nombres o carrera.');
+      }
+
+      return estudiante;
     });
   }
 
-  function normalizarEnvio(resultado, origen) {
+  function normalizarEnvio(resultado) {
     var base = resultado && resultado.envio
       ? resultado.envio
       : resultado && resultado.data
@@ -176,44 +145,31 @@
     Object.keys(base).forEach(function (clave) {
       if (clave !== 'datos') envio[clave] = base[clave];
     });
-    envio._origen = origen || '';
+    envio._origen = 'google-sheets';
     return envio;
   }
 
-  function buscarEnvioSheets(cedula) {
+  function buscarEnvio(cedula) {
     var sheets = get('EstudianteMVPSheets');
     var variantes = variantesCedula(cedula);
     var indice = 0;
 
-    if (!sheets || typeof sheets.consultarEnvioPorCedula !== 'function') return Promise.resolve(null);
+    if (!sheets || typeof sheets.consultarEnvioPorCedula !== 'function') {
+      return Promise.resolve(null);
+    }
 
     function siguiente() {
       if (indice >= variantes.length) return Promise.resolve(null);
       return sheets.consultarEnvioPorCedula(variantes[indice++])
         .then(function (resultado) {
           return resultado && resultado.encontrado === true
-            ? normalizarEnvio(resultado, 'google-sheets')
+            ? normalizarEnvio(resultado)
             : siguiente();
         })
-        .catch(siguiente);
+        .catch(function () { return siguiente(); });
     }
 
     return siguiente();
-  }
-
-  function buscarEnvioFirebase(cedula) {
-    var consultas = consultasCedula(coleccion('titulos', 'titulos'), cedula, true);
-    if (!consultas.length) return Promise.resolve(null);
-
-    return Promise.all(consultas).then(function (resultados) {
-      var candidatos = aLista(resultados);
-      return candidatos.length ? normalizarEnvio(candidatos[0], 'firebase') : null;
-    });
-  }
-
-  function buscarEnvio(cedula) {
-    return Promise.all([buscarEnvioSheets(cedula), buscarEnvioFirebase(cedula)])
-      .then(function (resultados) { return resultados[0] || resultados[1] || null; });
   }
 
   function titulosEnvio(envio) {
@@ -297,10 +253,12 @@
   function mostrarRevision(estudiante, envio) {
     var panel = panelRevision();
     var titulos = titulosEnvio(envio);
-    var estado = texto(campo(envio, ['estado', 'estadoFinal', 'estadoProceso', 'estadoFirebase'])).toUpperCase();
-    var etiqueta = estado === 'PENDIENTE_SYNC'
-      ? 'Registro recibido — sincronización pendiente'
-      : 'En revisión por coordinación';
+    var estado = texto(campo(envio, ['estado', 'estadoFinal', 'estadoProceso', 'estadoGoogleSheets'])).toUpperCase();
+    var etiqueta = estado === 'PENDIENTE_LOCAL'
+      ? 'Registro pendiente de sincronización'
+      : estado === 'DEVUELTO'
+        ? 'Registro devuelto para corrección'
+        : 'En revisión por coordinación';
     var bloqueTitulos = titulos.length
       ? '<div class="review-titles"><h3>Propuestas registradas</h3><ol>' +
         titulos.map(function (titulo) { return '<li>' + escapar(titulo) + '</li>'; }).join('') +
@@ -314,8 +272,7 @@
       '<div><p class="review-status-card__eyebrow">Registro confirmado</p>',
       '<h2>Tus propuestas ya fueron enviadas</h2>',
       '<span class="review-status-card__badge">', escapar(etiqueta), '</span></div></div>',
-      '<p class="review-status-card__message">El coordinador está revisando tus títulos. ',
-      'No necesitas enviarlos nuevamente. Ingresa en unos días para consultar el estado del proceso.</p>',
+      '<p class="review-status-card__message">El registro fue encontrado en RESPALDO TITULOS APP.</p>',
       '<div class="review-data">',
       dato('Estudiante', estudiante.nombres),
       dato('Cédula', estudiante.cedula),
@@ -323,7 +280,7 @@
       dato('Período', estudiante.periodoLabel || estudiante.periodoId),
       '</div>', bloqueTitulos,
       '<div class="review-status-card__footer">',
-      '<div class="review-status-card__notice"><strong>Importante:</strong> este registro ya está protegido para evitar envíos duplicados.</div>',
+      '<div class="review-status-card__notice"><strong>Importante:</strong> este registro está protegido para evitar envíos duplicados.</div>',
       '<button class="btn btn--secondary" type="button" data-review-action="otra-cedula">Consultar otra cédula</button>',
       '</div>'
     ].join('');
@@ -382,10 +339,10 @@
     input.value = cedula;
     mostrarFlujo(true);
     if (interfaz && typeof interfaz.setCargando === 'function') {
-      interfaz.setCargando(true, 'Consultando datos y estado del registro...');
+      interfaz.setCargando(true, 'Consultando REQUISITOS_BDLOCAL_SYNC y RESPALDO TITULOS APP...');
     }
     if (interfaz && typeof interfaz.mostrarEstado === 'function') {
-      interfaz.mostrarEstado('#estadoPrincipal', 'Validando tu identidad y revisando si ya enviaste tus propuestas...', 'info');
+      interfaz.mostrarEstado('#estadoPrincipal', 'Buscando tu cédula en todos los períodos disponibles...', 'info');
     }
 
     buscarEstudiante(cedula)
@@ -414,9 +371,9 @@
 
     if (instalado) return;
     if (!form || !input || !get('EstudianteMVPUI') || !get('EstudianteMVPState') ||
-        !get('EstudianteMVPApp') || !get('EstudianteMVPFirebaseEstudiantes')) {
+        !get('EstudianteMVPApp') || !servicioRequisitos() || !get('EstudianteMVPSheets')) {
       intentos += 1;
-      if (intentos <= 50) window.setTimeout(instalar, 100);
+      if (intentos <= 80) window.setTimeout(instalar, 100);
       return;
     }
 
