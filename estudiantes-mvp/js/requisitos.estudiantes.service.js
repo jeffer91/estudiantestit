@@ -30,7 +30,7 @@
   function solicitar(accion, datos) {
     var controller = typeof AbortController === 'function' ? new AbortController() : null;
     var timer = controller
-      ? window.setTimeout(function () { controller.abort(); }, 60000)
+      ? window.setTimeout(function () { controller.abort(); }, 115000)
       : null;
     var opciones = {
       method: 'POST',
@@ -65,7 +65,7 @@
       })
       .catch(function (error) {
         if (error && error.name === 'AbortError') {
-          throw new Error('La consulta académica superó 60 segundos. Intenta nuevamente.');
+          throw new Error('La consulta académica superó el tiempo máximo. Intenta nuevamente.');
         }
         throw error;
       })
@@ -192,14 +192,14 @@
     if (!document.querySelector('link[data-estudiante-revision="true"]')) {
       estilo = document.createElement('link');
       estilo.rel = 'stylesheet';
-      estilo.href = 'css/estudiante.consulta.revision.css?v=2.1.0';
+      estilo.href = 'css/estudiante.consulta.revision.css?v=2.1.1';
       estilo.setAttribute('data-estudiante-revision', 'true');
       document.head.appendChild(estilo);
     }
 
     if (!document.querySelector('script[data-estudiante-revision="true"]')) {
       script = document.createElement('script');
-      script.src = 'js/estudiante.consulta.revision.js?v=2.1.0';
+      script.src = 'js/estudiante.consulta.revision.js?v=2.1.1';
       script.async = false;
       script.setAttribute('data-estudiante-revision', 'true');
       document.head.appendChild(script);
