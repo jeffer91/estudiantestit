@@ -58,10 +58,16 @@ function periods(result) {
     }
   });
 
-  const periodos = [...map.values()];
+  const rawPeriods = [...map.values()];
+  const principalIndex = Math.max(0, rawPeriods.findIndex((item) => item.principal));
+  const periodos = rawPeriods.map((item, index) => ({
+    ...item,
+    principal: rawPeriods.length > 0 && index === principalIndex
+  }));
+
   return {
     periodos,
-    principal: periodos.find((item) => item.principal) || periodos[0] || null
+    principal: periodos[principalIndex] || null
   };
 }
 
