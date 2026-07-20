@@ -1,4 +1,4 @@
-/* API del Administrador: Requisitos consulta, Títulos operación y Claves para IA. */
+/* API del Administrador: Requisitos consulta, Títulos operación y Claves configuración. */
 (function(window){
   'use strict';
 
@@ -15,6 +15,17 @@
       ? window.location.origin.replace(/\/$/, '')
       : 'https://titulos.pages.dev';
   }
+  function leerRespuesta(resp, nombre){
+    return resp.text().then(function(body){
+      var json = {};
+      try { json = body ? JSON.parse(body) : {}; }
+      catch (error) { throw new Error((nombre || 'El servicio') + ' respondió en un formato no válido.'); }
+      if (!resp.ok || json.ok === false) {
+        throw new Error(json.mensaje || json.message || json.error || ('Error HTTP ' + resp.status));
+      }
+      return json;
+    });
+  }
   function solicitar(ruta, accion, datos, metodo){
     return fetch(base() + ruta, {
       method: 'POST',
@@ -29,46 +40,34 @@
         metodo: metodo || 'POST',
         datos: datos || {}
       })
-    }).then(function(resp){
-      return resp.text().then(function(body){
-        var json = {};
-        try { json = body ? JSON.parse(body) : {}; }
-        catch (error) { throw new Error('El servicio respondió en un formato no válido.'); }
-        if (!resp.ok || json.ok === false) {
-          throw new Error(json.mensaje || json.message || json.error || ('Error HTTP ' + resp.status));
-        }
-        return json;
-      });
-    });
+    }).then(function(resp){ return leerRespuesta(resp, 'El servicio'); });
   }
   function titulos(a,d,m){ return solicitar('/api/titulos',a,d,m); }
   function requisitos(a,d){ return solicitar('/api/requisitos',a,d,'POST'); }
+  function clavesGet(action){
+    return fetch(base() + '/api/claves?action=' + encodeURIComponent(action), {
+      method:'GET', cache:'no-store', headers:{'X-Titulos-App':'administrador'}
+    }).then(function(resp){ return leerRespuesta(resp,'Claves'); });
+  }
+  function clavesPost(action,data){
+    return fetch(base() + '/api/claves', {
+      method:'POST', cache:'no-store',
+      headers:{'Content-Type':'application/json','X-Titulos-App':'administrador'},
+      body:JSON.stringify(Object.assign({action:action},data||{}))
+    }).then(function(resp){ return leerRespuesta(resp,'Claves'); });
+  }
   function iaGet(action, providerId){
     var url = base() + '/api/ia?action=' + encodeURIComponent(action || 'admin-list');
     if (providerId) url += '&providerId=' + encodeURIComponent(providerId);
-    return fetch(url,{method:'GET',cache:'no-store',headers:{'X-Titulos-App':'administrador'}}).then(function(resp){
-      return resp.text().then(function(body){
-        var json={};
-        try{json=body?JSON.parse(body):{};}catch(error){throw new Error('IA respondió en formato no válido.');}
-        if(!resp.ok||json.ok===false)throw new Error(json.mensaje||json.error||('Error HTTP '+resp.status));
-        return json;
-      });
-    });
+    return fetch(url,{method:'GET',cache:'no-store',headers:{'X-Titulos-App':'administrador'}})
+      .then(function(resp){ return leerRespuesta(resp,'IA'); });
   }
   function iaPost(action, data){
     return fetch(base() + '/api/ia', {
-      method:'POST',
-      cache:'no-store',
+      method:'POST', cache:'no-store',
       headers:{'Content-Type':'application/json','X-Titulos-App':'administrador'},
       body:JSON.stringify(Object.assign({action:action},data||{}))
-    }).then(function(resp){
-      return resp.text().then(function(body){
-        var json={};
-        try{json=body?JSON.parse(body):{};}catch(error){throw new Error('IA respondió en formato no válido.');}
-        if(!resp.ok||json.ok===false)throw new Error(json.mensaje||json.error||('Error HTTP '+resp.status));
-        return json;
-      });
-    });
+    }).then(function(resp){ return leerRespuesta(resp,'IA'); });
   }
   function lista(r, claves){
     if (Array.isArray(r)) return r;
@@ -85,6 +84,8 @@
     configRequisitos: function(){ return requisitos('CONFIGURACION_PUBLICA',{}); },
     pingTitulos: function(){ return titulos('PING',{},'GET'); },
     pingRequisitos: function(){ return requisitos('PING',{}); },
+    listarServicios: function(){ return clavesGet('admin-list'); },
+    guardarServicio: function(servicio){ return clavesPost('admin-save',{service:servicio||{}}); },
     listarPeriodos: function(){ return requisitos('LISTAR_PERIODOS_TITULACION',{}); },
     listarCarreras: function(periodoId){ return requisitos('LISTAR_CARRERAS_PERIODO',{periodoId:periodoId||''}); },
     consultarEstudiante: function(cedula,periodoId){ return requisitos('CONSULTAR_ESTUDIANTE_TITULACION',{cedula:cedula,numeroIdentificacion:cedula,periodoId:periodoId||''}); },
@@ -99,6 +100,7 @@
     guardarIA: function(proveedor){ return iaPost('admin-save',{provider:proveedor||{}}); },
     cambiarEstadoIA: function(providerId,activo){ return iaPost('admin-toggle',{providerId:providerId,activo:activo===true}); },
     probarIA: function(providerId,prompt){ return iaPost('admin-test',{providerId:providerId,prompt:prompt||'Responde únicamente: conexión correcta.'}); },
+    extraerServicios: function(r){ return lista(r,['servicios','registros']); },
     extraerPeriodos: function(r){ return lista(r,['periodos','periods','registros']); },
     extraerCarreras: function(r){ return lista(r,['carreras','registros']); },
     extraerCoordinadores: function(r){ return lista(r,['coordinadores','registros']); },
