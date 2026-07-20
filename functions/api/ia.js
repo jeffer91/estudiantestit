@@ -1,8 +1,10 @@
 import { getDocument, listDocuments, setDocument, text } from '../_lib/firestore.js';
 
 const ORIGINS = new Set([
+  'null',
   'https://titulos.pages.dev',
   'https://titulos-administrador.pages.dev',
+  'https://titulos-coordinadores.pages.dev',
   'http://127.0.0.1:5500',
   'http://localhost:5500',
   'http://127.0.0.1:8787',
@@ -15,12 +17,32 @@ const HOSTS = new Set([
 ]);
 
 function origin(request){return text(request.headers.get('Origin'));}
-function headers(request){const o=origin(request);const h={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Access-Control-Allow-Methods':'GET, POST, OPTIONS','Access-Control-Allow-Headers':'Content-Type','Vary':'Origin'};if(o&&ORIGINS.has(o))h['Access-Control-Allow-Origin']=o;return h;}
+function appId(request){return text(request.headers.get('X-Titulos-App')).toLowerCase();}
+function headers(request){
+  const o=origin(request);
+  const h={
+    'Content-Type':'application/json; charset=utf-8',
+    'Cache-Control':'no-store',
+    'Access-Control-Allow-Methods':'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers':'Content-Type, X-Titulos-App',
+    'Vary':'Origin'
+  };
+  if(o&&ORIGINS.has(o))h['Access-Control-Allow-Origin']=o;
+  return h;
+}
 function reply(request,data,status=200){return new Response(JSON.stringify(data),{status,headers:headers(request)});}
 function number(value,fallback){const n=Number(value);return Number.isFinite(n)?n:Number(fallback||0);}
 function providerId(value){return text(value).toLowerCase().replace(/[^a-z0-9_-]/g,'');}
 function collection(env){return text(env.IA_COLLECTION)||'IA';}
-function isAdmin(request){const o=origin(request).toLowerCase();return o.includes('titulos-administrador.pages.dev')||o.includes('localhost')||o.includes('127.0.0.1');}
+function isAdmin(request){
+  const o=origin(request).toLowerCase();
+  if(o.includes('titulos-administrador.pages.dev'))return true;
+  if(o==='null'||o.includes('localhost')||o.includes('127.0.0.1')){
+    const app=appId(request);
+    return app==='administrador'||app==='admin';
+  }
+  return false;
+}
 function safeProvider(raw){raw=raw||{};const id=providerId(raw.id||raw.proveedor||raw._docId||raw.nombre);return{id,proveedor:id,nombre:text(raw.nombre||raw.name||id),tipo:text(raw.tipo||raw.protocol||'openai-compatible'),activo:raw.activo===true,prioridad:number(raw.prioridad,999),endpoint:text(raw.endpoint||raw.url),modelo:text(raw.modelo||raw.model),model:text(raw.model||raw.modelo),timeoutMs:Math.max(5000,number(raw.timeoutMs,45000)),maxTokens:Math.max(100,number(raw.maxTokens,3000)),temperatura:number(raw.temperatura,0.3),descripcion:text(raw.descripcion),apiKeyConfigurada:Boolean(text(raw.apiKey||raw.key||raw.token)),ultimaPruebaOk:raw.ultimaPruebaOk===true,ultimaPruebaEn:text(raw.ultimaPruebaEn),ultimaLatenciaMs:number(raw.ultimaLatenciaMs,0),ultimoError:text(raw.ultimoError)};}
 async function readProvider(env,id){const item=await getDocument(env,collection(env)+'/'+providerId(id));if(!item)throw new Error('No se encontró el proveedor IA.');return item;}
 function secret(raw){return text(raw.apiKey||raw.key||raw.token);}
@@ -31,4 +53,16 @@ async function generate(raw,prompt,options){const key=secret(raw);if(!key)throw 
 async function parse(request){if(request.method==='GET'){const u=new URL(request.url);return{action:u.searchParams.get('action')||'list'};}if(!text(request.headers.get('Content-Type')).toLowerCase().includes('application/json'))throw new Error('Se esperaba application/json.');return request.json();}
 async function adminAction(request,env,input,action){if(!isAdmin(request))return reply(request,{ok:false,mensaje:'Acción no permitida.'},403);if(action==='admin-list'){const list=await listDocuments(env,collection(env),{max:100});return reply(request,{ok:true,proveedores:list.map(safeProvider)});}if(action==='admin-read'){return reply(request,{ok:true,proveedor:safeProvider(await readProvider(env,input.providerId))});}if(action==='admin-toggle'){const id=providerId(input.providerId);await setDocument(env,collection(env)+'/'+id,{activo:input.activo===true,actualizadoEn:new Date().toISOString()});return reply(request,{ok:true,providerId:id});}if(action==='admin-save'){const p=input.provider||{};const id=providerId(p.id||p.proveedor||p.nombre);if(!id)throw new Error('El proveedor necesita un ID.');const old=await getDocument(env,collection(env)+'/'+id).catch(()=>null);const supplied=secret(p);const data={id,proveedor:id,nombre:text(p.nombre||p.name||id),tipo:text(p.tipo||'openai-compatible'),activo:p.activo===true,prioridad:number(p.prioridad,999),endpoint:text(p.endpoint),modelo:text(p.modelo||p.model),model:text(p.model||p.modelo),timeoutMs:Math.max(5000,number(p.timeoutMs,45000)),maxTokens:Math.max(100,number(p.maxTokens,3000)),temperatura:number(p.temperatura,0.3),descripcion:text(p.descripcion),actualizadoEn:new Date().toISOString()};if(supplied){data.apiKey=supplied;data.key=supplied;}else if(old&&secret(old)){data.apiKey=secret(old);data.key=secret(old);}const saved=await setDocument(env,collection(env)+'/'+id,data);return reply(request,{ok:true,proveedor:safeProvider(saved)});}if(action==='admin-test'){const raw=await readProvider(env,input.providerId);const result=await generate(raw,text(input.prompt)||'Responde con una prueba breve.',input.options||{});await setDocument(env,collection(env)+'/'+providerId(input.providerId),{ultimaPruebaOk:true,ultimaPruebaEn:new Date().toISOString(),ultimaLatenciaMs:result.latencyMs,ultimoError:''});return reply(request,{ok:true,providerId:providerId(input.providerId),...result});}return reply(request,{ok:false,mensaje:'Acción administrativa desconocida.'},400);}
 
-export async function onRequest({request,env}){const o=origin(request);if(o&&!ORIGINS.has(o))return reply(request,{ok:false,mensaje:'Origen no permitido.'},403);if(request.method==='OPTIONS')return new Response(null,{status:204,headers:headers(request)});if(!['GET','POST'].includes(request.method))return reply(request,{ok:false,mensaje:'Método no permitido.'},405);try{const input=await parse(request);const action=text(input.action||input.accion||'').toLowerCase();if(action==='list'){const list=await listDocuments(env,collection(env),{max:100});return reply(request,{ok:true,proveedores:list.filter(p=>p.activo===true).map(safeProvider)});}if(action.startsWith('admin-'))return adminAction(request,env,input,action);const id=providerId(input.providerId||input.provider);if(!id)throw new Error('No se indicó el proveedor IA.');const raw=await readProvider(env,id);if(raw.activo!==true)throw new Error('El proveedor IA está inactivo.');const result=await generate(raw,text(input.prompt),input.options||{});return reply(request,{ok:true,provider:id,...result});}catch(error){return reply(request,{ok:false,error:error.message||String(error)},502);}}
+export async function onRequest({request,env}){
+  const o=origin(request);if(o&&!ORIGINS.has(o))return reply(request,{ok:false,mensaje:'Origen no permitido.'},403);
+  if(request.method==='OPTIONS')return new Response(null,{status:204,headers:headers(request)});
+  if(!['GET','POST'].includes(request.method))return reply(request,{ok:false,mensaje:'Método no permitido.'},405);
+  try{
+    const input=await parse(request);const action=text(input.action||input.accion||'').toLowerCase();
+    if(action==='list'){const list=await listDocuments(env,collection(env),{max:100});return reply(request,{ok:true,proveedores:list.filter(p=>p.activo===true).map(safeProvider)});}
+    if(action.startsWith('admin-'))return adminAction(request,env,input,action);
+    const id=providerId(input.providerId||input.provider);if(!id)throw new Error('No se indicó el proveedor IA.');
+    const raw=await readProvider(env,id);if(raw.activo!==true)throw new Error('El proveedor IA está inactivo.');
+    const result=await generate(raw,text(input.prompt),input.options||{});return reply(request,{ok:true,provider:id,...result});
+  }catch(error){return reply(request,{ok:false,error:error.message||String(error)},502);}
+}
