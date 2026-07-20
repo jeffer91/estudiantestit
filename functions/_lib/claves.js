@@ -47,7 +47,7 @@ export async function requestClaves(env, action, data = {}) {
       body: JSON.stringify({
         accion: text(action).toUpperCase(),
         action: text(action).toUpperCase(),
-        acceso,
+        acceso: access,
         datos: data || {}
       })
     },
@@ -56,8 +56,11 @@ export async function requestClaves(env, action, data = {}) {
 
   const raw = await response.text();
   let result;
-  try { result = raw ? JSON.parse(raw) : {}; }
-  catch (error) { throw new Error('Claves respondió en un formato no válido.'); }
+  try {
+    result = raw ? JSON.parse(raw) : {};
+  } catch (error) {
+    throw new Error('Claves respondió en un formato no válido.');
+  }
 
   if (!response.ok || result.ok === false) {
     throw new Error(text(result.mensaje || result.error) || 'Claves devolvió un error.');
