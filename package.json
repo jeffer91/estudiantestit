@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev:ia": "node dev/ia-proxy-server.mjs",
-    "dev:cloudflare": "npx wrangler pages dev . --port 8788"
+    "dev:cloudflare": "npx wrangler pages dev . --port 8788 --compatibility-date=2026-05-03"
   },
   "engines": {
     "node": ">=18"
