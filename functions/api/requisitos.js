@@ -72,7 +72,9 @@ function periods(result) {
 }
 
 async function call(env, action, payload) {
-  return runService(env, 'REQUISITOS', action, 'POST', payload || {}, 'consulta');
+  const configured = Number(env.CLAVES_TIMEOUT_MS || 0);
+  const timeoutMs = Math.max(Number.isFinite(configured) ? configured : 0, 90000);
+  return runService(env, 'REQUISITOS', action, 'POST', payload || {}, 'consulta', timeoutMs);
 }
 
 async function listPeriods(env) {
@@ -157,14 +159,9 @@ async function consult(env, data) {
   if (!id) throw new Error('No se recibió una cédula válida.');
 
   const requestedPeriod = text(data.periodoId || data.periodo || data.periodoLabel);
-  let principalPeriod = '';
-
-  if (!requestedPeriod) {
-    const catalog = await listPeriods(env);
-    principalPeriod = catalog.principal && catalog.principal.id || '';
-  }
-
   const result = await pull(env, requestedPeriod);
+  const catalog = requestedPeriod ? { principal: null } : periods(result);
+  const principalPeriod = catalog.principal && catalog.principal.id || '';
   const students = table(result, 'Estudiantes').map((item) => student(item, requestedPeriod));
   const matches = students.filter((item) => item.cedula === id);
   const found = preferStudent(matches, requestedPeriod, principalPeriod);
@@ -178,7 +175,7 @@ async function consult(env, data) {
       periodoId: requestedPeriod,
       mensaje: requestedPeriod
         ? 'No encontramos un estudiante con esa cédula en el período seleccionado.'
-        : 'No encontramos un estudiante con esa cédula en los períodos activos de REQUISITOS_BDLOCAL_SYNC.'
+        : 'No encontramos un estudiante con esa cédula en ninguno de los períodos disponibles de REQUISITOS_BDLOCAL_SYNC.'
     };
   }
 
