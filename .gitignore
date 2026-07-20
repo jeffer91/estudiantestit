@@ -3,6 +3,8 @@ dist/
 build/
 .env
 .env.*
+.dev.vars
+.dev.vars.*
 .DS_Store
 Thumbs.db
 .vscode/
