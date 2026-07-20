@@ -1,0 +1,14 @@
+# Copia este archivo como .dev.vars en la raíz del proyecto.
+# No subas .dev.vars a GitHub.
+
+# URL de la implementación web de Google Apps Script.
+APPS_SCRIPT_URL=https://script.google.com/macros/s/PEGA_AQUI_EL_ID_DE_IMPLEMENTACION/exec
+
+# El Código.gs actual tiene tokenSecreto vacío, por eso puede quedar vacío.
+# Si luego agregas un token en Apps Script, coloca aquí exactamente el mismo valor.
+APPS_SCRIPT_TOKEN=
+
+# Opcionales.
+SHEETS_TIMEOUT_MS=45000
+SHEETS_ACTIVO=true
+SHEETS_NOMBRE=Google Sheets Titulación
