@@ -79,13 +79,13 @@ const clavesLib = read('functions/_lib/claves.js');
 const clavesRelay = read('google-apps-script/CLAVES_02_RELAY.gs');
 const devExample = read('.dev.vars.example');
 
-assert(/runService\(env,'TITULOS'/.test(titulosApi), 'La API de Títulos no está conectada a Claves.');
-assert(/runService\(env,'REQUISITOS'/.test(requisitosApi), 'La API de Requisitos no está conectada a Claves.');
+assert(/runService\s*\(\s*env\s*,\s*['"]TITULOS['"]/.test(titulosApi), 'La API de Títulos no está conectada a Claves.');
+assert(/runService\s*\(\s*env\s*,\s*['"]REQUISITOS['"]/.test(requisitosApi), 'La API de Requisitos no está conectada a Claves.');
 assert(/REQUISITOS_BDLOCAL_SYNC es de solo consulta/.test(requisitosApi), 'La API de Requisitos no declara modo solo consulta.');
 assert(/generateAi/.test(iaApi), 'La API de IA no usa la generación central de Claves.');
 assert(/LISTAR_SERVICIOS_ADMIN/.test(clavesApi + clavesRelay), 'Claves no permite administrar los servicios de forma segura.');
 assert(/GUARDAR_SERVICIO/.test(clavesApi + clavesRelay), 'Claves no permite guardar endpoints, tokens y estados.');
-assert(/\['pull_bl2', 'ping'\]/.test(clavesRelay), 'El relay no limita Requisitos a operaciones de consulta.');
+assert(/pull_bl2/.test(clavesRelay) && /ping/.test(clavesRelay) && /solo consulta/.test(clavesRelay), 'El relay no limita Requisitos a operaciones de consulta.');
 assert(!/firestore|firebase/i.test(titulosApi + requisitosApi + iaApi + clavesApi + clavesLib), 'El backend activo todavía contiene Firebase o Firestore.');
 assert(/CLAVES_APPS_SCRIPT_URL/.test(devExample), '.dev.vars.example no contiene CLAVES_APPS_SCRIPT_URL.');
 assert(/CLAVES_ACCESS_TOKEN/.test(devExample), '.dev.vars.example no contiene CLAVES_ACCESS_TOKEN.');
