@@ -1,5 +1,5 @@
 /** Configuración base de la hoja Claves. */
-var CLAVES_VERSION='1.0.0-google-sheets-central';
+var CLAVES_VERSION='1.1.0-google-sheets-direct';
 var CLAVES_HEADERS={
   Servicios:['clave','nombre','tipo','endpoint','secreto','spreadsheetId','estado','timeoutMs','version','mensaje','actualizadoEn'],
   IA:['id','nombre','tipo','endpoint','modelo','credencial','estado','prioridad','timeoutMs','maxTokens','temperatura','descripcion','ultimaPruebaOk','ultimaPruebaEn','ultimaLatenciaMs','ultimoError','actualizadoEn'],
