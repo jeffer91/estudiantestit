@@ -1,0 +1,12 @@
+.ad-loading{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;background:rgba(10,43,77,.28);color:#fff;font-weight:800;font-size:18px;backdrop-filter:blur(2px)}
+.ad-loading[hidden]{display:none!important}
+.ad-form-span{grid-column:1/-1}
+.ad-check{display:flex;align-items:center;gap:10px;min-height:42px;padding:8px 0}
+.ad-check input{width:20px;min-height:20px;margin:0}
+.ad-check span{margin:0}
+.ad-status-success{border-color:rgba(22,128,60,.35);background:#e8f7ee;color:#11622e}
+.ad-status-warning{border-color:rgba(184,110,0,.35);background:#fff5e6;color:#8a5300}
+.ad-status-danger{border-color:rgba(180,35,24,.35);background:#fff1f0;color:#8d1c13}
+.ad-status-info{border-color:rgba(31,111,235,.3);background:#e8f1ff;color:#174f9d}
+small{color:var(--ad-muted)}
+@media(max-width:900px){.ad-form-grid-3,.ad-form-grid-4{grid-template-columns:1fr}.ad-form-span{grid-column:auto}}
