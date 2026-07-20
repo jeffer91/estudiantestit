@@ -1,11 +1,17 @@
 /* Inicio autónomo de Coordinadores mediante la API central segura. */
 (function(window,document){
   'use strict';
-  var VERSION='2.6.1';
+  var VERSION='2.6.2';
   var API_PUBLICA='https://titulos.pages.dev';
+  var API_LOCAL='http://127.0.0.1:8788';
 
   function texto(v){
     return String(v===null||v===undefined?'':v).trim();
+  }
+
+  function esEntornoLocal(){
+    var host=texto(window.location&&window.location.hostname).toLowerCase();
+    return ['localhost','127.0.0.1','0.0.0.0','::1','[::1]'].indexOf(host)>=0;
   }
 
   function usarProxyLocal(){
@@ -31,13 +37,12 @@
     }
 
     /*
-      Live Server y doble clic usan por defecto la API publicada.
-      El proxy local :8787 solo se usa cuando se activa de forma expresa:
-      - window.TITULOS_USAR_PROXY_LOCAL = true
-      - o agregando ?proxy=local a la URL.
+      Live Server y Wrangler local utilizan la API local del puerto 8788.
+      Doble clic y Cloudflare publicado utilizan la API pública.
+      También puede forzarse el modo local con ?proxy=local.
     */
-    if(usarProxyLocal()){
-      return 'http://127.0.0.1:8787';
+    if(esEntornoLocal()||usarProxyLocal()){
+      return API_LOCAL;
     }
 
     return API_PUBLICA;
