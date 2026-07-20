@@ -108,4 +108,12 @@
   };
 
   window.ADAPIService = Object.freeze(api);
+
+  if (window.document && !window.document.querySelector('script[data-ad-servicios="true"]')) {
+    var script = window.document.createElement('script');
+    script.src = './ad-js/ad-servicios.app.js?v=2.0.0';
+    script.async = false;
+    script.setAttribute('data-ad-servicios','true');
+    window.document.head.appendChild(script);
+  }
 })(window);
