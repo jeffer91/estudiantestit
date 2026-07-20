@@ -3,789 +3,155 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
   <title>Administrador Titulación</title>
-
-  <link rel="stylesheet" href="./ad-css/ad-admin.css" />
+  <link rel="icon" href="data:," />
+  <link rel="stylesheet" href="./ad-css/ad-admin.css?v=2.0.0" />
+  <link rel="stylesheet" href="./ad-css/ad-google-sheets.css?v=2.0.0" />
 </head>
-
 <body>
+  <div id="ad-loading" class="ad-loading" hidden>Procesando...</div>
   <div class="ad-shell">
     <aside class="ad-sidebar">
       <div class="ad-brand">
         <div class="ad-brand-mark">AD</div>
-
-        <div>
-          <h1>Administrador</h1>
-          <p>Titulación</p>
-        </div>
+        <div><h1>Administrador</h1><p>Titulación</p></div>
       </div>
-
       <nav class="ad-nav" aria-label="Menú administrador">
-        <a
-          class="is-active"
-          href="#ad-seccion-estado"
-          data-ad-view-target="ad-seccion-estado"
-          aria-current="page"
-        >
-          Estado general
-        </a>
-
-        <a
-          href="#ad-seccion-periodos"
-          data-ad-view-target="ad-seccion-periodos"
-        >
-          Períodos
-        </a>
-
-        <a
-          href="#ad-seccion-coordinadores"
-          data-ad-view-target="ad-seccion-coordinadores"
-        >
-          Coordinadores
-        </a>
-
-        <a
-          href="#ad-seccion-carreras"
-          data-ad-view-target="ad-seccion-carreras"
-        >
-          Carreras
-        </a>
-
-        <a
-          href="#ad-seccion-titulos"
-          data-ad-view-target="ad-seccion-titulos"
-        >
-          Títulos
-        </a>
-
-        <a
-          href="#ad-seccion-devolver"
-          data-ad-view-target="ad-seccion-devolver"
-        >
-          Devolver título
-        </a>
-
-        <a
-          href="#ad-seccion-reparar"
-          data-ad-view-target="ad-seccion-reparar"
-        >
-          Reparar Firebase
-        </a>
-
-        <a
-          href="#ad-seccion-diagnostico"
-          data-ad-view-target="ad-seccion-diagnostico"
-        >
-          Diagnóstico
-        </a>
-
-        <a
-          href="#ad-seccion-logs"
-          data-ad-view-target="ad-seccion-logs"
-        >
-          Logs
-        </a>
+        <a class="is-active" href="#ad-seccion-estado" data-ad-view-target="ad-seccion-estado" aria-current="page">Estado general</a>
+        <a href="#ad-seccion-periodos" data-ad-view-target="ad-seccion-periodos">Períodos</a>
+        <a href="#ad-seccion-carreras" data-ad-view-target="ad-seccion-carreras">Carreras y estudiantes</a>
+        <a href="#ad-seccion-coordinadores" data-ad-view-target="ad-seccion-coordinadores">Coordinadores</a>
+        <a href="#ad-seccion-titulos" data-ad-view-target="ad-seccion-titulos">Títulos</a>
+        <a href="#ad-seccion-devolver" data-ad-view-target="ad-seccion-devolver">Devolver propuestas</a>
+        <a href="#ad-seccion-ia" data-ad-view-target="ad-seccion-ia">Claves de IA</a>
+        <a href="#ad-seccion-diagnostico" data-ad-view-target="ad-seccion-diagnostico">Diagnóstico</a>
       </nav>
     </aside>
 
     <main class="ad-main">
       <header class="ad-header">
         <div>
-          <p class="ad-eyebrow">Panel independiente</p>
-
-          <h2>Administrador de títulos</h2>
-
-          <p class="ad-muted">
-            Gestión de períodos, coordinadores, carreras, títulos enviados
-            y diagnóstico de conexiones.
-          </p>
+          <p class="ad-eyebrow">Google Sheets</p>
+          <h2>Administrador de titulación</h2>
+          <p class="ad-muted">REQUISITOS_BDLOCAL_SYNC se consulta; RESPALDO TITULOS APP recibe las operaciones; Claves administra servicios, estados, tokens e IA.</p>
         </div>
-
         <div class="ad-header-actions">
-          <span
-            class="ad-badge ad-badge-warning"
-            id="ad-badge-firebase"
-          >
-            Firebase: pendiente
-          </span>
-
-          <span
-            class="ad-badge ad-badge-warning"
-            id="ad-badge-sheets"
-          >
-            Sheets: pendiente
-          </span>
-
-          <span
-            class="ad-badge ad-badge-info"
-            id="ad-badge-version"
-          >
-            v1.0.0
-          </span>
+          <span class="ad-badge ad-badge-warning" id="ad-badge-requisitos">Requisitos: pendiente</span>
+          <span class="ad-badge ad-badge-warning" id="ad-badge-titulos">Títulos: pendiente</span>
+          <span class="ad-badge ad-badge-warning" id="ad-badge-claves">Claves: pendiente</span>
+          <span class="ad-badge ad-badge-info" id="ad-badge-version">v2.0.0</span>
         </div>
       </header>
 
-      <!-- =====================================================
-      VISTA: ESTADO GENERAL
-      ====================================================== -->
-
-      <section
-        class="ad-grid ad-grid-4 ad-view is-active"
-        id="ad-seccion-estado"
-        data-ad-view
-      >
-        <article class="ad-card ad-kpi-card">
-          <span class="ad-kpi-label">Período principal</span>
-
-          <strong id="ad-kpi-periodo">
-            Sin cargar
-          </strong>
-
-          <small id="ad-kpi-periodo-id">
-            Esperando conexión
-          </small>
-        </article>
-
-        <article class="ad-card ad-kpi-card">
-          <span class="ad-kpi-label">Títulos enviados</span>
-
-          <strong id="ad-kpi-titulos">
-            0
-          </strong>
-
-          <small>
-            Colección titulos
-          </small>
-        </article>
-
-        <article class="ad-card ad-kpi-card">
-          <span class="ad-kpi-label">Coordinadores</span>
-
-          <strong id="ad-kpi-coordinadores">
-            0
-          </strong>
-
-          <small>
-            Colección titulos_coordinadores
-          </small>
-        </article>
-
-        <article class="ad-card ad-kpi-card">
-          <span class="ad-kpi-label">Carreras detectadas</span>
-
-          <strong id="ad-kpi-carreras">
-            0
-          </strong>
-
-          <small>
-            Títulos enviados + Estudiantes
-          </small>
-        </article>
+      <section id="ad-seccion-estado" class="ad-view" data-ad-view>
+        <div class="ad-grid ad-grid-4">
+          <article class="ad-card ad-kpi-card"><span class="ad-kpi-label">Período principal</span><strong id="ad-kpi-periodo">-</strong><small id="ad-kpi-periodo-id">-</small></article>
+          <article class="ad-card ad-kpi-card"><span class="ad-kpi-label">Coordinadores</span><strong id="ad-kpi-coordinadores">0</strong><small>RESPALDO TITULOS APP</small></article>
+          <article class="ad-card ad-kpi-card"><span class="ad-kpi-label">Carreras</span><strong id="ad-kpi-carreras">0</strong><small>REQUISITOS_BDLOCAL_SYNC</small></article>
+          <article class="ad-card ad-kpi-card"><span class="ad-kpi-label">Títulos / IA activa</span><strong><span id="ad-kpi-titulos">0</span> / <span id="ad-kpi-ia">0</span></strong><small>Títulos enviados / proveedores</small></article>
+        </div>
+        <section class="ad-section">
+          <div class="ad-section-head"><div><p class="ad-eyebrow">Resumen</p><h3>Estado de las bases</h3></div><button class="ad-btn ad-btn-primary" type="button" data-action="refrescar">Actualizar todo</button></div>
+          <div class="ad-card"><pre id="ad-estado-general" class="ad-result-box">Cargando...</pre></div>
+        </section>
       </section>
 
-      <!-- =====================================================
-      VISTA: PERÍODOS
-      ====================================================== -->
-
-      <section
-        class="ad-section ad-view"
-        id="ad-seccion-periodos"
-        data-ad-view
-        hidden
-      >
-        <div class="ad-section-head">
-          <div>
-            <p class="ad-eyebrow">Bloque períodos</p>
-
-            <h3>Períodos</h3>
-
-            <p class="ad-muted">
-              Todos los períodos se manejarán como activos.
-              Aquí se agregan períodos y se define el período principal.
-            </p>
-          </div>
-        </div>
-
+      <section id="ad-seccion-periodos" class="ad-view" data-ad-view hidden>
+        <div class="ad-section-head"><div><p class="ad-eyebrow">Solo consulta</p><h3>Períodos académicos</h3><p class="ad-muted">Se leen exclusivamente desde REQUISITOS_BDLOCAL_SYNC. Esta app no los modifica.</p></div></div>
         <div class="ad-card">
-          <div class="ad-form-grid ad-form-grid-3">
-            <label>
-              <span>ID período</span>
-
-              <input
-                id="ad-periodo-id"
-                type="text"
-                placeholder="2026-02__2026-08"
-                autocomplete="off"
-              />
-            </label>
-
-            <label>
-              <span>Label período</span>
-
-              <input
-                id="ad-periodo-label"
-                type="text"
-                placeholder="Febrero 2026 a Agosto 2026"
-                autocomplete="off"
-              />
-            </label>
-
-            <div class="ad-form-actions">
-              <button
-                class="ad-btn ad-btn-primary"
-                id="ad-btn-periodo-agregar"
-                type="button"
-              >
-                Agregar período
-              </button>
-
-              <button
-                class="ad-btn ad-btn-secondary"
-                id="ad-btn-periodo-principal"
-                type="button"
-              >
-                Definir principal
-              </button>
-            </div>
-          </div>
-
-          <div class="ad-table-wrap">
-            <table class="ad-table">
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Label</th>
-                  <th>Estado</th>
-                  <th>Acción</th>
-                </tr>
-              </thead>
-
-              <tbody id="ad-tabla-periodos">
-                <tr>
-                  <td colspan="4" class="ad-empty">
-                    Sin datos cargados.
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          <label><span>Período usado para consultar carreras</span><select id="ad-periodo-select"></select></label>
+          <div class="ad-table-wrap"><table class="ad-table"><thead><tr><th>ID</th><th>Período</th><th>Modo</th><th>Principal</th></tr></thead><tbody id="ad-tabla-periodos"><tr><td colspan="4" class="ad-empty">Cargando...</td></tr></tbody></table></div>
         </div>
       </section>
 
-      <!-- =====================================================
-      VISTA: COORDINADORES
-      ====================================================== -->
-
-      <section
-        class="ad-section ad-view"
-        id="ad-seccion-coordinadores"
-        data-ad-view
-        hidden
-      >
-        <div class="ad-section-head">
-          <div>
-            <p class="ad-eyebrow">Bloque coordinadores</p>
-
-            <h3>Coordinadores</h3>
-
-            <p class="ad-muted">
-              Crear, editar, activar, desactivar y administrar
-              coordinadores de titulación.
-            </p>
-          </div>
-        </div>
-
+      <section id="ad-seccion-carreras" class="ad-view" data-ad-view hidden>
+        <div class="ad-section-head"><div><p class="ad-eyebrow">Solo consulta</p><h3>Carreras y estudiantes</h3><p class="ad-muted">Información académica proveniente de REQUISITOS_BDLOCAL_SYNC.</p></div></div>
         <div class="ad-card">
-          <div class="ad-form-grid ad-form-grid-4">
-            <label>
-              <span>Nombre</span>
-
-              <input
-                id="ad-coordinador-nombre"
-                type="text"
-                placeholder="Amado Chiluisa"
-                autocomplete="off"
-              />
-            </label>
-
-            <label>
-              <span>Telegram</span>
-
-              <input
-                id="ad-coordinador-telegram"
-                type="text"
-                placeholder="@usuario"
-                autocomplete="off"
-              />
-            </label>
-
-            <label>
-              <span>ID documento</span>
-
-              <input
-                id="ad-coordinador-id"
-                type="text"
-                placeholder="Se genera desde el nombre"
-                autocomplete="off"
-              />
-            </label>
-
-            <div class="ad-form-actions">
-              <button
-                class="ad-btn ad-btn-primary"
-                id="ad-btn-coordinador-guardar"
-                type="button"
-              >
-                Guardar coordinador
-              </button>
-            </div>
-          </div>
-
-          <div class="ad-table-wrap">
-            <table class="ad-table">
-              <thead>
-                <tr>
-                  <th>Coordinador</th>
-                  <th>Telegram</th>
-                  <th>Estado</th>
-                  <th>Carreras</th>
-                  <th>Acciones</th>
-                </tr>
-              </thead>
-
-              <tbody id="ad-tabla-coordinadores">
-                <tr>
-                  <td colspan="5" class="ad-empty">
-                    Sin datos cargados.
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          <div id="ad-estado-carreras" class="ad-result-box">Selecciona un período en Períodos.</div>
+          <div class="ad-table-wrap"><table class="ad-table"><thead><tr><th>Código</th><th>Carrera</th><th>Origen</th></tr></thead><tbody id="ad-tabla-carreras"><tr><td colspan="3" class="ad-empty">Cargando...</td></tr></tbody></table></div>
+        </div>
+        <div class="ad-card ad-section">
+          <h3>Consultar estudiante</h3>
+          <form id="ad-form-estudiante" class="ad-form-grid ad-form-grid-3">
+            <label><span>Cédula</span><input id="ad-estudiante-cedula" inputmode="numeric" required /></label>
+            <label><span>Período</span><select id="ad-estudiante-periodo" data-periodo-select></select></label>
+            <button class="ad-btn ad-btn-primary" type="submit">Consultar</button>
+          </form>
+          <pre id="ad-estudiante-salida" class="ad-diagnostic-box">Sin consulta.</pre>
         </div>
       </section>
 
-      <!-- =====================================================
-      VISTA: CARRERAS
-      ====================================================== -->
-
-      <section
-        class="ad-section ad-view"
-        id="ad-seccion-carreras"
-        data-ad-view
-        hidden
-      >
-        <div class="ad-section-head">
-          <div>
-            <p class="ad-eyebrow">Bloque carreras</p>
-
-            <h3>Asignación de carreras</h3>
-
-            <p class="ad-muted">
-              Las carreras se detectarán desde títulos enviados
-              y se cruzarán con la colección Estudiantes.
-            </p>
-          </div>
-        </div>
-
+      <section id="ad-seccion-coordinadores" class="ad-view" data-ad-view hidden>
+        <div class="ad-section-head"><div><p class="ad-eyebrow">Lectura y escritura</p><h3>Coordinadores</h3><p class="ad-muted">Los cambios se guardan en RESPALDO TITULOS APP.</p></div></div>
         <div class="ad-card">
-          <div class="ad-form-grid ad-form-grid-3">
-            <label>
-              <span>Coordinador</span>
-
-              <select id="ad-asignar-coordinador">
-                <option value="">
-                  Cargar coordinadores
-                </option>
-              </select>
-            </label>
-
-            <label>
-              <span>Carrera</span>
-
-              <select id="ad-asignar-carrera">
-                <option value="">
-                  Cargar carreras
-                </option>
-              </select>
-            </label>
-
-            <div class="ad-form-actions">
-              <button
-                class="ad-btn ad-btn-primary"
-                id="ad-btn-asignar-carrera"
-                type="button"
-              >
-                Asignar carrera
-              </button>
-
-              <button
-                class="ad-btn ad-btn-secondary"
-                id="ad-btn-cargar-carreras"
-                type="button"
-              >
-                Cargar carreras
-              </button>
-            </div>
-          </div>
-
-          <div
-            id="ad-lista-carreras"
-            class="ad-list-box"
-          >
-            Sin carreras cargadas.
-          </div>
+          <form id="ad-form-coordinador" class="ad-form-grid ad-form-grid-4">
+            <label><span>ID opcional</span><input id="ad-coordinador-id" placeholder="Se genera desde el nombre" /></label>
+            <label><span>Nombre</span><input id="ad-coordinador-nombre" required /></label>
+            <label><span>Telegram</span><input id="ad-coordinador-telegram" placeholder="@usuario" /></label>
+            <button class="ad-btn ad-btn-primary" type="submit">Guardar</button>
+            <label class="ad-form-span"><span>Carreras asignadas</span><textarea id="ad-coordinador-carreras" rows="2" placeholder="Carrera 1 | Carrera 2"></textarea></label>
+          </form>
+          <pre id="ad-estado-coordinador" class="ad-result-box">Sin cambios pendientes.</pre>
+          <div class="ad-table-wrap"><table class="ad-table"><thead><tr><th>Coordinador</th><th>Telegram</th><th>Estado</th><th>Carreras</th><th>Acciones</th></tr></thead><tbody id="ad-tabla-coordinadores"><tr><td colspan="5" class="ad-empty">Cargando...</td></tr></tbody></table></div>
+        </div>
+        <div class="ad-card ad-section">
+          <h3>Asignar o reemplazar carreras</h3>
+          <form id="ad-form-asignacion" class="ad-form-grid ad-form-grid-3">
+            <label><span>Coordinador</span><select id="ad-asignar-coordinador"></select></label>
+            <label><span>Carreras</span><textarea id="ad-asignar-carreras" rows="2" placeholder="Una o varias carreras separadas por |"></textarea></label>
+            <button class="ad-btn ad-btn-primary" type="submit">Guardar asignación</button>
+          </form>
+          <pre id="ad-estado-asignacion" class="ad-result-box">Sin asignación pendiente.</pre>
         </div>
       </section>
 
-      <!-- =====================================================
-      VISTA: TÍTULOS
-      ====================================================== -->
+      <section id="ad-seccion-titulos" class="ad-view" data-ad-view hidden>
+        <div class="ad-section-head"><div><p class="ad-eyebrow">RESPALDO TITULOS APP</p><h3>Títulos enviados</h3></div><label><span>Buscar</span><input id="ad-buscar-titulo" placeholder="Cédula, nombre, carrera o estado" /></label></div>
+        <div class="ad-card"><div class="ad-table-wrap"><table class="ad-table"><thead><tr><th>Cédula</th><th>Estudiante</th><th>Carrera</th><th>Período</th><th>Estado</th><th>Acción</th></tr></thead><tbody id="ad-tabla-titulos"><tr><td colspan="6" class="ad-empty">Cargando...</td></tr></tbody></table></div></div>
+      </section>
 
-      <section
-        class="ad-section ad-view"
-        id="ad-seccion-titulos"
-        data-ad-view
-        hidden
-      >
-        <div class="ad-section-head">
-          <div>
-            <p class="ad-eyebrow">Bloque títulos</p>
-
-            <h3>Títulos enviados</h3>
-
-            <p class="ad-muted">
-              Buscar por cédula, cruzar con Estudiantes
-              y visualizar las propuestas enviadas.
-            </p>
-          </div>
-        </div>
-
+      <section id="ad-seccion-devolver" class="ad-view ad-danger-zone" data-ad-view hidden>
+        <div class="ad-section-head"><div><p class="ad-eyebrow">Acción administrativa</p><h3>Devolver propuestas</h3><p class="ad-muted">La resolución se registra en RESPALDO TITULOS APP y permitirá un nuevo envío.</p></div></div>
         <div class="ad-card">
-          <div class="ad-form-grid ad-form-grid-3">
-            <label>
-              <span>Cédula / identificación</span>
-
-              <input
-                id="ad-buscar-cedula"
-                type="text"
-                placeholder="1752918662"
-                autocomplete="off"
-              />
-            </label>
-
-            <div class="ad-form-actions">
-              <button
-                class="ad-btn ad-btn-primary"
-                id="ad-btn-buscar-titulo"
-                type="button"
-              >
-                Buscar título
-              </button>
-
-              <button
-                class="ad-btn ad-btn-secondary"
-                id="ad-btn-listar-titulos"
-                type="button"
-              >
-                Listar títulos
-              </button>
-            </div>
-          </div>
-
-          <div
-            id="ad-resultado-titulo"
-            class="ad-result-box"
-          >
-            Ingresa una cédula para buscar.
-          </div>
-
-          <div class="ad-table-wrap">
-            <table class="ad-table">
-              <thead>
-                <tr>
-                  <th>Cédula</th>
-                  <th>Estudiante</th>
-                  <th>Carrera</th>
-                  <th>Estado</th>
-                  <th>Fecha envío</th>
-                </tr>
-              </thead>
-
-              <tbody id="ad-tabla-titulos">
-                <tr>
-                  <td colspan="5" class="ad-empty">
-                    Sin títulos cargados.
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          <form id="ad-form-devolver" class="ad-form-grid">
+            <label><span>Cédula</span><input id="ad-devolver-cedula" inputmode="numeric" required /></label>
+            <label><span>Período</span><input id="ad-devolver-periodo" placeholder="Puede quedar vacío para tomar el último" /></label>
+            <label><span>Motivo</span><textarea id="ad-devolver-motivo" rows="4" required></textarea></label>
+            <button class="ad-btn ad-btn-danger" type="submit">Devolver propuestas</button>
+          </form>
+          <pre id="ad-estado-devolver" class="ad-result-box">Sin acción pendiente.</pre>
         </div>
       </section>
 
-      <!-- =====================================================
-      VISTA: DEVOLVER TÍTULO
-      ====================================================== -->
-
-      <section
-        class="ad-section ad-danger-zone ad-view"
-        id="ad-seccion-devolver"
-        data-ad-view
-        hidden
-      >
-        <div class="ad-section-head">
-          <div>
-            <p class="ad-eyebrow">Acción directa</p>
-
-            <h3>Devolver título</h3>
-
-            <p class="ad-muted">
-              Copia en historial, registra log y elimina
-              el documento de titulos para que el estudiante
-              envíe desde cero.
-            </p>
-          </div>
-        </div>
-
+      <section id="ad-seccion-ia" class="ad-view" data-ad-view hidden>
+        <div class="ad-section-head"><div><p class="ad-eyebrow">Claves</p><h3>Proveedores de IA</h3><p class="ad-muted">Credenciales, estado, modelo y prioridad se guardan en la hoja Claves.</p></div></div>
         <div class="ad-card">
-          <div class="ad-form-grid ad-form-grid-3">
-            <label>
-              <span>Cédula</span>
-
-              <input
-                id="ad-devolver-cedula"
-                type="text"
-                placeholder="Cédula del estudiante"
-                autocomplete="off"
-              />
-            </label>
-
-            <label>
-              <span>Motivo</span>
-
-              <input
-                id="ad-devolver-motivo"
-                type="text"
-                value="Reinicio de intento desde administración"
-                autocomplete="off"
-              />
-            </label>
-
-            <div class="ad-form-actions">
-              <button
-                class="ad-btn ad-btn-danger"
-                id="ad-btn-devolver-titulo"
-                type="button"
-              >
-                Devolver título
-              </button>
-            </div>
-          </div>
-
-          <div
-            id="ad-resultado-devolver"
-            class="ad-result-box"
-          >
-            Acción pendiente.
-          </div>
+          <form id="ad-form-ia" class="ad-form-grid ad-form-grid-4">
+            <label><span>ID</span><input id="ad-ia-id" placeholder="gemini" required /></label>
+            <label><span>Nombre</span><input id="ad-ia-nombre" /></label>
+            <label><span>Tipo</span><select id="ad-ia-tipo"><option value="gemini">Gemini</option><option value="openai-compatible">OpenAI compatible</option></select></label>
+            <label><span>Prioridad</span><input id="ad-ia-prioridad" type="number" min="1" value="999" /></label>
+            <label class="ad-form-span"><span>Endpoint</span><input id="ad-ia-endpoint" placeholder="Deja vacío para conservar el actual" /></label>
+            <label><span>Modelo</span><input id="ad-ia-modelo" /></label>
+            <label><span>Credencial</span><input id="ad-ia-credencial" type="password" autocomplete="new-password" placeholder="Deja vacío para conservarla" /></label>
+            <label class="ad-check"><input id="ad-ia-activo" type="checkbox" /><span>Proveedor activo</span></label>
+            <button class="ad-btn ad-btn-primary" type="submit">Guardar proveedor</button>
+          </form>
+          <pre id="ad-estado-ia" class="ad-result-box">Las credenciales nunca se muestran en el navegador.</pre>
+          <div class="ad-table-wrap"><table class="ad-table"><thead><tr><th>Proveedor</th><th>Tipo</th><th>Modelo</th><th>Estado</th><th>Credencial</th><th>Acciones</th></tr></thead><tbody id="ad-tabla-ia"><tr><td colspan="6" class="ad-empty">Cargando...</td></tr></tbody></table></div>
         </div>
       </section>
 
-      <!-- =====================================================
-      VISTA: REPARAR FIREBASE
-      ====================================================== -->
-
-      <section
-        class="ad-section ad-danger-zone ad-view"
-        id="ad-seccion-reparar"
-        data-ad-view
-        hidden
-      >
-        <div class="ad-section-head">
-          <div>
-            <p class="ad-eyebrow">Acción directa</p>
-
-            <h3>Reparar Firebase</h3>
-
-            <p class="ad-muted">
-              Detecta documentos con ID incorrecto, crea
-              el documento correcto con cédula, archiva
-              y elimina el viejo.
-            </p>
-          </div>
-        </div>
-
-        <div class="ad-card">
-          <div class="ad-form-grid ad-form-grid-3">
-            <label>
-              <span>ID documento incorrecto</span>
-
-              <input
-                id="ad-reparar-doc-id"
-                type="text"
-                placeholder="2026-02__2026-08__1752918662"
-                autocomplete="off"
-              />
-            </label>
-
-            <div class="ad-form-actions">
-              <button
-                class="ad-btn ad-btn-secondary"
-                id="ad-btn-detectar-reparaciones"
-                type="button"
-              >
-                Detectar reparaciones
-              </button>
-
-              <button
-                class="ad-btn ad-btn-danger"
-                id="ad-btn-reparar-documento"
-                type="button"
-              >
-                Reparar documento
-              </button>
-            </div>
-          </div>
-
-          <div
-            id="ad-resultado-reparar"
-            class="ad-result-box"
-          >
-            Sin reparación ejecutada.
-          </div>
-        </div>
+      <section id="ad-seccion-diagnostico" class="ad-view" data-ad-view hidden>
+        <div class="ad-section-head"><div><p class="ad-eyebrow">Conexiones</p><h3>Diagnóstico de bases</h3></div><button class="ad-btn ad-btn-primary" type="button" data-action="diagnosticar">Ejecutar diagnóstico</button></div>
+        <div class="ad-card"><pre id="ad-diagnostico-salida" class="ad-diagnostic-box">Diagnóstico pendiente.</pre></div>
       </section>
 
-      <!-- =====================================================
-      VISTA: DIAGNÓSTICO
-      ====================================================== -->
-
-      <section
-        class="ad-section ad-view"
-        id="ad-seccion-diagnostico"
-        data-ad-view
-        hidden
-      >
-        <div class="ad-section-head">
-          <div>
-            <p class="ad-eyebrow">Conexiones</p>
-
-            <h3>Diagnóstico Firebase / Google Sheets</h3>
-
-            <p class="ad-muted">
-              Pruebas de conexión, colecciones principales
-              y estado de Google Sheets.
-            </p>
-          </div>
-        </div>
-
-        <div class="ad-card">
-          <div class="ad-actions-row">
-            <button
-              class="ad-btn ad-btn-primary"
-              id="ad-btn-probar-firebase"
-              type="button"
-            >
-              Probar Firebase
-            </button>
-
-            <button
-              class="ad-btn ad-btn-secondary"
-              id="ad-btn-probar-sheets"
-              type="button"
-            >
-              Probar Google Sheets
-            </button>
-
-            <button
-              class="ad-btn ad-btn-secondary"
-              id="ad-btn-recargar-dashboard"
-              type="button"
-            >
-              Recargar dashboard
-            </button>
-          </div>
-
-          <div
-            id="ad-panel-diagnostico"
-            class="ad-diagnostic-box"
-          >
-            Diagnóstico pendiente.
-          </div>
-        </div>
-      </section>
-
-      <!-- =====================================================
-      VISTA: LOGS
-      ====================================================== -->
-
-      <section
-        class="ad-section ad-view"
-        id="ad-seccion-logs"
-        data-ad-view
-        hidden
-      >
-        <div class="ad-section-head">
-          <div>
-            <p class="ad-eyebrow">Auditoría</p>
-
-            <h3>Logs administrativos</h3>
-
-            <p class="ad-muted">
-              Últimas acciones registradas en titulos_logs.
-            </p>
-          </div>
-        </div>
-
-        <div class="ad-card">
-          <div class="ad-table-wrap">
-            <table class="ad-table">
-              <thead>
-                <tr>
-                  <th>Fecha</th>
-                  <th>Acción</th>
-                  <th>Detalle</th>
-                  <th>Estado</th>
-                </tr>
-              </thead>
-
-              <tbody id="ad-tabla-logs">
-                <tr>
-                  <td colspan="4" class="ad-empty">
-                    Sin logs cargados.
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      <footer class="ad-footer">
-        <span>Administrador Titulación</span>
-
-        <span id="ad-footer-version">
-          Versión 1.0.0
-        </span>
-      </footer>
+      <footer class="ad-footer"><span>Administrador Titulación</span><span id="ad-footer-version">Versión 2.0.0</span></footer>
     </main>
   </div>
 
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
-
-  <script src="./ad-js/ad-config.js"></script>
-  <script src="./ad-js/ad-firebase.service.js"></script>
-  <script src="./ad-js/ad-diagnostico.service.js"></script>
-  <script src="./ad-js/ad-periodos.service.js"></script>
-  <script src="./ad-js/ad-titulos.service.js"></script>
-  <script src="./ad-js/ad-coordinadores.service.js"></script>
-  <script src="./ad-js/ad-app.js"></script>
-  <script src="./ad-js/ad-coordinadores.app.js"></script>
-  <script src="./ad-js/ad-titulos.app.js"></script>
-  <script src="./ad-js/ad-devolver.app.js"></script>
-  <script src="./ad-js/ad-reparar.app.js"></script>
+  <script src="./ad-js/ad-api.service.js?v=2.0.0"></script>
+  <script src="./ad-js/ad-google-sheets.app.js?v=2.0.0"></script>
 </body>
 </html>
