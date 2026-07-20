@@ -16,7 +16,7 @@
   cargar('js/ia.titulacion.robusto.service.js?v=4.0.0');
   cargar('js/ia.recomendacion.ui.js?v=3.0.0');
   cargar('js/ia.nueve.integracion.js?v=2.0.0');
-  cargar('js/estudiante.arquitectura.v2.js?v=2.0.0');
+  cargar('js/estudiante.arquitectura.v2.js?v=2.1.0');
   cargar('js/estudiante.envio.modal.js?v=1.0.1');
   window.EstudianteMVPIAProviders=Object.freeze({generarTexto:generarTexto,normalizarProveedorRuntime:normalizarProveedorRuntime,proxyUrl:proxyUrl});
 })(window,document);
