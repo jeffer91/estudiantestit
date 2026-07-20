@@ -20,17 +20,18 @@ const ALLOWED = new Set([
 
 const STUDENT_CACHE_TTL_MS = 5 * 60 * 1000;
 const STUDENT_NOT_FOUND_TTL_MS = 60 * 1000;
-const STUDENT_CACHE_LIMIT = 200;
+const STUDENT_CACHE_LIMIT = 300;
 const studentCache = new Map();
 const studentInflight = new Map();
 
-function cedula(value) {
+function normalizeCedula(value) {
   const digits = text(value).replace(/\D/g, '');
-  return digits.length === 9 ? '0' + digits : digits;
+  if (digits.length === 9) return '0' + digits;
+  return digits.length === 10 ? digits : '';
 }
 
 function unwrap(result) {
-  return result && result.respuesta || result && result.data || result || {};
+  return result && (result.respuesta || result.data) || result || {};
 }
 
 function table(result, name) {
@@ -42,66 +43,54 @@ function table(result, name) {
   return [];
 }
 
-function periods(result) {
+function normalizePeriods(result) {
   const root = unwrap(result);
-  const list = root.periodos || root.periods || root.result && (root.result.periodos || root.result.periods) || root.tables && root.tables.Periodos || [];
+  const source = root.periodos || root.periods ||
+    root.result && (root.result.periodos || root.result.periods) ||
+    root.tables && root.tables.Periodos || [];
   const map = new Map();
 
-  (Array.isArray(list) ? list : []).forEach((item) => {
+  (Array.isArray(source) ? source : []).forEach((item) => {
     item = item || {};
     const id = text(item.periodoId || item.periodoCanonicoId || item.id || item.value || item.key);
     const label = text(item.periodoLabel || item.periodoCanonicoLabel || item.label || item.nombre || id);
     const inactive = text(item.estado || 'ACTIVO').toUpperCase() === 'INACTIVO';
-    if (id && !inactive && !map.has(id)) {
-      map.set(id, {
-        id,
-        periodoId: id,
-        label: label || id,
-        periodoLabel: label || id,
-        activo: true,
-        principal: item.principal === true
-      });
-    }
+    if (!id || inactive || map.has(id)) return;
+    map.set(id, {
+      id,
+      periodoId: id,
+      label: label || id,
+      periodoLabel: label || id,
+      activo: true,
+      principal: item.principal === true
+    });
   });
 
-  const rawPeriods = [...map.values()];
-  const principalIndex = Math.max(0, rawPeriods.findIndex((item) => item.principal));
-  const periodos = rawPeriods.map((item, index) => ({
+  const raw = [...map.values()];
+  let principalIndex = raw.findIndex((item) => item.principal);
+  if (principalIndex < 0 && raw.length) principalIndex = 0;
+  const periodos = raw.map((item, index) => ({
     ...item,
-    principal: rawPeriods.length > 0 && index === principalIndex
+    principal: index === principalIndex
   }));
 
   return {
     periodos,
-    principal: periodos[principalIndex] || null
+    principal: principalIndex >= 0 ? periodos[principalIndex] : null
   };
 }
 
-async function call(env, action, payload) {
-  const configured = Number(env.CLAVES_TIMEOUT_MS || 0);
-  const timeoutMs = Math.max(Number.isFinite(configured) ? configured : 0, 90000);
-  return runService(env, 'REQUISITOS', action, 'POST', payload || {}, 'consulta', timeoutMs);
-}
-
-async function listPeriods(env) {
-  const data = periods(await call(env, 'pull_bl2', { scope: 'periods', includeData: false }));
-  return {
-    ok: true,
-    tipo: 'LISTAR_PERIODOS_TITULACION',
-    ...data,
-    total: data.periodos.length,
-    fuente: 'REQUISITOS_BDLOCAL_SYNC'
-  };
-}
-
-function student(item, fallbackPeriod) {
+function normalizeStudent(item, fallbackPeriod) {
   item = item || {};
-  const id = cedula(item.cedula || item.numeroIdentificacion || item.NumeroIdentificacion || item.Cedula || item['Cédula']);
+  const id = normalizeCedula(
+    item.cedula || item.numeroIdentificacion || item.NumeroIdentificacion || item.Cedula || item['Cédula']
+  );
   const periodId = text(item.periodoId || item.periodoCanonicoId || item.periodId || fallbackPeriod);
   const career = text(item.NombreCarrera || item.nombreCarrera || item.carrera || item.Carrera);
   const names = text(item.Nombres || item.nombres || item.nombre || item.Nombre);
 
   return {
+    ...item,
     id: text(item.id || item._id || item.studentId || id),
     cedula: id,
     numeroIdentificacion: id,
@@ -125,46 +114,15 @@ function student(item, fallbackPeriod) {
     CorreoPersonal: text(item.CorreoPersonal || item.correoPersonal),
     correoPersonal: text(item.CorreoPersonal || item.correoPersonal),
     Celular: text(item.Celular || item.celular),
-    celular: text(item.Celular || item.celular),
-    Academico: text(item.Academico || item['Académico']),
-    Documentacion: text(item.Documentacion || item['Documentación']),
-    Financiero: text(item.Financiero),
-    Ingles: text(item.Ingles || item['Inglés']),
-    Titulacion: text(item.Titulacion || item['Titulación']),
-    Vinculacion: text(item.Vinculacion || item['Vinculación']),
-    PracticasVinculacion: text(item.PracticasVinculacion || item['PrácticasVinculacion']),
-    SeguimientoGraduados: text(item.SeguimientoGraduados),
-    ActualizacionDatos: text(item.ActualizacionDatos || item['ActualizaciónDatos']),
-    AprobacionTitulacion: text(item.AprobacionTitulacion || item['AprobaciónTitulacion']),
-    AprobacionComplexivoProyecto: text(item.AprobacionComplexivoProyecto || item['AprobaciónComplexivoProyecto'])
+    celular: text(item.Celular || item.celular)
   };
 }
 
-async function pull(env, periodId) {
-  return call(env, 'pull_bl2', {
-    scope: periodId ? 'period' : 'all',
-    periodoId: periodId || '',
-    includeData: true
-  });
+function cacheKey(id, periodId) {
+  return id + '|' + periodId;
 }
 
-function preferStudent(matches, requestedPeriod, principalPeriod) {
-  if (!matches.length) return null;
-  if (requestedPeriod) {
-    return matches.find((item) => item.periodoId === requestedPeriod || item.periodoLabel === requestedPeriod) || matches[0];
-  }
-  if (principalPeriod) {
-    const principal = matches.find((item) => item.periodoId === principalPeriod || item.periodoLabel === principalPeriod);
-    if (principal) return principal;
-  }
-  return matches[0];
-}
-
-function cacheKey(id, requestedPeriod) {
-  return id + '|' + requestedPeriod;
-}
-
-function cacheGet(key) {
+function getCached(key) {
   const item = studentCache.get(key);
   if (!item) return null;
   if (item.expiresAt <= Date.now()) {
@@ -174,25 +132,20 @@ function cacheGet(key) {
   return { ...item.value, cache: 'worker' };
 }
 
-function cachePut(key, value) {
-  const ttl = value && value.encontrado === true
-    ? STUDENT_CACHE_TTL_MS
-    : STUDENT_NOT_FOUND_TTL_MS;
-
+function setCached(key, value) {
   if (studentCache.size >= STUDENT_CACHE_LIMIT) {
     const oldest = studentCache.keys().next().value;
     if (oldest) studentCache.delete(oldest);
   }
-
-  studentCache.set(key, {
-    value,
-    expiresAt: Date.now() + ttl
-  });
+  const ttl = value && value.encontrado === true
+    ? STUDENT_CACHE_TTL_MS
+    : STUDENT_NOT_FOUND_TTL_MS;
+  studentCache.set(key, { value, expiresAt: Date.now() + ttl });
 }
 
 function normalizeDirectResult(result, id, requestedPeriod) {
   const raw = result && (result.estudiante || result.registro || result.data);
-  const found = result && (result.encontrado === true || result.existe === true) && raw;
+  const found = Boolean(result && (result.encontrado === true || result.existe === true) && raw);
 
   if (!found) {
     return {
@@ -203,19 +156,21 @@ function normalizeDirectResult(result, id, requestedPeriod) {
       periodoId: requestedPeriod,
       fuente: 'REQUISITOS_BDLOCAL_SYNC',
       lecturaDirecta: true,
-      mensaje: result && result.mensaje || 'No encontramos un estudiante con esa cédula en REQUISITOS_BDLOCAL_SYNC.'
+      duracionMs: Number(result && result.duracionMs || 0),
+      mensaje: result && result.mensaje ||
+        'No encontramos un estudiante con esa cédula en REQUISITOS_BDLOCAL_SYNC.'
     };
   }
 
-  const normalized = student(raw, requestedPeriod);
+  const student = normalizeStudent(raw, requestedPeriod);
   return {
     ok: true,
     encontrado: true,
     existe: true,
-    estudiante: normalized,
-    registro: normalized,
-    periodoId: normalized.periodoId,
-    periodoLabel: normalized.periodoLabel,
+    estudiante: student,
+    registro: student,
+    periodoId: student.periodoId,
+    periodoLabel: student.periodoLabel,
     coincidencias: Number(result.coincidencias || 1),
     fuente: 'REQUISITOS_BDLOCAL_SYNC',
     lecturaDirecta: true,
@@ -224,68 +179,52 @@ function normalizeDirectResult(result, id, requestedPeriod) {
   };
 }
 
-async function consultLegacy(env, id, requestedPeriod) {
-  const result = await pull(env, requestedPeriod);
-  const catalog = requestedPeriod ? { principal: null } : periods(result);
-  const principalPeriod = catalog.principal && catalog.principal.id || '';
-  const students = table(result, 'Estudiantes').map((item) => student(item, requestedPeriod));
-  const matches = students.filter((item) => item.cedula === id);
-  const found = preferStudent(matches, requestedPeriod, principalPeriod);
+async function callService(env, action, payload, timeoutMs = 30000) {
+  return runService(env, 'REQUISITOS', action, 'POST', payload || {}, 'consulta', timeoutMs);
+}
 
-  if (!found) {
-    return {
-      ok: true,
-      encontrado: false,
-      existe: false,
-      cedula: id,
-      periodoId: requestedPeriod,
-      mensaje: requestedPeriod
-        ? 'No encontramos un estudiante con esa cédula en el período seleccionado.'
-        : 'No encontramos un estudiante con esa cédula en ninguno de los períodos disponibles de REQUISITOS_BDLOCAL_SYNC.'
-    };
-  }
-
+async function listPeriods(env) {
+  const data = normalizePeriods(
+    await callService(env, 'pull_bl2', { scope: 'periods', includeData: false }, 45000)
+  );
   return {
     ok: true,
-    encontrado: true,
-    existe: true,
-    estudiante: found,
-    registro: found,
-    periodoId: found.periodoId,
-    periodoLabel: found.periodoLabel,
-    coincidencias: matches.length,
-    fuente: 'REQUISITOS_BDLOCAL_SYNC',
-    lecturaDirecta: false,
-    mensaje: 'Estudiante encontrado correctamente.'
+    tipo: 'LISTAR_PERIODOS_TITULACION',
+    ...data,
+    total: data.periodos.length,
+    fuente: 'REQUISITOS_BDLOCAL_SYNC'
   };
 }
 
-async function consult(env, data) {
-  const id = cedula(data.cedula || data.numeroIdentificacion || data.identificacion);
+async function consultStudent(env, data) {
+  const id = normalizeCedula(data.cedula || data.numeroIdentificacion || data.identificacion);
   if (!id) throw new Error('No se recibió una cédula válida.');
 
   const requestedPeriod = text(data.periodoId || data.periodo || data.periodoLabel);
   const key = cacheKey(id, requestedPeriod);
-  const cached = cacheGet(key);
+  const cached = getCached(key);
   if (cached) return cached;
   if (studentInflight.has(key)) return studentInflight.get(key);
 
   const task = requestClaves(env, 'CONSULTAR_ESTUDIANTE_REQUISITOS', {
     cedula: id,
     numeroIdentificacion: id,
-    periodoId: requestedPeriod
-  }, 30000)
+    periodoId: requestedPeriod,
+    modo: 'IDENTIDAD_RAPIDA'
+  }, 15000)
     .then((result) => normalizeDirectResult(result, id, requestedPeriod))
+    .then((result) => {
+      setCached(key, result);
+      return result;
+    })
     .catch((error) => {
       const message = text(error && error.message);
       if (/Acción no reconocida/i.test(message)) {
-        return consultLegacy(env, id, requestedPeriod);
+        throw new Error(
+          'Claves Central no tiene publicada la consulta rápida. Actualiza la implementación web de Claves Central.'
+        );
       }
       throw error;
-    })
-    .then((result) => {
-      cachePut(key, result);
-      return result;
     })
     .finally(() => {
       studentInflight.delete(key);
@@ -319,7 +258,10 @@ export async function onRequest({ request, env }) {
       : { ...input };
 
     if (!ALLOWED.has(action)) {
-      return jsonReply(request, { ok: false, mensaje: 'REQUISITOS_BDLOCAL_SYNC es de solo consulta.' }, 403);
+      return jsonReply(request, {
+        ok: false,
+        mensaje: 'REQUISITOS_BDLOCAL_SYNC es de solo consulta.'
+      }, 403);
     }
 
     if (action === 'CONFIGURACION_PUBLICA') {
@@ -338,8 +280,8 @@ export async function onRequest({ request, env }) {
     }
 
     if (action === 'PING') {
-      const ping = await call(env, 'ping', {});
-      return jsonReply(request, ping.respuesta || ping.data || ping);
+      const ping = await callService(env, 'ping', {}, 30000);
+      return jsonReply(request, unwrap(ping));
     }
 
     if (action === 'LISTAR_PERIODOS_TITULACION' || action === 'LISTAR_PERIODOS_PUBLICOS') {
@@ -347,12 +289,17 @@ export async function onRequest({ request, env }) {
     }
 
     if (action === 'CONSULTAR_ESTUDIANTE' || action === 'CONSULTAR_ESTUDIANTE_TITULACION') {
-      return jsonReply(request, await consult(env, data));
+      return jsonReply(request, await consultStudent(env, data));
     }
 
     if (action === 'LISTAR_CARRERAS_PERIODO') {
       const periodId = text(data.periodoId || data.periodo || data.periodoLabel);
-      const careers = table(await pull(env, periodId), 'Carreras');
+      const result = await callService(env, 'pull_bl2', {
+        scope: periodId ? 'period' : 'all',
+        periodoId: periodId,
+        includeData: true
+      }, 60000);
+      const careers = table(result, 'Carreras');
       return jsonReply(request, {
         ok: true,
         carreras: careers,
