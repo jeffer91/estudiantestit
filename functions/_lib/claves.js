@@ -18,9 +18,14 @@ function validateUrl(value) {
   return url.toString();
 }
 
+function timeoutValue(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : Number(fallback || 30000);
+}
+
 async function fetchTimed(url, options, timeoutMs) {
   const controller = new AbortController();
-  const ms = Math.min(60000, Math.max(5000, Number(timeoutMs || 30000)));
+  const ms = Math.min(120000, Math.max(5000, timeoutValue(timeoutMs, 30000)));
   const timer = setTimeout(() => controller.abort(), ms);
   try {
     return await fetch(url, { ...options, signal: controller.signal });
@@ -34,7 +39,7 @@ async function fetchTimed(url, options, timeoutMs) {
   }
 }
 
-export async function requestClaves(env, action, data = {}) {
+export async function requestClaves(env, action, data = {}, timeoutMs) {
   const access = text(env.CLAVES_ACCESS_TOKEN);
   if (!access) throw new Error('No está configurado CLAVES_ACCESS_TOKEN.');
 
@@ -51,7 +56,7 @@ export async function requestClaves(env, action, data = {}) {
         datos: data || {}
       })
     },
-    env.CLAVES_TIMEOUT_MS || 30000
+    timeoutMs || env.CLAVES_TIMEOUT_MS || 30000
   );
 
   const raw = await response.text();
@@ -68,14 +73,14 @@ export async function requestClaves(env, action, data = {}) {
   return result;
 }
 
-export function runService(env, service, action, method, payload, role) {
+export function runService(env, service, action, method, payload, role, timeoutMs) {
   return requestClaves(env, 'EJECUTAR_SERVICIO', {
     servicio: text(service).toUpperCase(),
     accionServicio: text(action).toUpperCase(),
     metodo: text(method || 'POST').toUpperCase(),
     rol: text(role || 'student'),
     payload: payload || {}
-  });
+  }, timeoutMs);
 }
 
 export function getPublicStatus(env) {
