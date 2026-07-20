@@ -1,4 +1,4 @@
-import { getPublicStatus, runService } from '../_lib/claves.js';
+import { getPublicStatus, requestClaves, runService } from '../_lib/claves.js';
 import {
   corsHeaders,
   jsonReply,
@@ -17,6 +17,12 @@ const ALLOWED = new Set([
   'CONSULTAR_ESTUDIANTE_TITULACION',
   'LISTAR_CARRERAS_PERIODO'
 ]);
+
+const STUDENT_CACHE_TTL_MS = 5 * 60 * 1000;
+const STUDENT_NOT_FOUND_TTL_MS = 60 * 1000;
+const STUDENT_CACHE_LIMIT = 200;
+const studentCache = new Map();
+const studentInflight = new Map();
 
 function cedula(value) {
   const digits = text(value).replace(/\D/g, '');
@@ -154,11 +160,71 @@ function preferStudent(matches, requestedPeriod, principalPeriod) {
   return matches[0];
 }
 
-async function consult(env, data) {
-  const id = cedula(data.cedula || data.numeroIdentificacion || data.identificacion);
-  if (!id) throw new Error('No se recibió una cédula válida.');
+function cacheKey(id, requestedPeriod) {
+  return id + '|' + requestedPeriod;
+}
 
-  const requestedPeriod = text(data.periodoId || data.periodo || data.periodoLabel);
+function cacheGet(key) {
+  const item = studentCache.get(key);
+  if (!item) return null;
+  if (item.expiresAt <= Date.now()) {
+    studentCache.delete(key);
+    return null;
+  }
+  return { ...item.value, cache: 'worker' };
+}
+
+function cachePut(key, value) {
+  const ttl = value && value.encontrado === true
+    ? STUDENT_CACHE_TTL_MS
+    : STUDENT_NOT_FOUND_TTL_MS;
+
+  if (studentCache.size >= STUDENT_CACHE_LIMIT) {
+    const oldest = studentCache.keys().next().value;
+    if (oldest) studentCache.delete(oldest);
+  }
+
+  studentCache.set(key, {
+    value,
+    expiresAt: Date.now() + ttl
+  });
+}
+
+function normalizeDirectResult(result, id, requestedPeriod) {
+  const raw = result && (result.estudiante || result.registro || result.data);
+  const found = result && (result.encontrado === true || result.existe === true) && raw;
+
+  if (!found) {
+    return {
+      ok: true,
+      encontrado: false,
+      existe: false,
+      cedula: id,
+      periodoId: requestedPeriod,
+      fuente: 'REQUISITOS_BDLOCAL_SYNC',
+      lecturaDirecta: true,
+      mensaje: result && result.mensaje || 'No encontramos un estudiante con esa cédula en REQUISITOS_BDLOCAL_SYNC.'
+    };
+  }
+
+  const normalized = student(raw, requestedPeriod);
+  return {
+    ok: true,
+    encontrado: true,
+    existe: true,
+    estudiante: normalized,
+    registro: normalized,
+    periodoId: normalized.periodoId,
+    periodoLabel: normalized.periodoLabel,
+    coincidencias: Number(result.coincidencias || 1),
+    fuente: 'REQUISITOS_BDLOCAL_SYNC',
+    lecturaDirecta: true,
+    duracionMs: Number(result.duracionMs || 0),
+    mensaje: result.mensaje || 'Estudiante encontrado correctamente.'
+  };
+}
+
+async function consultLegacy(env, id, requestedPeriod) {
   const result = await pull(env, requestedPeriod);
   const catalog = requestedPeriod ? { principal: null } : periods(result);
   const principalPeriod = catalog.principal && catalog.principal.id || '';
@@ -189,8 +255,44 @@ async function consult(env, data) {
     periodoLabel: found.periodoLabel,
     coincidencias: matches.length,
     fuente: 'REQUISITOS_BDLOCAL_SYNC',
+    lecturaDirecta: false,
     mensaje: 'Estudiante encontrado correctamente.'
   };
+}
+
+async function consult(env, data) {
+  const id = cedula(data.cedula || data.numeroIdentificacion || data.identificacion);
+  if (!id) throw new Error('No se recibió una cédula válida.');
+
+  const requestedPeriod = text(data.periodoId || data.periodo || data.periodoLabel);
+  const key = cacheKey(id, requestedPeriod);
+  const cached = cacheGet(key);
+  if (cached) return cached;
+  if (studentInflight.has(key)) return studentInflight.get(key);
+
+  const task = requestClaves(env, 'CONSULTAR_ESTUDIANTE_REQUISITOS', {
+    cedula: id,
+    numeroIdentificacion: id,
+    periodoId: requestedPeriod
+  }, 30000)
+    .then((result) => normalizeDirectResult(result, id, requestedPeriod))
+    .catch((error) => {
+      const message = text(error && error.message);
+      if (/Acción no reconocida/i.test(message)) {
+        return consultLegacy(env, id, requestedPeriod);
+      }
+      throw error;
+    })
+    .then((result) => {
+      cachePut(key, result);
+      return result;
+    })
+    .finally(() => {
+      studentInflight.delete(key);
+    });
+
+  studentInflight.set(key, task);
+  return task;
 }
 
 function publicService(status, key) {
