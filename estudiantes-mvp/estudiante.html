@@ -1,52 +1,23 @@
 <!DOCTYPE html>
-<!--
-  Archivo: estudiante.html
-  Ruta: estudiantes-mvp/estudiante.html
-  Funciones principales:
-  - Mostrar la pantalla pública del estudiante.
-  - Permitir consulta por cédula desde Firebase.
-  - Guiar el flujo por paginación: consulta, datos, Telegram, propuestas, resumen y envío.
-  - Activar IA de Titulación por cada propuesta.
-  - Cargar los modales informativos y tecnológicos del estudiante.
-  - Enviar primero a Google Sheets y respaldar en Firebase.
-  - Cargar memoria local del navegador para recuperar avances.
-  - Preparar paginación interna para Propuesta 1, Propuesta 2 y Propuesta 3.
--->
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
   <title>Registro de Títulos Académicos</title>
-
-  <meta
-    name="description"
-    content="Formulario público para que estudiantes registren sus propuestas de títulos académicos."
-  />
-
-  <link rel="stylesheet" href="css/app.css" />
+  <meta name="description" content="Formulario público para registrar propuestas de títulos académicos." />
+  <link rel="icon" href="data:," />
+  <link rel="stylesheet" href="css/app.css?v=2.0.0" />
 </head>
-
 <body>
   <div id="memoriaPopup" class="memory-modal" hidden role="dialog" aria-modal="true" aria-labelledby="memoriaPopupTitulo">
     <div class="memory-modal__backdrop" data-accion="memoria-continuar"></div>
-
     <div class="memory-modal__card">
       <p class="section-kicker">Avance guardado</p>
       <h2 id="memoriaPopupTitulo">Encontramos un avance guardado</h2>
-      <p>
-        Encontramos un avance guardado en este navegador. Puedes continuar donde te quedaste
-        o empezar un nuevo registro.
-      </p>
-
+      <p>Encontramos un avance guardado en este navegador. Puedes continuar donde te quedaste o empezar un nuevo registro.</p>
       <div class="memory-modal__actions">
-        <button id="btnMemoriaContinuar" type="button" class="btn btn--primary" data-accion="memoria-continuar">
-          Continuar
-        </button>
-
-        <button id="btnMemoriaNuevo" type="button" class="btn btn--secondary" data-accion="memoria-nuevo" data-no-lock="true">
-          Empezar nuevo
-        </button>
+        <button id="btnMemoriaContinuar" type="button" class="btn btn--primary" data-accion="memoria-continuar">Continuar</button>
+        <button id="btnMemoriaNuevo" type="button" class="btn btn--secondary" data-accion="memoria-nuevo" data-no-lock="true">Empezar nuevo</button>
       </div>
     </div>
   </div>
@@ -55,13 +26,8 @@
     <div class="app-header__content">
       <div class="brand">
         <div class="brand__logo-wrap">
-          <img
-            class="brand__logo"
-            src="img/logo-itsqmet.png"
-            alt="ITSQMET - Formando profesionales de élite"
-          />
+          <img class="brand__logo" src="img/logo-itsqmet.png" alt="ITSQMET - Formando profesionales de élite" />
         </div>
-
         <div class="brand__text">
           <p class="app-badge">IA de Titulación</p>
           <h1>Registro de Títulos Académicos</h1>
@@ -88,22 +54,13 @@
       <div class="section-heading">
         <p class="section-kicker">Paso 1</p>
         <h2>Consulta tus datos</h2>
-        <p>Ingresa solo tu número de cédula. La app consultará tus datos académicos en Firebase.</p>
+        <p>Ingresa solo tu número de cédula. La app consultará tus datos académicos en REQUISITOS_BDLOCAL_SYNC.</p>
       </div>
-
       <form id="formConsulta" class="form-grid">
         <div class="field field--full">
           <label for="cedulaInput">Número de cédula</label>
-          <input
-            id="cedulaInput"
-            type="text"
-            inputmode="numeric"
-            autocomplete="off"
-            placeholder="Ejemplo: 0104489000"
-            required
-          />
+          <input id="cedulaInput" type="text" inputmode="numeric" autocomplete="off" placeholder="Ejemplo: 0104489000" required />
         </div>
-
         <div class="form-actions field--full">
           <button type="submit" class="btn btn--primary">Consultar datos</button>
         </div>
@@ -116,20 +73,17 @@
         <h2>Verifica tus datos académicos</h2>
         <p>Revisa que tu información corresponda a tu registro académico.</p>
       </div>
-
       <div class="data-grid">
         <div><span>Nombres</span><strong id="datoNombres">-</strong></div>
         <div><span>Cédula</span><strong id="datoCedula">-</strong></div>
         <div><span>Carrera</span><strong id="datoCarrera">-</strong></div>
         <div><span>Período</span><strong id="datoPeriodo">-</strong></div>
-
         <div hidden><span>Código carrera</span><strong id="datoCodigoCarrera">-</strong></div>
         <div hidden><span>Sede</span><strong id="datoSede">-</strong></div>
         <div hidden><span>Modalidad</span><strong id="datoModalidad">-</strong></div>
         <div hidden><span>Correo</span><strong id="datoCorreo">-</strong></div>
         <div hidden><span>Celular</span><strong id="datoCelular">-</strong></div>
       </div>
-
       <div class="step-actions">
         <button type="button" class="btn btn--ghost" data-accion="volver-paso" data-paso="consulta">Volver</button>
         <button type="button" class="btn btn--primary" data-accion="ir-paso" data-paso="telegram">Continuar</button>
@@ -142,22 +96,13 @@
         <h2>Registra tu Telegram</h2>
         <p>Este usuario servirá para identificar tu contacto durante el proceso de titulación.</p>
       </div>
-
       <form id="formTelegram" class="form-grid">
         <div class="field field--full">
           <label for="telegramInput">Usuario de Telegram</label>
-          <input
-            id="telegramInput"
-            type="text"
-            autocomplete="off"
-            placeholder="@usuario"
-            required
-          />
+          <input id="telegramInput" type="text" autocomplete="off" placeholder="@usuario" required />
           <small>Debe iniciar con letra y tener entre 5 y 32 caracteres.</small>
         </div>
-
         <div id="estadoTelegram" class="status-message field--full"></div>
-
         <div class="form-actions field--full">
           <button type="button" class="btn btn--ghost" data-accion="volver-paso" data-paso="datos">Volver</button>
           <button type="submit" class="btn btn--primary">Guardar Telegram</button>
@@ -171,7 +116,6 @@
           <p class="proposal-pager__label" id="propuestaIndiceTexto">Propuesta 1 de 3</p>
           <p class="proposal-pager__help">Llena los campos y avanza cuando termines.</p>
         </div>
-
         <div class="proposal-pager__dots" aria-hidden="true">
           <span class="proposal-pager__dot is-active" data-propuesta-dot="1"></span>
           <span class="proposal-pager__dot" data-propuesta-dot="2"></span>
@@ -182,181 +126,60 @@
       <form id="formPropuestas" novalidate>
         <article class="proposal-card" data-propuesta-panel="1">
           <div class="form-grid">
-            <div class="field field--full">
-              <label for="p1Titulo">Título escrito por el estudiante</label>
-              <input id="p1Titulo" type="text" required />
-            </div>
-
-            <div class="field">
-              <label for="p1Tema">Tema general</label>
-              <input id="p1Tema" type="text" required />
-            </div>
-
-            <div class="field">
-              <label for="p1Contexto">Lugar o contexto</label>
-              <input id="p1Contexto" type="text" required />
-            </div>
-
-            <div class="field">
-              <label for="p1Grupo">Grupo de estudio</label>
-              <input id="p1Grupo" type="text" required />
-            </div>
-
-            <div class="field">
-              <label for="p1Periodo">Año o período</label>
-              <input id="p1Periodo" type="text" placeholder="Ejemplo: 2026" required />
-            </div>
-
-            <div class="field field--full">
-              <label for="p1Problema">Problema o necesidad</label>
-              <textarea id="p1Problema" required></textarea>
-            </div>
-
-            <div class="field field--full">
-              <label for="p1Objetivo">Objetivo</label>
-              <textarea id="p1Objetivo" required></textarea>
-            </div>
+            <div class="field field--full"><label for="p1Titulo">Título escrito por el estudiante</label><input id="p1Titulo" type="text" required /></div>
+            <div class="field"><label for="p1Tema">Tema general</label><input id="p1Tema" type="text" required /></div>
+            <div class="field"><label for="p1Contexto">Lugar o contexto</label><input id="p1Contexto" type="text" required /></div>
+            <div class="field"><label for="p1Grupo">Grupo de estudio</label><input id="p1Grupo" type="text" required /></div>
+            <div class="field"><label for="p1Periodo">Año o período</label><input id="p1Periodo" type="text" placeholder="Ejemplo: 2026" required /></div>
+            <div class="field field--full"><label for="p1Problema">Problema o necesidad</label><textarea id="p1Problema" required></textarea></div>
+            <div class="field field--full"><label for="p1Objetivo">Objetivo</label><textarea id="p1Objetivo" required></textarea></div>
           </div>
-
-          <div class="ai-actions">
-            <button type="button" class="btn btn--ai" data-accion="generar-ia" data-propuesta="1">
-              Generar sugerencias con IA de Titulación
-            </button>
-          </div>
-
+          <div class="ai-actions"><button type="button" class="btn btn--ai" data-accion="generar-ia" data-propuesta="1">Generar sugerencias con IA de Titulación</button></div>
           <div id="p1EstadoIA" class="status-message"></div>
           <div id="p1Sugerencias" class="suggestions-list"></div>
-
-          <div class="proposal-page-actions">
-            <button type="button" class="btn btn--primary" data-accion="propuesta-siguiente" data-propuesta="1">
-              Siguiente propuesta
-            </button>
-          </div>
+          <div class="proposal-page-actions"><button type="button" class="btn btn--primary" data-accion="propuesta-siguiente" data-propuesta="1">Siguiente propuesta</button></div>
         </article>
 
         <article class="proposal-card" data-propuesta-panel="2" hidden>
           <div class="form-grid">
-            <div class="field field--full">
-              <label for="p2Titulo">Título escrito por el estudiante</label>
-              <input id="p2Titulo" type="text" required />
-            </div>
-
-            <div class="field">
-              <label for="p2Tema">Tema general</label>
-              <input id="p2Tema" type="text" required />
-            </div>
-
-            <div class="field">
-              <label for="p2Contexto">Lugar o contexto</label>
-              <input id="p2Contexto" type="text" required />
-            </div>
-
-            <div class="field">
-              <label for="p2Grupo">Grupo de estudio</label>
-              <input id="p2Grupo" type="text" required />
-            </div>
-
-            <div class="field">
-              <label for="p2Periodo">Año o período</label>
-              <input id="p2Periodo" type="text" placeholder="Ejemplo: 2026" required />
-            </div>
-
-            <div class="field field--full">
-              <label for="p2Problema">Problema o necesidad</label>
-              <textarea id="p2Problema" required></textarea>
-            </div>
-
-            <div class="field field--full">
-              <label for="p2Objetivo">Objetivo</label>
-              <textarea id="p2Objetivo" required></textarea>
-            </div>
+            <div class="field field--full"><label for="p2Titulo">Título escrito por el estudiante</label><input id="p2Titulo" type="text" required /></div>
+            <div class="field"><label for="p2Tema">Tema general</label><input id="p2Tema" type="text" required /></div>
+            <div class="field"><label for="p2Contexto">Lugar o contexto</label><input id="p2Contexto" type="text" required /></div>
+            <div class="field"><label for="p2Grupo">Grupo de estudio</label><input id="p2Grupo" type="text" required /></div>
+            <div class="field"><label for="p2Periodo">Año o período</label><input id="p2Periodo" type="text" placeholder="Ejemplo: 2026" required /></div>
+            <div class="field field--full"><label for="p2Problema">Problema o necesidad</label><textarea id="p2Problema" required></textarea></div>
+            <div class="field field--full"><label for="p2Objetivo">Objetivo</label><textarea id="p2Objetivo" required></textarea></div>
           </div>
-
-          <div class="ai-actions">
-            <button type="button" class="btn btn--ai" data-accion="generar-ia" data-propuesta="2">
-              Generar sugerencias con IA de Titulación
-            </button>
-          </div>
-
+          <div class="ai-actions"><button type="button" class="btn btn--ai" data-accion="generar-ia" data-propuesta="2">Generar sugerencias con IA de Titulación</button></div>
           <div id="p2EstadoIA" class="status-message"></div>
           <div id="p2Sugerencias" class="suggestions-list"></div>
-
           <div class="proposal-page-actions">
-            <button type="button" class="btn btn--ghost" data-accion="propuesta-anterior" data-propuesta="2">
-              Anterior
-            </button>
-
-            <button type="button" class="btn btn--primary" data-accion="propuesta-siguiente" data-propuesta="2">
-              Siguiente propuesta
-            </button>
+            <button type="button" class="btn btn--ghost" data-accion="propuesta-anterior" data-propuesta="2">Anterior</button>
+            <button type="button" class="btn btn--primary" data-accion="propuesta-siguiente" data-propuesta="2">Siguiente propuesta</button>
           </div>
         </article>
 
         <article class="proposal-card" data-propuesta-panel="3" hidden>
           <div class="form-grid">
-            <div class="field field--full">
-              <label for="p3Titulo">Título escrito por el estudiante</label>
-              <input id="p3Titulo" type="text" required />
-            </div>
-
-            <div class="field">
-              <label for="p3Tema">Tema general</label>
-              <input id="p3Tema" type="text" required />
-            </div>
-
-            <div class="field">
-              <label for="p3Contexto">Lugar o contexto</label>
-              <input id="p3Contexto" type="text" required />
-            </div>
-
-            <div class="field">
-              <label for="p3Grupo">Grupo de estudio</label>
-              <input id="p3Grupo" type="text" required />
-            </div>
-
-            <div class="field">
-              <label for="p3Periodo">Año o período</label>
-              <input id="p3Periodo" type="text" placeholder="Ejemplo: 2026" required />
-            </div>
-
-            <div class="field field--full">
-              <label for="p3Problema">Problema o necesidad</label>
-              <textarea id="p3Problema" required></textarea>
-            </div>
-
-            <div class="field field--full">
-              <label for="p3Objetivo">Objetivo</label>
-              <textarea id="p3Objetivo" required></textarea>
-            </div>
+            <div class="field field--full"><label for="p3Titulo">Título escrito por el estudiante</label><input id="p3Titulo" type="text" required /></div>
+            <div class="field"><label for="p3Tema">Tema general</label><input id="p3Tema" type="text" required /></div>
+            <div class="field"><label for="p3Contexto">Lugar o contexto</label><input id="p3Contexto" type="text" required /></div>
+            <div class="field"><label for="p3Grupo">Grupo de estudio</label><input id="p3Grupo" type="text" required /></div>
+            <div class="field"><label for="p3Periodo">Año o período</label><input id="p3Periodo" type="text" placeholder="Ejemplo: 2026" required /></div>
+            <div class="field field--full"><label for="p3Problema">Problema o necesidad</label><textarea id="p3Problema" required></textarea></div>
+            <div class="field field--full"><label for="p3Objetivo">Objetivo</label><textarea id="p3Objetivo" required></textarea></div>
           </div>
-
-          <div class="ai-actions">
-            <button type="button" class="btn btn--ai" data-accion="generar-ia" data-propuesta="3">
-              Generar sugerencias con IA de Titulación
-            </button>
-          </div>
-
+          <div class="ai-actions"><button type="button" class="btn btn--ai" data-accion="generar-ia" data-propuesta="3">Generar sugerencias con IA de Titulación</button></div>
           <div id="p3EstadoIA" class="status-message"></div>
           <div id="p3Sugerencias" class="suggestions-list"></div>
-
           <div class="proposal-page-actions">
-            <button type="button" class="btn btn--ghost" data-accion="propuesta-anterior" data-propuesta="3">
-              Anterior
-            </button>
-
-            <button type="button" class="btn btn--primary" data-accion="propuesta-ver-resumen" data-propuesta="3">
-              Ver resumen
-            </button>
+            <button type="button" class="btn btn--ghost" data-accion="propuesta-anterior" data-propuesta="3">Anterior</button>
+            <button type="button" class="btn btn--primary" data-accion="propuesta-ver-resumen" data-propuesta="3">Ver resumen</button>
           </div>
         </article>
 
         <div id="estadoPropuestas" class="status-message"></div>
-
-        <div class="form-actions">
-          <button type="button" class="btn btn--ghost" data-accion="volver-paso" data-paso="telegram">
-            Volver a Telegram
-          </button>
-        </div>
+        <div class="form-actions"><button type="button" class="btn btn--ghost" data-accion="volver-paso" data-paso="telegram">Volver a Telegram</button></div>
       </form>
     </section>
 
@@ -366,12 +189,9 @@
         <h2>Resumen y título favorito</h2>
         <p>Revisa las 3 propuestas y selecciona cuál prefieres como título principal.</p>
       </div>
-
       <div id="resumenEstudiante" class="summary-box"></div>
       <div id="resumenPropuestas" class="summary-list"></div>
-
       <div id="estadoResumen" class="status-message"></div>
-
       <div class="step-actions">
         <button type="button" class="btn btn--ghost" data-accion="volver-paso" data-paso="propuestas">Volver</button>
         <button type="button" class="btn btn--primary" data-accion="ir-paso" data-paso="enviar">Continuar al envío</button>
@@ -384,47 +204,35 @@
         <h2>Confirmar envío</h2>
         <p>Antes de enviar, confirma que la información registrada es correcta.</p>
       </div>
-
       <form id="formEnvio">
         <label class="check-card" for="confirmacionEnvio">
           <input id="confirmacionEnvio" type="checkbox" />
-          <span>
-            Confirmo que revisé mis datos y que deseo enviar mis 3 propuestas de titulación.
-          </span>
+          <span>Confirmo que revisé mis datos y que deseo enviar mis 3 propuestas de titulación.</span>
         </label>
-
         <div id="estadoEnvioFinal" class="status-message"></div>
-
         <div class="form-actions">
           <button type="button" class="btn btn--ghost" data-accion="volver-paso" data-paso="resumen">Volver</button>
           <button type="submit" class="btn btn--primary">Enviar propuestas</button>
-          <button type="button" class="btn btn--secondary" data-accion="nuevo-registro" data-no-lock="true">
-            Nuevo registro
-          </button>
+          <button type="button" class="btn btn--secondary" data-accion="nuevo-registro" data-no-lock="true">Nuevo registro</button>
         </div>
       </form>
     </section>
   </main>
 
-  <script src="js/app.config.js"></script>
-  <script src="js/app.utils.js"></script>
-
-  <script src="js/firebase.core.service.js"></script>
-  <script src="js/firebase.estudiantes.service.js"></script>
-  <script src="js/firebase.ia.service.js"></script>
-  <script src="js/firebase.envios.service.js"></script>
-
-  <script src="js/sheets.service.js"></script>
-
-  <script src="js/ia.prompt.service.js"></script>
-  <script src="js/ia.providers.service.js"></script>
-  <script src="js/ia.titulacion.service.js"></script>
-
-  <script src="js/estudiante.state.js"></script>
-  <script src="js/estudiante.ui.js"></script>
-  <script src="js/estudiante.modales.js"></script>
-  <script src="js/estudiante.memoria.service.js"></script>
-  <script src="js/estudiante.propuestas.paginacion.js"></script>
-  <script src="js/estudiante.app.js"></script>
+  <script src="js/app.config.js?v=2.0.0"></script>
+  <script src="js/app.utils.js?v=2.0.0"></script>
+  <script src="js/requisitos.estudiantes.service.js?v=2.0.0"></script>
+  <script src="js/ia.config.service.js?v=2.0.0"></script>
+  <script src="js/titulos.cola.service.js?v=2.0.0"></script>
+  <script src="js/sheets.service.js?v=2.0.0"></script>
+  <script src="js/ia.prompt.service.js?v=2.0.0"></script>
+  <script src="js/ia.providers.service.js?v=2.0.0"></script>
+  <script src="js/ia.titulacion.service.js?v=2.0.0"></script>
+  <script src="js/estudiante.state.js?v=2.0.0"></script>
+  <script src="js/estudiante.ui.js?v=2.0.0"></script>
+  <script src="js/estudiante.modales.js?v=2.0.0"></script>
+  <script src="js/estudiante.memoria.service.js?v=2.0.0"></script>
+  <script src="js/estudiante.propuestas.paginacion.js?v=2.0.0"></script>
+  <script src="js/estudiante.app.js?v=2.0.0"></script>
 </body>
 </html>
