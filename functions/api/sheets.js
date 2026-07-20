@@ -1,11 +1,14 @@
 import { getDocument, text } from '../_lib/firestore.js';
 
 const ORIGINS = new Set([
+  'null',
   'https://titulos.pages.dev',
   'https://titulos-administrador.pages.dev',
   'https://titulos-coordinadores.pages.dev',
-  'http://127.0.0.1:5500','http://localhost:5500',
-  'http://127.0.0.1:8787','http://localhost:8787'
+  'http://127.0.0.1:5500',
+  'http://localhost:5500',
+  'http://127.0.0.1:8787',
+  'http://localhost:8787'
 ]);
 const STUDENT = new Set(['PING','CONFIGURACION_PUBLICA','CONSULTAR_ENVIO_CEDULA','VERIFICAR_ENVIO','ENVIO_ESTUDIANTE']);
 const COORDINATOR = new Set(['PING','CONFIGURACION_PUBLICA','LISTAR_COORDINADORES','LISTAR_PERIODOS_TITULACION','LISTAR_ENVIOS_COORDINADOR','LISTAR_ENVIOS_POR_CARRERA','VERIFICAR_ENVIO','CONSULTAR_ENVIO_CEDULA','APROBAR_ENVIO_COORDINADOR','DEVOLVER_ENVIO_COORDINADOR','GUARDAR_REVISION_COORDINADOR','GUARDAR_RESOLUCION','MOVER_DEVUELTO_COORDINADOR','GUARDAR_LOG']);
@@ -13,9 +16,31 @@ const ADMIN = new Set([...STUDENT,...COORDINATOR,'RESUMEN_ADMINISTRADOR','LISTAR
 const READS = new Set(['PING','LISTAR_COORDINADORES','LISTAR_PERIODOS_TITULACION','LISTAR_ENVIOS_COORDINADOR','LISTAR_ENVIOS_POR_CARRERA','VERIFICAR_ENVIO','CONSULTAR_ENVIO_CEDULA','RESUMEN_ADMINISTRADOR','LISTAR_BASE_ESTUDIANTES','LISTAR_PENDIENTES_SYNC','LISTAR_HISTORIAL_REPARACIONES','LISTAR_LOGS','ANALIZAR_GOOGLE_SHEETS','CONSULTAR_ESTUDIANTE']);
 
 function origin(request){return text(request.headers.get('Origin'));}
-function cors(request){const o=origin(request);const h={'Access-Control-Allow-Methods':'POST, OPTIONS','Access-Control-Allow-Headers':'Content-Type','Access-Control-Max-Age':'86400','Vary':'Origin'};if(o&&ORIGINS.has(o))h['Access-Control-Allow-Origin']=o;return h;}
+function appId(request){return text(request.headers.get('X-Titulos-App')).toLowerCase();}
+function cors(request){
+  const o=origin(request);
+  const h={
+    'Access-Control-Allow-Methods':'POST, OPTIONS',
+    'Access-Control-Allow-Headers':'Content-Type, X-Titulos-App',
+    'Access-Control-Max-Age':'86400',
+    'Vary':'Origin'
+  };
+  if(o&&ORIGINS.has(o))h['Access-Control-Allow-Origin']=o;
+  return h;
+}
 function reply(request,data,status=200){return new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff',...cors(request)}});}
-function role(request){const o=origin(request).toLowerCase();if(o.includes('titulos-administrador')||o.includes('localhost')||o.includes('127.0.0.1'))return'admin';if(o.includes('titulos-coordinadores'))return'coordinator';return'student';}
+function role(request){
+  const o=origin(request).toLowerCase();
+  if(o.includes('titulos-administrador.pages.dev'))return'admin';
+  if(o.includes('titulos-coordinadores.pages.dev'))return'coordinator';
+  if(o.includes('titulos.pages.dev'))return'student';
+  if(o==='null'||o.includes('localhost')||o.includes('127.0.0.1')){
+    const app=appId(request);
+    if(app==='administrador'||app==='admin')return'admin';
+    if(app==='coordinadores'||app==='coordinador'||app==='coordinator')return'coordinator';
+  }
+  return'student';
+}
 function allowed(r,a){return r==='admin'?ADMIN.has(a):r==='coordinator'?COORDINATOR.has(a):STUDENT.has(a);}
 function action(value){return text(value).toUpperCase().replace(/[^A-Z0-9_]/g,'');}
 function boolean(value){if(value===false)return false;return !['false','0','no','inactivo'].includes(text(value).toLowerCase());}
