@@ -30,6 +30,8 @@ function doPost(e) {
       respuesta = clavesGuardarServicio_(datos.servicio || datos);
     } else if (accion === 'EJECUTAR_SERVICIO') {
       respuesta = clavesEjecutarServicio_(datos);
+    } else if (accion === 'CONSULTAR_ESTUDIANTE_REQUISITOS') {
+      respuesta = clavesConsultarEstudianteRequisitos_(datos);
     } else if (accion === 'LISTAR_PROVEEDORES_IA_PUBLICOS') {
       respuesta = clavesListarIA_(false);
     } else if (accion === 'LISTAR_PROVEEDORES_IA_ADMIN') {
@@ -297,6 +299,322 @@ function clavesEjecutarServicio_(datos) {
 
   clavesLog_('EJECUTAR_' + servicio.clave, 'OK', accion);
   return { ok: true, servicio: servicio.clave, respuesta: json };
+}
+
+/* =========================================================
+ * Consulta directa y de solo lectura en REQUISITOS_BDLOCAL_SYNC.
+ * Evita descargar toda la base mediante pull_bl2.
+ * ======================================================= */
+function clavesConsultarEstudianteRequisitos_(datos) {
+  datos = datos || {};
+
+  var inicio = new Date().getTime();
+  var cedula = clavesCedulaCanonica_(
+    datos.cedula || datos.numeroIdentificacion || datos.identificacion
+  );
+  var periodoSolicitado = clavesTexto_(
+    datos.periodoId || datos.periodo || datos.periodoLabel
+  );
+
+  if (!cedula) throw new Error('No se recibió una cédula válida.');
+
+  var servicio = clavesServicio_('REQUISITOS');
+  var spreadsheetId = clavesTexto_(servicio.spreadsheetId);
+  if (!spreadsheetId) {
+    throw new Error('REQUISITOS no tiene spreadsheetId configurado en Claves.');
+  }
+
+  var cache = CacheService.getScriptCache();
+  var cacheKey = 'req_est_v3_' + cedula + '_' + periodoSolicitado;
+  var cacheRaw = cache.get(cacheKey);
+  if (cacheRaw) {
+    try {
+      var cacheData = JSON.parse(cacheRaw);
+      cacheData.cache = true;
+      return cacheData;
+    } catch (ignorado) {}
+  }
+
+  var ss = SpreadsheetApp.openById(spreadsheetId);
+  var baseRows = clavesBuscarFilasPorCedula_(ss, 'Estudiantes', cedula);
+  var matriculas = clavesBuscarFilasPorCedula_(ss, 'MatriculasPeriodo', cedula);
+
+  if (periodoSolicitado) {
+    matriculas = matriculas.filter(function(item) {
+      return clavesTexto_(item.periodoId || item.periodoLabel) === periodoSolicitado;
+    });
+  }
+
+  var matricula = clavesElegirMatricula_(matriculas);
+  var base = baseRows.length ? baseRows[baseRows.length - 1] : {};
+
+  if (!matricula && !baseRows.length) {
+    var noEncontrado = {
+      ok: true,
+      encontrado: false,
+      existe: false,
+      cedula: cedula,
+      periodoId: periodoSolicitado,
+      fuente: 'REQUISITOS_BDLOCAL_SYNC',
+      lecturaDirecta: true,
+      duracionMs: new Date().getTime() - inicio,
+      mensaje: 'No encontramos un estudiante con esa cédula en REQUISITOS_BDLOCAL_SYNC.'
+    };
+    cache.put(cacheKey, JSON.stringify(noEncontrado), 60);
+    return noEncontrado;
+  }
+
+  if (!matricula) matricula = {};
+
+  var periodoId = clavesTexto_(
+    matricula.periodoId || matricula.periodId || matricula.ultimoPeriodoId || periodoSolicitado
+  );
+  var periodo = periodoId
+    ? clavesBuscarFilaExacta_(ss, 'Periodos', 'periodoId', periodoId)
+    : null;
+  var periodoLabel = clavesTexto_(
+    matricula.periodoLabel ||
+    (periodo && (periodo.periodoLabel || periodo.label)) ||
+    periodoId
+  );
+
+  var requisitos = clavesBuscarFilasPorCedula_(ss, 'Requisitos', cedula)
+    .filter(function(item) {
+      return !periodoId || clavesTexto_(item.periodoId) === periodoId;
+    });
+  var notas = clavesBuscarFilasPorCedula_(ss, 'Notas', cedula)
+    .filter(function(item) {
+      return !periodoId || clavesTexto_(item.periodoId) === periodoId;
+    });
+  var divisiones = clavesBuscarFilasPorCedula_(ss, 'DivisionesEstudiantes', cedula)
+    .filter(function(item) {
+      return !periodoId || clavesTexto_(item.periodoId) === periodoId;
+    });
+
+  var estudiante = clavesCombinarNoVacios_({}, base);
+  estudiante = clavesCombinarNoVacios_(estudiante, matricula);
+  if (notas.length) {
+    estudiante = clavesCombinarNoVacios_(estudiante, notas[notas.length - 1]);
+  }
+
+  requisitos.forEach(function(item) {
+    var key = clavesRequisitoCanonico_(
+      item.requisitoKey || item.requisitoNombre || item.key || item.nombre
+    );
+    var estado = clavesTexto_(item.estado || item.valor || item.value);
+    if (key && estado) estudiante[key] = estado;
+  });
+
+  var division = clavesTexto_(
+    matricula.division || matricula.Division ||
+    (divisiones.length && (divisiones[divisiones.length - 1].division || divisiones[divisiones.length - 1].Division))
+  );
+
+  estudiante.id = clavesTexto_(matricula.id || (periodoId ? periodoId + '__' + cedula : cedula));
+  estudiante._id = estudiante.id;
+  estudiante.studentId = estudiante.id;
+  estudiante.cedula = cedula;
+  estudiante.numeroIdentificacion = cedula;
+  estudiante.NumeroIdentificacion = cedula;
+  estudiante.periodoId = periodoId;
+  estudiante.periodId = periodoId;
+  estudiante.periodoCanonicoId = periodoId;
+  estudiante.periodoLabel = periodoLabel;
+  estudiante.periodoCanonicoLabel = periodoLabel;
+  estudiante.Nombres = clavesTexto_(
+    base.Nombres || base.nombres || base.nombreCompleto || matricula.Nombres || matricula.nombres
+  );
+  estudiante.CodigoCarrera = clavesTexto_(
+    matricula.CodigoCarrera || matricula.codigoCarrera || base.CodigoCarrera || base.codigoCarrera
+  );
+  estudiante.NombreCarrera = clavesTexto_(
+    matricula.NombreCarrera || matricula.nombreCarrera || base.NombreCarrera || base.nombreCarrera
+  );
+  estudiante.Sede = clavesTexto_(matricula.Sede || matricula.sede);
+  estudiante.HorarioComplexivo = clavesTexto_(
+    matricula.HorarioComplexivo || matricula.horarioComplexivo
+  );
+  estudiante.estadoMatricula = clavesTexto_(matricula.estadoMatricula || 'ACTIVO');
+  estudiante.division = division;
+  estudiante.source = 'google_sheets_direct';
+
+  var encontrado = Boolean(estudiante.Nombres || estudiante.NombreCarrera || baseRows.length || matriculas.length);
+  var respuesta = {
+    ok: true,
+    encontrado: encontrado,
+    existe: encontrado,
+    cedula: cedula,
+    estudiante: encontrado ? estudiante : null,
+    registro: encontrado ? estudiante : null,
+    periodoId: periodoId,
+    periodoLabel: periodoLabel,
+    coincidencias: matriculas.length || baseRows.length,
+    fuente: 'REQUISITOS_BDLOCAL_SYNC',
+    lecturaDirecta: true,
+    cache: false,
+    duracionMs: new Date().getTime() - inicio,
+    mensaje: encontrado
+      ? 'Estudiante encontrado correctamente.'
+      : 'No encontramos un estudiante con esa cédula en REQUISITOS_BDLOCAL_SYNC.'
+  };
+
+  cache.put(cacheKey, JSON.stringify(respuesta), encontrado ? 300 : 60);
+  return respuesta;
+}
+
+function clavesCedulaCanonica_(valor) {
+  var digitos = clavesTexto_(valor).replace(/\D/g, '');
+  if (digitos.length === 9) digitos = '0' + digitos;
+  return digitos.length === 10 ? digitos : '';
+}
+
+function clavesVariantesCedula_(cedula) {
+  var lista = [cedula];
+  if (cedula && cedula.charAt(0) === '0') lista.push(cedula.slice(1));
+  return lista.filter(function(item, index, todos) {
+    return item && todos.indexOf(item) === index;
+  });
+}
+
+function clavesMapaCabeceras_(sheet) {
+  var lastColumn = sheet.getLastColumn();
+  if (lastColumn < 1) return { lista: [], mapa: {} };
+
+  var lista = sheet.getRange(1, 1, 1, lastColumn).getDisplayValues()[0]
+    .map(function(item) { return clavesTexto_(item); });
+  var mapa = {};
+  lista.forEach(function(item, index) {
+    mapa[item.toLowerCase()] = index + 1;
+  });
+  return { lista: lista, mapa: mapa };
+}
+
+function clavesFilaHojaObjeto_(sheet, numeroFila, cabeceras) {
+  var valores = sheet.getRange(numeroFila, 1, 1, cabeceras.lista.length).getDisplayValues()[0];
+  var objeto = {};
+
+  cabeceras.lista.forEach(function(header, index) {
+    objeto[header] = valores[index];
+  });
+
+  var payload = {};
+  var rawPayload = clavesTexto_(objeto.payloadJson);
+  if (rawPayload && rawPayload !== '{}') {
+    try { payload = JSON.parse(rawPayload); } catch (ignorado) {}
+  }
+
+  return clavesCombinarNoVacios_(payload, objeto);
+}
+
+function clavesBuscarFilasPorCedula_(ss, sheetName, cedula) {
+  var sheet = ss.getSheetByName(sheetName);
+  if (!sheet || sheet.getLastRow() < 2) return [];
+
+  var cabeceras = clavesMapaCabeceras_(sheet);
+  var columnas = ['cedula', 'numeroidentificacion'];
+  var filas = {};
+  var variantes = clavesVariantesCedula_(cedula);
+
+  columnas.forEach(function(nombre) {
+    var columna = cabeceras.mapa[nombre];
+    if (!columna) return;
+
+    variantes.forEach(function(valor) {
+      var encontrados = sheet
+        .getRange(2, columna, sheet.getLastRow() - 1, 1)
+        .createTextFinder(valor)
+        .matchEntireCell(true)
+        .findAll();
+
+      encontrados.forEach(function(celda) {
+        filas[celda.getRow()] = true;
+      });
+    });
+  });
+
+  return Object.keys(filas)
+    .map(Number)
+    .sort(function(a, b) { return a - b; })
+    .map(function(numeroFila) {
+      return clavesFilaHojaObjeto_(sheet, numeroFila, cabeceras);
+    });
+}
+
+function clavesBuscarFilaExacta_(ss, sheetName, header, valor) {
+  var sheet = ss.getSheetByName(sheetName);
+  if (!sheet || sheet.getLastRow() < 2) return null;
+
+  var cabeceras = clavesMapaCabeceras_(sheet);
+  var columna = cabeceras.mapa[clavesTexto_(header).toLowerCase()];
+  if (!columna) return null;
+
+  var celda = sheet
+    .getRange(2, columna, sheet.getLastRow() - 1, 1)
+    .createTextFinder(clavesTexto_(valor))
+    .matchEntireCell(true)
+    .findNext();
+
+  return celda ? clavesFilaHojaObjeto_(sheet, celda.getRow(), cabeceras) : null;
+}
+
+function clavesElegirMatricula_(matriculas) {
+  var lista = (matriculas || []).slice();
+  if (!lista.length) return null;
+
+  lista.sort(function(a, b) {
+    var activoA = clavesTexto_(a.estadoMatricula || 'ACTIVO').toUpperCase() === 'ACTIVO' ? 1 : 0;
+    var activoB = clavesTexto_(b.estadoMatricula || 'ACTIVO').toUpperCase() === 'ACTIVO' ? 1 : 0;
+    if (activoA !== activoB) return activoB - activoA;
+
+    var periodoA = clavesTexto_(a.periodoId || a.ultimoPeriodoId);
+    var periodoB = clavesTexto_(b.periodoId || b.ultimoPeriodoId);
+    return periodoB.localeCompare(periodoA, 'es', { sensitivity: 'base' });
+  });
+
+  return lista[0];
+}
+
+function clavesCombinarNoVacios_(destino, origen) {
+  var salida = destino && typeof destino === 'object' ? destino : {};
+  var fuente = origen && typeof origen === 'object' ? origen : {};
+
+  Object.keys(fuente).forEach(function(key) {
+    var valor = fuente[key];
+    if (valor !== undefined && valor !== null && clavesTexto_(valor) !== '') {
+      salida[key] = valor;
+    }
+  });
+
+  return salida;
+}
+
+function clavesSinAcentos_(valor) {
+  return clavesTexto_(valor)
+    .toLowerCase()
+    .replace(/[áàäâ]/g, 'a')
+    .replace(/[éèëê]/g, 'e')
+    .replace(/[íìïî]/g, 'i')
+    .replace(/[óòöô]/g, 'o')
+    .replace(/[úùüû]/g, 'u')
+    .replace(/ñ/g, 'n')
+    .replace(/[^a-z0-9]/g, '');
+}
+
+function clavesRequisitoCanonico_(valor) {
+  var mapa = {
+    academico: 'Academico',
+    actualizaciondatos: 'ActualizacionDatos',
+    aprobacioncomplexivoproyecto: 'AprobacionComplexivoProyecto',
+    aprobaciontitulacion: 'AprobacionTitulacion',
+    documentacion: 'Documentacion',
+    financiero: 'Financiero',
+    ingles: 'Ingles',
+    practicasvinculacion: 'PracticasVinculacion',
+    seguimientograduados: 'SeguimientoGraduados',
+    titulacion: 'Titulacion',
+    vinculacion: 'Vinculacion'
+  };
+  return mapa[clavesSinAcentos_(valor)] || '';
 }
 
 function clavesListarIA_(incluirInactivos) {
