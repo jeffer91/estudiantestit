@@ -9,7 +9,7 @@
     var f=texto(window.ESTUDIANTE_IA_PROXY_URL||'');
     var origen;
     if(f)return f;
-    if(esLocal())return 'http://127.0.0.1:8787/api/ia';
+    if(esLocal())return 'http://127.0.0.1:8788/api/ia';
     if(esArchivo())return 'https://titulos.pages.dev/api/ia';
     origen=texto(window.location&&window.location.origin);
     return (origen&&origen!=='null'?origen.replace(/\/$/,''):'https://titulos.pages.dev')+'/api/ia';
