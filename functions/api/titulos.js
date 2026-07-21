@@ -1,4 +1,4 @@
-import { getPublicStatus, runService } from '../_lib/claves.js';
+import { getPublicStatus, requestClaves, runService } from '../_lib/claves.js';
 import {
   corsHeaders,
   jsonReply,
@@ -9,38 +9,66 @@ import {
   text
 } from '../_lib/http.js';
 
+const ACCESS_ACTION = 'CONSULTAR_ACCESO_ESTUDIANTE';
+
 const STUDENT = new Set([
-  'PING', 'CONFIGURACION_PUBLICA', 'CONSULTAR_ENVIO_CEDULA',
-  'VERIFICAR_ENVIO', 'ENVIO_ESTUDIANTE'
+  'PING',
+  'CONFIGURACION_PUBLICA',
+  ACCESS_ACTION,
+  'CONSULTAR_ENVIO_CEDULA',
+  'VERIFICAR_ENVIO',
+  'ENVIO_ESTUDIANTE'
 ]);
+
 const COORDINATOR = new Set([
-  'PING', 'CONFIGURACION_PUBLICA', 'LISTAR_COORDINADORES',
-  'LISTAR_ENVIOS_COORDINADOR', 'LISTAR_ENVIOS_POR_CARRERA',
-  'VERIFICAR_ENVIO', 'CONSULTAR_ENVIO_CEDULA',
-  'APROBAR_ENVIO_COORDINADOR', 'DEVOLVER_ENVIO_COORDINADOR',
-  'GUARDAR_REVISION_COORDINADOR', 'GUARDAR_RESOLUCION',
-  'MOVER_DEVUELTO_COORDINADOR', 'GUARDAR_LOG'
-]);
-const ADMIN = new Set([
   ...STUDENT,
+  'LISTAR_COORDINADORES',
+  'LISTAR_ENVIOS_COORDINADOR',
+  'LISTAR_ENVIOS_POR_CARRERA',
+  'APROBAR_ENVIO_COORDINADOR',
+  'DEVOLVER_ENVIO_COORDINADOR',
+  'GUARDAR_REVISION_COORDINADOR',
+  'GUARDAR_RESOLUCION',
+  'MOVER_DEVUELTO_COORDINADOR',
+  'GUARDAR_LOG'
+]);
+
+const ADMIN = new Set([
   ...COORDINATOR,
-  'RESUMEN_ADMINISTRADOR', 'LISTAR_BASE_ESTUDIANTES',
-  'GUARDAR_COORDINADOR', 'ACTUALIZAR_COORDINADOR',
-  'CAMBIAR_ESTADO_COORDINADOR', 'ASIGNAR_CARRERA',
-  'SINCRONIZAR_COORDINADORES', 'ADMIN_DEVOLVER_TITULOS',
-  'ADMIN_ELIMINAR_TITULOS', 'LISTAR_PENDIENTES_SYNC',
-  'LISTAR_HISTORIAL_REPARACIONES', 'LISTAR_LOGS',
-  'ANALIZAR_GOOGLE_SHEETS', 'CORREGIR_GOOGLE_SHEETS',
+  'RESUMEN_ADMINISTRADOR',
+  'LISTAR_BASE_ESTUDIANTES',
+  'GUARDAR_COORDINADOR',
+  'ACTUALIZAR_COORDINADOR',
+  'CAMBIAR_ESTADO_COORDINADOR',
+  'ASIGNAR_CARRERA',
+  'SINCRONIZAR_COORDINADORES',
+  'ADMIN_DEVOLVER_TITULOS',
+  'ADMIN_ELIMINAR_TITULOS',
+  'LISTAR_PENDIENTES_SYNC',
+  'LISTAR_HISTORIAL_REPARACIONES',
+  'LISTAR_LOGS',
+  'ANALIZAR_GOOGLE_SHEETS',
+  'CORREGIR_GOOGLE_SHEETS',
   'CONSULTAR_ESTUDIANTE'
 ]);
 
-const READ_BY_ID = new Set(['VERIFICAR_ENVIO', 'CONSULTAR_ENVIO_CEDULA']);
-const WRITE_ACTIONS = new Set([
-  'ENVIO_ESTUDIANTE', 'APROBAR_ENVIO_COORDINADOR',
-  'DEVOLVER_ENVIO_COORDINADOR', 'GUARDAR_REVISION_COORDINADOR',
-  'GUARDAR_RESOLUCION', 'MOVER_DEVUELTO_COORDINADOR',
-  'ADMIN_DEVOLVER_TITULOS', 'ADMIN_ELIMINAR_TITULOS'
+const READ_BY_ID = new Set([
+  ACCESS_ACTION,
+  'VERIFICAR_ENVIO',
+  'CONSULTAR_ENVIO_CEDULA'
 ]);
+
+const WRITE_ACTIONS = new Set([
+  'ENVIO_ESTUDIANTE',
+  'APROBAR_ENVIO_COORDINADOR',
+  'DEVOLVER_ENVIO_COORDINADOR',
+  'GUARDAR_REVISION_COORDINADOR',
+  'GUARDAR_RESOLUCION',
+  'MOVER_DEVUELTO_COORDINADOR',
+  'ADMIN_DEVOLVER_TITULOS',
+  'ADMIN_ELIMINAR_TITULOS'
+]);
+
 const CACHE_TTL_MS = 2 * 60 * 1000;
 const CACHE_LIMIT = 400;
 const verificationCache = new Map();
@@ -105,15 +133,29 @@ async function executeService(env, action, method, payload, userRole) {
   return result.respuesta || result.data || result;
 }
 
+async function executeRead(env, action, method, payload, userRole) {
+  if (action === ACCESS_ACTION) {
+    return requestClaves(env, ACCESS_ACTION, {
+      cedula: normalizeCedula(
+        payload.cedula || payload.numeroIdentificacion || payload.identificacion
+      ),
+      periodoId: text(payload.periodoId || payload.periodo || payload.periodoLabel)
+    }, 12000);
+  }
+  return executeService(env, action, method, payload, userRole);
+}
+
 async function verifyWithCache(env, action, method, payload, userRole) {
-  const key = verificationKey(payload);
-  if (!key) return executeService(env, action, method, payload, userRole);
+  const key = action + '|' + verificationKey(payload);
+  if (!verificationKey(payload)) {
+    return executeRead(env, action, method, payload, userRole);
+  }
 
   const cached = getCached(key);
   if (cached) return cached;
   if (verificationInflight.has(key)) return verificationInflight.get(key);
 
-  const task = executeService(env, action, method, payload, userRole)
+  const task = executeRead(env, action, method, payload, userRole)
     .then((result) => {
       setCached(key, result);
       return result;
