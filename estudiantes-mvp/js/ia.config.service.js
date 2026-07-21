@@ -1,6 +1,7 @@
-/* Metadatos públicos de IA desde la hoja Claves. Nunca expone credenciales. */
+/* Configuración pública de IA de Titulación. Nunca expone marcas, modelos ni credenciales. */
 (function(window){
   'use strict';
+
   var cache = null;
 
   function texto(v){ return String(v === null || v === undefined ? '' : v).trim(); }
@@ -18,63 +19,86 @@
       : 'https://titulos.pages.dev';
   }
   function apiUrl(){ return apiBase() + '/api/ia?action=list'; }
-  function normalizarProveedor(data,idForzado){
+
+  function normalizarMotor(data,index){
     data = data || {};
-    var u = window.EstudianteMVPUtils || null;
-    var normalizar = u && typeof u.normalizarClave === 'function'
-      ? u.normalizarClave
-      : function(v){ return texto(v).toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,''); };
-    var id = normalizar(idForzado || data.id || data.proveedor || data.provider || data.nombre || '');
+    index = Number(index || 0);
+    var id = texto(data.id || data.motor || ('motor_' + (index + 1)));
     return {
       id: id,
       proveedor: id,
-      nombre: texto(data.nombre || data.name || id),
-      tipo: texto(data.tipo || data.protocol || '').replace(/_/g,'-'),
-      activo: data.activo === true,
-      prioridad: numero(data.prioridad || data.priority,999),
-      modelo: texto(data.modelo || data.model || ''),
-      model: texto(data.model || data.modelo || ''),
+      nombre: 'Motor interno ' + (index + 1),
+      tipo: 'interno',
+      activo: data.activo !== false,
+      prioridad: numero(data.prioridad,index + 1),
       timeoutMs: Math.max(5000,numero(data.timeoutMs,45000)),
-      maxTokens: Math.max(100,numero(data.maxTokens,900)),
-      temperatura: numero(data.temperatura,0.4),
-      descripcion: texto(data.descripcion || ''),
-      apiKeyConfigurada: data.apiKeyConfigurada === true,
-      apiKey: '', key: '', token: '', endpoint: '', raw: null
+      maxTokens: Math.max(100,numero(data.maxTokens,3000)),
+      temperatura: numero(data.temperatura,0.3),
+      descripcion: 'Motor interno de IA de Titulación.',
+      modelo: '',
+      model: '',
+      apiKeyConfigurada: true,
+      apiKey: '',
+      key: '',
+      token: '',
+      endpoint: '',
+      raw: null
     };
   }
+
   function listarProveedores(forzar){
     if (cache && !forzar) return Promise.resolve(cache.slice());
+
     return fetch(apiUrl(),{method:'GET',cache:'no-store'})
       .then(function(resp){
         return resp.text().then(function(body){
           var json = {};
           try { json = body ? JSON.parse(body) : {}; }
-          catch (error) { throw new Error('El servicio IA respondió en un formato no válido.'); }
-          if (!resp.ok || json.ok === false) throw new Error(json.error || json.mensaje || 'No se pudieron cargar los proveedores IA.');
+          catch (error) { throw new Error('El servicio de IA respondió en un formato no válido.'); }
+          if (!resp.ok || json.ok === false) {
+            throw new Error(json.error || json.mensaje || 'No se pudo iniciar la IA de Titulación.');
+          }
           return json;
         });
       })
       .then(function(json){
-        cache = (Array.isArray(json.proveedores) ? json.proveedores : [])
-          .map(normalizarProveedor)
-          .filter(function(p){ return p.id; })
+        var lista = Array.isArray(json.proveedores) ? json.proveedores : [];
+        cache = lista.map(normalizarMotor)
+          .filter(function(motor){ return motor.id && motor.activo === true; })
           .sort(function(a,b){ return a.prioridad - b.prioridad; });
         return cache.slice();
       });
   }
+
   function listarProveedoresActivos(){
-    return listarProveedores(false).then(function(lista){ return lista.filter(function(p){ return p.activo === true; }); });
+    return listarProveedores(false);
   }
+
   function leerProveedor(id){
     id = texto(id);
-    return listarProveedores(false).then(function(lista){ return lista.find(function(p){ return p.id === id || p.proveedor === id; }) || null; });
+    return listarProveedores(false).then(function(lista){
+      return lista.find(function(motor){ return motor.id === id; }) || null;
+    });
   }
+
   function obtenerProveedorPreferido(lista){
-    return (Array.isArray(lista) ? lista : []).filter(function(p){ return p.activo; }).sort(function(a,b){ return a.prioridad - b.prioridad; })[0] || null;
+    return (Array.isArray(lista) ? lista : [])
+      .filter(function(motor){ return motor.activo === true; })
+      .sort(function(a,b){ return a.prioridad - b.prioridad; })[0] || null;
   }
+
   function probarLectura(){
     return listarProveedoresActivos().then(function(lista){
-      return { ok: true, totalActivos: lista.length, proveedores: lista, mensaje: lista.length ? 'Proveedores IA activos encontrados en Claves.' : 'No hay proveedores IA activos.' };
+      return {
+        ok: lista.length > 0,
+        activo: lista.length > 0,
+        totalActivos: lista.length,
+        motoresDisponibles: lista.length,
+        proveedores: lista,
+        mensaje: lista.length
+          ? 'IA de Titulación disponible.'
+          : 'La IA de Titulación no está disponible en este momento.'
+      };
     });
   }
 
@@ -82,10 +106,11 @@
     listarProveedores: listarProveedores,
     listarProveedoresActivos: listarProveedoresActivos,
     leerProveedor: leerProveedor,
-    normalizarProveedor: normalizarProveedor,
+    normalizarProveedor: normalizarMotor,
     obtenerProveedorPreferido: obtenerProveedorPreferido,
     probarLectura: probarLectura
   });
+
   window.EstudianteMVPIAConfig = servicio;
   window.EstudianteMVPFirebaseIA = servicio;
 })(window);
