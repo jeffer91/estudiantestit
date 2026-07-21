@@ -1,7 +1,7 @@
 /* Inicio autónomo de Coordinadores usando únicamente RESPALDO TITULOS APP. */
 (function(window,document){
   'use strict';
-  var VERSION='2.8.0';
+  var VERSION='2.8.1';
   var API_PUBLICA='https://titulos.pages.dev';
   var API_LOCAL='http://127.0.0.1:8788';
   var TIEMPO_INICIO=20000;
@@ -38,8 +38,6 @@
   function cargarAplicacion(){var archivos=['js/coordinador.sheets.primary.js','js/coordinador.catalogo.local.js','js/coordinador.envios.carreras.js','js/coordinador.ui.js','js/coordinador.modal.js','js/coordinador.app.js'];return archivos.reduce(function(promesa,ruta){return promesa.then(function(){return cargarScript(ruta);});},Promise.resolve());}
   function mostrarError(error){var estado=document.getElementById('estadoPrincipal'),periodo=document.getElementById('periodoSelect'),coordinador=document.getElementById('coordinadorSelect');if(periodo)periodo.innerHTML='<option value="">No disponible</option>';if(coordinador){coordinador.innerHTML='<option value="">No disponible</option>';coordinador.disabled=true;}if(estado){estado.className='status-message is-error';estado.textContent=error&&error.message?error.message:'No se pudo iniciar Coordinadores.';}console.error('[Coordinadores] Error de inicio:',error);}
 
-  /* La interfaz se carga de inmediato. La aplicación principal maneja la conexión. */
   cargarAplicacion().catch(mostrarError);
-
   window.CoordinadorMVPBootstrapIndependiente=Object.freeze({version:VERSION,resolverConfiguracion:comprobarServicio,apiBase:apiBase});
 })(window,document);
