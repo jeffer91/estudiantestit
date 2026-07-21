@@ -2,6 +2,7 @@ node_modules/
 dist/
 build/
 .pages-local/
+.pages-estudiantes/
 .env
 .env.*
 .dev.vars
