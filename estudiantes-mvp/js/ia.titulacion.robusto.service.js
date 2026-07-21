@@ -1,11 +1,9 @@
 /*
-  Orquestador IA por propuesta:
-  - Cada botón trabaja únicamente con la propuesta visible.
-  - Cada proceso genera 9 títulos internos: 3 diagnósticos, 3 de proceso y 3 de análisis final.
-  - Una segunda IA distinta corrige los mismos 9 cuando hay errores graves.
-  - Se realizan como máximo 3 procesos completos usando pares de proveedores distintos.
-  - Al estudiante se entregan 3 opciones: una por cada enfoque.
-  - Nunca se generan títulos mediante plantillas locales.
+  Orquestador robusto de IA de Titulación:
+  - Funciona con uno o varios motores internos.
+  - El mismo motor puede generar y corregir cuando es el único disponible.
+  - Conserva las opciones válidas y corrige únicamente lo necesario.
+  - Nunca muestra marcas, modelos ni nombres de proveedores al estudiante.
 */
 (function (window, document) {
   'use strict';
@@ -20,7 +18,7 @@
     if (instalado) return;
     if (!original || !window.EstudianteMVPIANueveCore) {
       intentosInstalacion += 1;
-      if (intentosInstalacion < 200) window.setTimeout(instalar, 25);
+      if (intentosInstalacion < 240) window.setTimeout(instalar, 25);
       return;
     }
 
@@ -29,18 +27,18 @@
       generarNueveTitulos: generarOpcionesParaPropuesta,
       generarTitulos3x3: generarOpcionesParaPropuesta,
       __flujoNueveTitulos: true,
-      modo: '9-internos-3-finales-por-propuesta',
-      version: '4.0.1'
+      modo: 'motores-internos-privados',
+      version: '5.0.0'
     }));
 
     instalado = true;
   }
 
   function generarOpcionesParaPropuesta(params) {
-    var firebase = window.EstudianteMVPFirebaseIA;
+    var config = window.EstudianteMVPFirebaseIA;
     var providers = window.EstudianteMVPIAProviders;
     var core = window.EstudianteMVPIANueveCore;
-    var error = validarParametros(params, firebase, providers, core);
+    var error = validarParametros(params, config, providers, core);
     var maxProcesos;
 
     if (error) return Promise.reject(new Error(error));
@@ -50,22 +48,20 @@
       Number(params.maxProcesos || MAX_PROCESOS)
     ));
 
-    return firebase.listarProveedoresActivos().then(function (lista) {
-      var paramsCore;
-
-      lista = Array.isArray(lista) ? lista.slice() : [];
-      lista.sort(function (a, b) {
+    return config.listarProveedoresActivos().then(function (motores) {
+      motores = Array.isArray(motores) ? motores.slice() : [];
+      motores.sort(function (a, b) {
         return Number(a.prioridad || 999) - Number(b.prioridad || 999);
       });
 
-      if (!lista.length) throw new Error('No hay proveedores IA activos.');
-
-      paramsCore = construirParametrosCore(params);
+      if (!motores.length) {
+        throw new Error('La IA de Titulación no está disponible en este momento.');
+      }
 
       return ejecutarProceso({
         params: params,
-        paramsCore: paramsCore,
-        proveedores: lista,
+        paramsCore: construirParametrosCore(params),
+        motores: motores,
         proceso: 1,
         maxProcesos: maxProcesos,
         mejor: null,
@@ -77,15 +73,18 @@
   }
 
   function ejecutarProceso(ctx) {
-    var indiceGenerador = (ctx.proceso - 1) * 2;
-    var indiceRevisor = indiceGenerador + 1;
-    var generador = ctx.proveedores[indiceGenerador];
-    var revisor = ctx.proveedores[indiceRevisor] || null;
+    var generador;
+    var revisor;
     var prompt;
 
-    if (ctx.proceso > ctx.maxProcesos || !generador) {
+    if (ctx.proceso > ctx.maxProcesos) {
       return finalizarConMejorDisponible(ctx);
     }
+
+    generador = ctx.motores[(ctx.proceso - 1) % ctx.motores.length];
+    revisor = ctx.motores.length > 1
+      ? ctx.motores[ctx.proceso % ctx.motores.length]
+      : generador;
 
     prompt = construirPromptGeneracion(ctx.core, ctx.paramsCore, ctx.params);
 
@@ -93,11 +92,10 @@
       proceso: ctx.proceso,
       maxProcesos: ctx.maxProcesos,
       etapa: 'generacion',
-      proveedor: obtenerId(generador),
-      mensaje: 'Proceso ' + ctx.proceso + ' de ' + ctx.maxProcesos + ': generando 9 alternativas internas.'
+      mensaje: 'Generando nuevas alternativas internas.'
     });
 
-    return llamarProveedor(ctx.providers, generador, prompt, false, ctx.params)
+    return llamarMotor(ctx.providers, generador, prompt, false, ctx.params)
       .then(function (respuesta) {
         var secciones = ctx.core.parsearRespuesta(respuesta);
         var total = ctx.core.contarTitulos(secciones);
@@ -105,50 +103,33 @@
         var base;
 
         if (!total) {
-          ctx.errores.push({
-            proceso: ctx.proceso,
-            proveedor: obtenerId(generador),
-            mensaje: 'No devolvió títulos utilizables.'
-          });
+          registrarError(ctx, 'La respuesta no contenía títulos utilizables.');
           return siguienteProceso(ctx);
         }
 
         reporte = ctx.core.validarYRecomendar(secciones, ctx.paramsCore);
-        base = crearCandidato(generador, generador, reporte, total, false, ctx.params);
+        base = crearCandidato(reporte, total, false, ctx.params);
         ctx.mejor = esMejor(base, ctx.mejor) ? base : ctx.mejor;
 
         notificar(ctx.params, {
           proceso: ctx.proceso,
           maxProcesos: ctx.maxProcesos,
           etapa: 'validacion',
-          proveedor: obtenerId(generador),
-          mensaje: 'Validando diagnóstico, proceso y análisis final.'
+          mensaje: 'Revisando estructura, extensión y relación académica.'
         });
 
         if (base.aptoFinal) {
           return construirResultado(
             base,
             ctx,
-            'Se analizaron 9 títulos y se seleccionaron las 3 mejores opciones para esta propuesta.'
+            'Se prepararon tres opciones relacionadas con la propuesta.'
           );
         }
 
-        if (!revisor) {
-          ctx.errores.push({
-            proceso: ctx.proceso,
-            proveedor: obtenerId(generador),
-            mensaje: 'Los títulos necesitan corrección y no hay una IA revisora disponible para este proceso.'
-          });
-          return siguienteProceso(ctx);
-        }
-
         return revisarMismoGrupo(ctx, base, revisor);
-      }, function (errorProveedor) {
-        ctx.errores.push({
-          proceso: ctx.proceso,
-          proveedor: obtenerId(generador),
-          mensaje: limpiarError(errorProveedor)
-        });
+      })
+      .catch(function (errorMotor) {
+        registrarError(ctx, limpiarError(errorMotor));
         return siguienteProceso(ctx);
       });
   }
@@ -165,11 +146,10 @@
       proceso: ctx.proceso,
       maxProcesos: ctx.maxProcesos,
       etapa: 'correccion',
-      proveedor: obtenerId(revisor),
-      mensaje: 'Una segunda IA está corrigiendo los mismos 9 títulos.'
+      mensaje: 'Corrigiendo las opciones que necesitan ajustes.'
     });
 
-    return llamarProveedor(ctx.providers, revisor, promptRevision, true, ctx.params)
+    return llamarMotor(ctx.providers, revisor, promptRevision, true, ctx.params)
       .then(function (respuesta) {
         var secciones = ctx.core.parsearRespuesta(respuesta);
         var total = ctx.core.contarTitulos(secciones);
@@ -178,16 +158,12 @@
         var elegido;
 
         if (!total) {
-          ctx.errores.push({
-            proceso: ctx.proceso,
-            proveedor: obtenerId(revisor),
-            mensaje: 'La revisión no devolvió títulos utilizables.'
-          });
+          registrarError(ctx, 'La revisión no devolvió títulos utilizables.');
           return siguienteProceso(ctx);
         }
 
         reporte = ctx.core.validarYRecomendar(secciones, ctx.paramsCore);
-        revisado = crearCandidato(revisor, base.generador, reporte, total, true, ctx.params);
+        revisado = crearCandidato(reporte, total, true, ctx.params);
         elegido = esMejor(revisado, base) ? revisado : base;
         ctx.mejor = esMejor(elegido, ctx.mejor) ? elegido : ctx.mejor;
 
@@ -195,33 +171,24 @@
           proceso: ctx.proceso,
           maxProcesos: ctx.maxProcesos,
           etapa: 'comparacion',
-          proveedor: obtenerId(revisor),
-          mensaje: 'Comparando la generación original con la versión corregida.'
+          mensaje: 'Comparando las versiones y conservando las opciones más claras.'
         });
 
         if (elegido.aptoFinal) {
           return construirResultado(
             elegido,
             ctx,
-            elegido === revisado
-              ? 'Una segunda IA corrigió los 9 títulos y se conservaron las 3 mejores opciones.'
-              : 'La revisión terminó, pero la versión original obtuvo una evaluación superior. Se muestran las 3 mejores opciones.'
+            elegido.revisado
+              ? 'Las opciones fueron revisadas y quedaron listas para elegir.'
+              : 'La versión inicial obtuvo una mejor evaluación y quedó lista para elegir.'
           );
         }
 
-        ctx.errores.push({
-          proceso: ctx.proceso,
-          proveedor: obtenerId(revisor),
-          mensaje: resumirReporte(elegido.reporte)
-        });
-
+        registrarError(ctx, resumirReporte(elegido.reporte));
         return siguienteProceso(ctx);
-      }, function (errorProveedor) {
-        ctx.errores.push({
-          proceso: ctx.proceso,
-          proveedor: obtenerId(revisor),
-          mensaje: limpiarError(errorProveedor)
-        });
+      })
+      .catch(function (errorMotor) {
+        registrarError(ctx, limpiarError(errorMotor));
         return siguienteProceso(ctx);
       });
   }
@@ -234,7 +201,7 @@
         proceso: ctx.proceso,
         maxProcesos: ctx.maxProcesos,
         etapa: 'reinicio',
-        mensaje: 'Iniciando un nuevo proceso con otro par de proveedores.'
+        mensaje: 'Realizando una nueva revisión interna.'
       });
     }
 
@@ -251,7 +218,7 @@
       return construirResultado(
         ctx.mejor,
         ctx,
-        'Se completaron los intentos. Se conservaron las 3 opciones más sólidas obtenidas para esta propuesta.',
+        'Se conservaron las tres opciones más sólidas obtenidas para esta propuesta.',
         true
       );
     }
@@ -276,35 +243,19 @@
   }
 
   function construirPromptGeneracion(core, paramsCore, paramsOriginales) {
-    var tituloBase = limpiar(
-      paramsOriginales.propuesta && (
-        paramsOriginales.propuesta.tituloFinal ||
-        paramsOriginales.propuesta.titulo ||
-        paramsOriginales.propuesta.tituloBase
-      )
-    );
-    var adicional = [
+    var tituloBase = obtenerTituloBase(paramsOriginales);
+    return core.construirPrompt(paramsCore) + [
       '',
       'REGLA ESPECIAL PARA ESTA PROPUESTA:',
-      '- Los 9 títulos deben abordar exactamente la misma propuesta; solo cambia el enfoque entre diagnóstico, proceso y análisis final.',
-      '- De los 9 títulos, al menos uno debe conservar claramente la idea central del título escrito por el estudiante y mejorar su redacción.',
-      '- Coloca esa versión mejorada como el título 1 de la sección 2 (propuesta o mejora).',
-      '- No copies errores de redacción del título original y no inventes información nueva.',
+      '- Los títulos deben abordar exactamente la misma propuesta; solo cambia el enfoque entre diagnóstico, propuesta de mejora y evaluación esperada.',
+      '- Al menos una opción del enfoque de propuesta o mejora debe conservar claramente la idea central del título escrito por el estudiante.',
+      '- No copies errores de redacción ni inventes información.',
       '- Título escrito por el estudiante: ' + (tituloBase || 'No escribió un título previo.')
     ].join('\n');
-
-    return core.construirPrompt(paramsCore) + adicional;
   }
 
   function construirPromptRevision(core, paramsCore, paramsOriginales, reporte) {
-    var tituloBase = limpiar(
-      paramsOriginales.propuesta && (
-        paramsOriginales.propuesta.tituloFinal ||
-        paramsOriginales.propuesta.titulo ||
-        paramsOriginales.propuesta.tituloBase
-      )
-    );
-
+    var tituloBase = obtenerTituloBase(paramsOriginales);
     return core.construirPromptRevision(
       paramsCore,
       reporte.secciones,
@@ -312,33 +263,33 @@
     ) + [
       '',
       'REGLA ESPECIAL DE CORRECCIÓN:',
-      '- Debes corregir los mismos 9 títulos, no iniciar un tema diferente.',
-      '- Mantén una versión mejorada de la idea del título del estudiante como título 1 de la sección 2.',
+      '- Corrige los mismos títulos y conserva todas las opciones que ya son válidas.',
+      '- Mantén una versión mejorada de la idea central del estudiante dentro del enfoque de propuesta o mejora.',
       '- Título escrito por el estudiante: ' + (tituloBase || 'No escribió un título previo.')
     ].join('\n');
   }
 
-  function crearCandidato(proveedor, generador, reporte, total, revisado, params) {
+  function crearCandidato(reporte, total, revisado, params) {
     var opcionesFinales = seleccionarOpcionesFinales(reporte, params);
     var tituloBase = obtenerTituloBase(params);
     var opcionProceso = opcionesFinales.find(function (item) {
       return item.etapa === 'propuesta_mejora';
     }) || null;
-    var cumpleTituloBase = !tituloBase || (
-      opcionProceso && similitud(opcionProceso.titulo, tituloBase) >= 0.12
-    );
+    var cumpleTituloBase = !tituloBase || !opcionProceso ||
+      similitud(opcionProceso.titulo, tituloBase) >= 0.08;
+    var gravesSeleccionados = opcionesFinales.reduce(function (totalGraves, item) {
+      return totalGraves + (Array.isArray(item.erroresGraves) ? item.erroresGraves.length : 0);
+    }, 0);
 
     return {
-      proveedor: proveedor,
-      generador: generador,
       reporte: reporte,
       totalTitulos: total,
       revisado: revisado === true,
       opcionesFinales: opcionesFinales,
       cumpleTituloBase: cumpleTituloBase,
-      aptoFinal: reporte.apto === true &&
-        opcionesFinales.length === 3 &&
-        cumpleTituloBase &&
+      gravesSeleccionados: gravesSeleccionados,
+      aptoFinal: opcionesFinales.length === 3 &&
+        gravesSeleccionados === 0 &&
         sonMostrables(opcionesFinales)
     };
   }
@@ -347,52 +298,84 @@
     var tituloBase = obtenerTituloBase(params);
     var usadas = {};
     var opciones = [];
+    var secciones = reporte && Array.isArray(reporte.secciones) ? reporte.secciones : [];
 
-    (reporte && Array.isArray(reporte.secciones) ? reporte.secciones : [])
-      .slice(0, 3)
-      .forEach(function (seccion) {
-        var candidatos = Array.isArray(seccion.titulos) ? seccion.titulos.slice() : [];
-        var elegida;
+    secciones.slice(0, 3).forEach(function (seccion) {
+      var candidatos = Array.isArray(seccion.titulos) ? seccion.titulos.slice() : [];
+      var elegida;
 
-        candidatos.sort(function (a, b) {
-          var aValida = Array.isArray(a.erroresGraves) ? a.erroresGraves.length === 0 : true;
-          var bValida = Array.isArray(b.erroresGraves) ? b.erroresGraves.length === 0 : true;
-          var aSim = seccion.seccion === 2 && tituloBase ? similitud(a.titulo, tituloBase) : 0;
-          var bSim = seccion.seccion === 2 && tituloBase ? similitud(b.titulo, tituloBase) : 0;
+      candidatos.sort(function (a, b) {
+        var gravesA = Array.isArray(a.erroresGraves) ? a.erroresGraves.length : 0;
+        var gravesB = Array.isArray(b.erroresGraves) ? b.erroresGraves.length : 0;
+        var similitudA = seccion.seccion === 2 && tituloBase ? similitud(a.titulo, tituloBase) : 0;
+        var similitudB = seccion.seccion === 2 && tituloBase ? similitud(b.titulo, tituloBase) : 0;
 
-          if (aValida !== bValida) return aValida ? -1 : 1;
-          if (seccion.seccion === 2 && tituloBase && Math.abs(bSim - aSim) > 0.03) {
-            return bSim - aSim;
-          }
-          return Number(b.puntaje || 0) - Number(a.puntaje || 0);
-        });
-
-        elegida = candidatos.find(function (item) {
-          var clave = normalizar(item.titulo);
-          return clave && !usadas[clave];
-        }) || null;
-
-        if (!elegida) return;
-
-        usadas[normalizar(elegida.titulo)] = true;
-        opciones.push({
-          numero: opciones.length + 1,
-          titulo: elegida.titulo,
-          justificacion: limpiar(elegida.justificacion) ||
-            'Opción seleccionada por su relación con la propuesta y el enfoque académico.',
-          puntaje: Number(elegida.puntaje || 0),
-          etapa: seccion.etapa,
-          nombreEtapa: seccion.nombreEtapa,
-          basadaEnTituloEstudiante: seccion.seccion === 2 && tituloBase
-            ? similitud(elegida.titulo, tituloBase) >= 0.12
-            : false,
-          recomendada: false,
-          recomendado: false
-        });
+        if (gravesA !== gravesB) return gravesA - gravesB;
+        if (seccion.seccion === 2 && tituloBase && Math.abs(similitudB - similitudA) > 0.03) {
+          return similitudB - similitudA;
+        }
+        return Number(b.puntaje || 0) - Number(a.puntaje || 0);
       });
 
+      elegida = candidatos.find(function (item) {
+        var clave = normalizar(item.titulo);
+        return clave && !usadas[clave];
+      }) || null;
+
+      if (!elegida) return;
+      usadas[normalizar(elegida.titulo)] = true;
+      opciones.push(crearOpcion(elegida, seccion, opciones.length + 1, tituloBase));
+    });
+
+    // Rescate: si una sección llegó vacía, completa con el mejor título único disponible.
+    if (opciones.length < 3) {
+      var restantes = [];
+      secciones.forEach(function (seccion) {
+        (Array.isArray(seccion.titulos) ? seccion.titulos : []).forEach(function (item) {
+          restantes.push({ item: item, seccion: seccion });
+        });
+      });
+      restantes.sort(function (a, b) {
+        var gravesA = Array.isArray(a.item.erroresGraves) ? a.item.erroresGraves.length : 0;
+        var gravesB = Array.isArray(b.item.erroresGraves) ? b.item.erroresGraves.length : 0;
+        if (gravesA !== gravesB) return gravesA - gravesB;
+        return Number(b.item.puntaje || 0) - Number(a.item.puntaje || 0);
+      });
+      restantes.some(function (registro) {
+        var clave = normalizar(registro.item.titulo);
+        if (!clave || usadas[clave]) return false;
+        usadas[clave] = true;
+        opciones.push(crearOpcion(
+          registro.item,
+          registro.seccion,
+          opciones.length + 1,
+          tituloBase
+        ));
+        return opciones.length === 3;
+      });
+    }
+
     marcarRecomendadaUnica(opciones);
-    return opciones;
+    return opciones.slice(0, 3);
+  }
+
+  function crearOpcion(item, seccion, numero, tituloBase) {
+    return {
+      numero: numero,
+      titulo: limpiar(item.titulo),
+      justificacion: limpiar(item.justificacion) ||
+        'Opción seleccionada por su relación con la propuesta y el enfoque académico.',
+      puntaje: Number(item.puntaje || 0),
+      etapa: seccion.etapa,
+      nombreEtapa: seccion.nombreEtapa,
+      erroresGraves: Array.isArray(item.erroresGraves) ? item.erroresGraves.slice() : [],
+      erroresMenores: Array.isArray(item.erroresMenores) ? item.erroresMenores.slice() : [],
+      basadaEnTituloEstudiante: seccion.seccion === 2 && tituloBase
+        ? similitud(item.titulo, tituloBase) >= 0.08
+        : false,
+      recomendada: false,
+      recomendado: false
+    };
   }
 
   function marcarRecomendadaUnica(opciones) {
@@ -429,7 +412,7 @@
       }
 
       usadas[clave] = true;
-      return Number(item.puntaje || 0) > -30;
+      return Number(item.puntaje || 0) > -35;
     });
   }
 
@@ -441,13 +424,12 @@
     if (a.opcionesFinales.length !== b.opcionesFinales.length) {
       return a.opcionesFinales.length > b.opcionesFinales.length;
     }
+    if (a.gravesSeleccionados !== b.gravesSeleccionados) {
+      return a.gravesSeleccionados < b.gravesSeleccionados;
+    }
     if (a.cumpleTituloBase !== b.cumpleTituloBase) return a.cumpleTituloBase;
-    if (a.reporte.graves !== b.reporte.graves) {
-      return a.reporte.graves < b.reporte.graves;
-    }
-    if (a.reporte.menores !== b.reporte.menores) {
-      return a.reporte.menores < b.reporte.menores;
-    }
+    if (a.reporte.graves !== b.reporte.graves) return a.reporte.graves < b.reporte.graves;
+    if (a.reporte.menores !== b.reporte.menores) return a.reporte.menores < b.reporte.menores;
 
     return puntajeOpciones(a.opcionesFinales) > puntajeOpciones(b.opcionesFinales);
   }
@@ -459,15 +441,11 @@
   }
 
   function construirResultado(candidato, ctx, mensaje, mejorDisponible) {
-    var proveedor = candidato.proveedor || {};
-    var generador = candidato.generador || proveedor;
-
     notificar(ctx.params, {
       proceso: Math.min(ctx.proceso, ctx.maxProcesos),
       maxProcesos: ctx.maxProcesos,
       etapa: 'finalizacion',
-      proveedor: obtenerId(proveedor),
-      mensaje: 'Preparando las 3 opciones finales para el estudiante.'
+      mensaje: 'Preparando las tres opciones finales.'
     });
 
     return {
@@ -477,17 +455,17 @@
         ctx.params.propuesta && ctx.params.propuesta.numero ||
         1
       ),
-      proveedor: obtenerId(proveedor),
-      proveedorNombre: limpiar(
-        proveedor.nombre || proveedor.name || obtenerId(proveedor)
-      ),
-      proveedorGenerador: obtenerId(generador),
-      revisadoPorOtraIA: candidato.revisado === true,
+      revisadoInternamente: candidato.revisado === true,
       procesoUsado: Math.min(ctx.proceso, ctx.maxProcesos),
       maxProcesos: ctx.maxProcesos,
       totalTitulosInternos: candidato.totalTitulos,
       seccionesInternas: candidato.reporte.secciones,
-      opcionesFinales: candidato.opcionesFinales,
+      opcionesFinales: candidato.opcionesFinales.map(function (item) {
+        var copia = Object.assign({}, item);
+        delete copia.erroresGraves;
+        delete copia.erroresMenores;
+        return copia;
+      }),
       mejorDisponible: mejorDisponible === true,
       validacion: {
         graves: candidato.reporte.graves,
@@ -499,8 +477,8 @@
     };
   }
 
-  function llamarProveedor(servicio, proveedor, prompt, revision, params) {
-    return servicio.generarTexto(proveedor, prompt, {
+  function llamarMotor(servicio, motor, prompt, revision, params) {
+    return servicio.generarTexto(motor, prompt, {
       timeoutMs: params.timeoutMs,
       temperatura: revision ? 0.12 : 0.3,
       maxTokens: Math.max(Number(params.maxTokens || 0), 3000),
@@ -508,45 +486,30 @@
     });
   }
 
-  function validarParametros(params, firebase, providers, core) {
+  function validarParametros(params, config, providers, core) {
     var estudiante = params && params.estudiante || {};
     var propuesta = params && params.propuesta || {};
 
-    if (!firebase || !providers || !core) return 'Faltan módulos internos de IA.';
+    if (!config || !providers || !core) return 'Faltan módulos internos de IA de Titulación.';
     if (!estudiante.cedula && !estudiante.numeroIdentificacion) {
       return 'Primero consulta los datos del estudiante.';
     }
     if (!estudiante.nombreCarrera && !estudiante.carrera && !estudiante.NombreCarrera) {
       return 'El estudiante no tiene una carrera registrada.';
     }
-    if (!limpiar(propuesta.temaGeneral || propuesta.tema)) {
-      return 'Completa el tema general de esta propuesta.';
-    }
-    if (!limpiar(propuesta.lugarContexto || propuesta.contexto || propuesta.lugar)) {
-      return 'Completa el lugar o contexto de esta propuesta.';
-    }
-    if (!limpiar(propuesta.grupoEstudio || propuesta.grupo || propuesta.poblacion)) {
-      return 'Completa el grupo de estudio de esta propuesta.';
-    }
-    if (!limpiar(propuesta.anioPeriodo || propuesta.periodo || propuesta.tiempo)) {
-      return 'Completa el año o período de esta propuesta.';
-    }
-    if (!limpiar(propuesta.problemaNecesidad || propuesta.problema || propuesta.necesidad)) {
-      return 'Completa el problema o necesidad de esta propuesta.';
-    }
-    if (!limpiar(propuesta.objetivo || propuesta.objetivoGeneral)) {
-      return 'Completa el objetivo de esta propuesta.';
-    }
+    if (!limpiar(propuesta.temaGeneral || propuesta.tema)) return 'Completa el tema general de esta propuesta.';
+    if (!limpiar(propuesta.lugarContexto || propuesta.contexto || propuesta.lugar)) return 'Completa el lugar o contexto de esta propuesta.';
+    if (!limpiar(propuesta.grupoEstudio || propuesta.grupo || propuesta.poblacion)) return 'Completa el grupo de estudio de esta propuesta.';
+    if (!limpiar(propuesta.anioPeriodo || propuesta.periodo || propuesta.tiempo)) return 'Completa el año o período de esta propuesta.';
+    if (!limpiar(propuesta.problemaNecesidad || propuesta.problema || propuesta.necesidad)) return 'Completa el problema o necesidad de esta propuesta.';
+    if (!limpiar(propuesta.objetivo || propuesta.objetivoGeneral)) return 'Completa el objetivo de esta propuesta.';
 
     return '';
   }
 
   function obtenerTituloBase(params) {
     var propuesta = params && params.propuesta || {};
-    var titulo = limpiar(
-      propuesta.tituloFinal || propuesta.titulo || propuesta.tituloBase
-    );
-
+    var titulo = limpiar(propuesta.tituloFinal || propuesta.titulo || propuesta.tituloBase);
     return titulo && normalizar(titulo) !== 'no_especificado' ? titulo : '';
   }
 
@@ -556,11 +519,9 @@
     var encontrados = 0;
 
     if (!tokensA.length || !tokensB.length) return 0;
-
     tokensB.forEach(function (token) {
       if (tokensA.indexOf(token) >= 0) encontrados += 1;
     });
-
     return encontrados / Math.min(Math.max(tokensB.length, 1), 8);
   }
 
@@ -578,33 +539,43 @@
 
   function resumirReporte(reporte) {
     var lista = reporte && Array.isArray(reporte.errores) ? reporte.errores : [];
-
-    if (!lista.length) return 'Los títulos todavía necesitan revisión.';
-
+    if (!lista.length) return 'Las opciones todavía necesitan una revisión adicional.';
     return lista.slice(0, 6).map(function (item) {
-      return 'S' + item.seccion + ' T' + item.titulo + ': ' + item.mensaje;
+      return 'Enfoque ' + item.seccion + ': ' + item.mensaje;
     }).join(' ');
   }
 
+  function registrarError(ctx, mensaje) {
+    ctx.errores.push({
+      proceso: ctx.proceso,
+      mensaje: limpiar(mensaje).slice(0, 350)
+    });
+  }
+
   function construirErrorFinal(errores) {
-    var mensaje = 'No fue posible obtener tres opciones válidas después de los procesos disponibles.';
-
     errores = Array.isArray(errores) ? errores : [];
-    if (errores.length) {
-      mensaje += ' Detalle: ' + errores.map(function (item) {
-        return 'Proceso ' + (item.proceso || '-') + ', ' + item.proveedor + ': ' + item.mensaje;
-      }).join(' | ');
-    }
+    var huboRespuestaIncompleta = errores.some(function (item) {
+      return /título|titulo|respuesta|revisión|revision|opciones/.test(normalizar(item.mensaje));
+    });
 
-    return new Error(mensaje);
+    return new Error(
+      huboRespuestaIncompleta
+        ? 'La IA de Titulación respondió, pero no fue posible completar tres opciones válidas. Intenta nuevamente.'
+        : 'No fue posible completar la generación en este momento. Intenta nuevamente.'
+    );
   }
 
   function notificar(params, detalle) {
     var callback = params && params.onProgress;
     var evento;
+    var publico = Object.assign({}, detalle || {});
+
+    delete publico.proveedor;
+    delete publico.provider;
+    delete publico.modelo;
 
     if (typeof callback === 'function') {
-      try { callback(detalle || {}); } catch (errorCallback) {}
+      try { callback(publico); } catch (errorCallback) {}
     }
 
     try {
@@ -613,20 +584,17 @@
           numeroPropuesta: Number(
             params.numeroPropuesta || params.propuesta && params.propuesta.numero || 1
           )
-        }, detalle || {})
+        }, publico)
       });
       document.dispatchEvent(evento);
     } catch (errorEvento) {}
   }
 
-  function obtenerId(proveedor) {
-    return limpiar(
-      proveedor && (proveedor.id || proveedor.proveedor || proveedor.provider) || 'IA'
-    );
-  }
-
   function limpiarError(error) {
-    return limpiar(error && error.message || error || 'Error de proveedor IA.').slice(0, 350);
+    var mensaje = limpiar(error && error.message || error || 'Error del servicio de IA.');
+    return mensaje
+      .replace(/gemini|groq|openrouter|openai|claude|llama|mistral/ig, 'servicio de IA')
+      .slice(0, 350);
   }
 
   function limpiar(valor) {
