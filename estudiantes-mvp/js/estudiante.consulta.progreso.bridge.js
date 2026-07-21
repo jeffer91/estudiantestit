@@ -1,6 +1,6 @@
 /*
   Puente visual para la consulta académica.
-  No duplica la consulta: únicamente abre y cierra el modal según el estado real de la pantalla.
+  Activa el modal de progreso y la revisión de envíos previamente registrados.
 */
 (function (window, document) {
   'use strict';
@@ -101,7 +101,7 @@
     if (error) mostrarError(error);
   }
 
-  function iniciarModal(evento) {
+  function iniciarModal() {
     var input = document.getElementById('cedulaInput');
     var modal = obtenerModal();
 
@@ -133,6 +133,38 @@
     });
   }
 
+  function cargarRevision() {
+    var version = '2.2.0';
+    var estiloId = 'estudiante-revision-estilo';
+    var scriptId = 'estudiante-revision-script';
+    var estilo;
+    var script;
+
+    if (!document.getElementById(estiloId)) {
+      estilo = document.createElement('link');
+      estilo.id = estiloId;
+      estilo.rel = 'stylesheet';
+      estilo.href = 'css/estudiante.consulta.revision.css?v=' + version;
+      document.head.appendChild(estilo);
+    }
+
+    if (
+      window.__ESTUDIANTE_CONSULTA_REVISION_CARGADA__ ||
+      document.getElementById(scriptId)
+    ) {
+      return;
+    }
+
+    script = document.createElement('script');
+    script.id = scriptId;
+    script.src = 'js/estudiante.consulta.revision.js?v=' + version;
+    script.async = false;
+    script.onerror = function () {
+      console.error('[Estudiantes MVP] No se pudo cargar la revisión de envíos previos.');
+    };
+    document.head.appendChild(script);
+  }
+
   function instalar() {
     var form = document.getElementById('formConsulta');
     var modal = obtenerModal();
@@ -146,6 +178,7 @@
     }
 
     instalado = true;
+    cargarRevision();
     form.addEventListener('submit', iniciarModal, true);
     instalarObservador();
   }
