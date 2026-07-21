@@ -90,28 +90,39 @@
     return mapa[estado]||'Procesando la solicitud';
   }
 
+  function limpiarPunto(punto){
+    var descripcion;
+    if(!punto||!punto.matches||!punto.matches('.ia-diagnostico__punto'))return;
+    descripcion=descripcionEstado(punto.getAttribute('data-estado')||'');
+    if(punto.getAttribute('title')!==descripcion)punto.setAttribute('title',descripcion);
+    if(punto.getAttribute('aria-label')!==descripcion)punto.setAttribute('aria-label',descripcion);
+  }
+
+  function limpiarDetalle(elemento){
+    var limpio;
+    if(!elemento||!elemento.matches||!elemento.matches('[data-ia-detalle]'))return;
+    limpio=texto(elemento.textContent)
+      .replace(/Proveedor actual\s*:[^.]+\.?/ig,'')
+      .replace(/Otra IA/ig,'Una revisión interna')
+      .replace(/Una segunda IA/ig,'Una revisión interna')
+      .replace(/otro par de proveedores/ig,'otro proceso interno');
+    if(limpio&&limpio!==elemento.textContent)elemento.textContent=limpio;
+  }
+
   function limpiarInterfazPublica(raiz){
     raiz=raiz&&raiz.nodeType===1?raiz:document;
 
+    limpiarPunto(raiz);
+    limpiarDetalle(raiz);
+
     Array.prototype.forEach.call(
       raiz.querySelectorAll?raiz.querySelectorAll('.ia-diagnostico__punto'):[],
-      function(punto){
-        var descripcion=descripcionEstado(punto.getAttribute('data-estado')||'');
-        punto.setAttribute('title',descripcion);
-        punto.setAttribute('aria-label',descripcion);
-      }
+      limpiarPunto
     );
 
     Array.prototype.forEach.call(
       raiz.querySelectorAll?raiz.querySelectorAll('[data-ia-detalle]'):[],
-      function(elemento){
-        var limpio=texto(elemento.textContent)
-          .replace(/Proveedor actual\s*:[^.]+\.?/ig,'')
-          .replace(/Otra IA/ig,'Una revisión interna')
-          .replace(/Una segunda IA/ig,'Una revisión interna')
-          .replace(/otro par de proveedores/ig,'otro proceso interno');
-        if(limpio&&limpio!==elemento.textContent)elemento.textContent=limpio;
-      }
+      limpiarDetalle
     );
   }
 
@@ -153,7 +164,7 @@
       generarTitulosPorPropuesta:desactivado,
       generarTresTitulos:desactivado,
       modo:'esperando_motor_por_propuesta',
-      version:'6.0.1'
+      version:'6.0.2'
     });
   }
 
