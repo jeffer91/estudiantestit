@@ -35,7 +35,17 @@ function extractEnvio(result){return result&&(result.envio||result.registro||res
 function envioEstado(result){const envio=extractEnvio(result)||{};return text(envio.estado||envio.estadoFinal||envio.estadoProceso||result&&result.estado).toUpperCase();}
 function permiteReenvio(result){const envio=extractEnvio(result)||{};const estado=envioEstado(result);const valor=envio.permitirReenvio!==undefined?envio.permitirReenvio:result&&result.permiteReenvio;return estado==='DEVUELTO'&&(valor===undefined||valor===null||yes(valor));}
 function directHasEnvio(result){return Boolean(result&&(result.existe===true||result.encontrado===true||extractEnvio(result)));}
-function accessHasEnvio(result){const student=result&&(result.estudiante||result.registro)||{};return Boolean(result&&(result.tieneEnvio===true||result.encontradoEnvio===true||extractEnvio(result)||yes(student.tieneEnvio)||text(student.idRegistro))&&!permiteReenvio(result);}
+function accessHasEnvio(result){
+  const student=result&&(result.estudiante||result.registro)||{};
+  const evidencia=Boolean(result&&(
+    result.tieneEnvio===true||
+    result.encontradoEnvio===true||
+    extractEnvio(result)||
+    yes(student.tieneEnvio)||
+    text(student.idRegistro)
+  ));
+  return evidencia&&!permiteReenvio(result);
+}
 
 async function executeService(env,action,method,payload,userRole){const result=await runService(env,'TITULOS',action,method,payload,userRole);return result.respuesta||result.data||result;}
 async function lookupEnvio(env,payload,userRole){
