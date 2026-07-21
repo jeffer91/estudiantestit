@@ -1,4 +1,4 @@
-/* Pantalla visible para títulos enviados y en revisión */
+/* Pantalla visible para títulos enviados, en revisión o aprobados. */
 .review-status-card {
   width: 100%;
   margin: 24px 0 40px;
@@ -12,6 +12,14 @@
 
 .review-status-card[hidden] {
   display: none !important;
+}
+
+.review-status-card--approved {
+  border-color: rgba(83, 188, 123, 0.75);
+  background:
+    radial-gradient(circle at top right, rgba(126, 226, 159, 0.18), transparent 34%),
+    linear-gradient(135deg, #073b2b 0%, #0d5a3d 58%, #12744b 100%);
+  box-shadow: 0 24px 60px rgba(5, 65, 43, 0.24);
 }
 
 .review-status-card__hero {
@@ -37,6 +45,12 @@
   line-height: 1;
 }
 
+.review-status-card--approved .review-status-card__icon {
+  border-color: #9be4b5;
+  background: rgba(155, 228, 181, 0.15);
+  color: #d7ffe5;
+}
+
 .review-status-card__eyebrow {
   margin: 0 0 8px;
   color: #f4d98e;
@@ -44,6 +58,10 @@
   font-weight: 900;
   letter-spacing: 0.13em;
   text-transform: uppercase;
+}
+
+.review-status-card--approved .review-status-card__eyebrow {
+  color: #c9f7d8;
 }
 
 .review-status-card h2 {
@@ -66,12 +84,64 @@
   font-weight: 800;
 }
 
+.review-status-card--approved .review-status-card__badge {
+  border-color: rgba(201, 247, 216, 0.7);
+  background: rgba(201, 247, 216, 0.14);
+  color: #e8fff0;
+}
+
 .review-status-card__message {
   max-width: 940px;
   margin: 26px 0;
   color: rgba(255, 255, 255, 0.92);
   font-size: clamp(1.05rem, 2vw, 1.28rem);
   line-height: 1.65;
+}
+
+.approved-title-card {
+  margin: 24px 0;
+  padding: clamp(22px, 4vw, 34px);
+  border: 2px solid rgba(201, 247, 216, 0.8);
+  border-radius: 24px;
+  background: #ffffff;
+  box-shadow: 0 18px 42px rgba(0, 43, 28, 0.18);
+  color: #073b2b;
+}
+
+.approved-title-card span,
+.approved-comment span {
+  display: block;
+  margin-bottom: 10px;
+  color: #18714d;
+  font-size: 0.8rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.approved-title-card strong {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: clamp(1.35rem, 3vw, 2.15rem);
+  line-height: 1.35;
+}
+
+.approved-comment {
+  margin-top: 18px;
+  padding: 18px 20px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.approved-comment span {
+  color: #c9f7d8;
+}
+
+.approved-comment p {
+  margin: 0;
+  color: #ffffff;
+  line-height: 1.6;
 }
 
 .review-data {
@@ -96,6 +166,10 @@
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.review-status-card--approved .review-data__item span {
+  color: #c9f7d8;
 }
 
 .review-data__item strong {
@@ -149,6 +223,10 @@
   line-height: 1.5;
 }
 
+.review-status-card--approved .review-status-card__notice {
+  border-left-color: #9be4b5;
+}
+
 .review-status-card .btn--secondary {
   flex: 0 0 auto;
   border-color: #f4d98e;
@@ -156,9 +234,19 @@
   color: #0b2f57;
 }
 
+.review-status-card--approved .btn--secondary {
+  border-color: #b8eeca;
+  color: #0d5a3d;
+}
+
 .review-status-card .btn--secondary:hover,
 .review-status-card .btn--secondary:focus-visible {
   background: #f8edca;
+}
+
+.review-status-card--approved .btn--secondary:hover,
+.review-status-card--approved .btn--secondary:focus-visible {
+  background: #e7faee;
 }
 
 @media (max-width: 760px) {
