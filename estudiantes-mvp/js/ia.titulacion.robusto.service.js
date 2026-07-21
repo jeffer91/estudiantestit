@@ -1,14 +1,15 @@
 /*
-  Orquestador robusto de IA de Titulación.
-  - Usa todos los motores internos disponibles sin revelar sus nombres.
-  - Con dos o más motores, uno genera y otro revisa.
-  - Acumula una opción válida por enfoque: diagnóstico, propuesta y evaluación.
-  - Nunca completa espacios con justificaciones ni con opciones repetidas.
+  Orquestador rápido de IA de Titulación.
+  - Ejecuta todos los motores internos en paralelo.
+  - Primera ronda: cada motor propone los tres enfoques.
+  - Segunda ronda opcional: solicita únicamente los enfoques faltantes.
+  - Conserva una sola opción completa por enfoque.
+  - Nunca revela nombres, marcas, modelos ni credenciales.
 */
 (function (window, document) {
   'use strict';
 
-  var MAX_PROCESOS = 3;
+  var MAX_RONDAS = 2;
   var instalado = false;
   var intentosInstalacion = 0;
   var NOMBRES_ENFOQUE = {
@@ -32,8 +33,8 @@
       generarNueveTitulos: generarOpcionesParaPropuesta,
       generarTitulos3x3: generarOpcionesParaPropuesta,
       __flujoNueveTitulos: true,
-      modo: 'motores-internos-combinados',
-      version: '5.2.0'
+      modo: 'motores-internos-paralelos',
+      version: '6.0.0'
     }));
 
     instalado = true;
@@ -44,14 +45,8 @@
     var providers = window.EstudianteMVPIAProviders;
     var core = window.EstudianteMVPIANueveCore;
     var error = validarParametros(params, config, providers, core);
-    var maxProcesos;
 
     if (error) return Promise.reject(new Error(error));
-
-    maxProcesos = Math.max(1, Math.min(
-      MAX_PROCESOS,
-      Number(params.maxProcesos || MAX_PROCESOS)
-    ));
 
     return config.listarProveedoresActivos().then(function (motores) {
       motores = Array.isArray(motores) ? motores.slice() : [];
@@ -63,16 +58,16 @@
         throw new Error('La IA de Titulación no está disponible en este momento.');
       }
 
-      return ejecutarProceso({
+      return ejecutarRonda({
         params: params,
         paramsCore: construirParametrosCore(params),
         motores: motores,
-        proceso: 1,
-        maxProcesos: maxProcesos,
-        acumulado: {},
-        errores: [],
         providers: providers,
         core: core,
+        ronda: 1,
+        maxRondas: Math.max(1, Math.min(MAX_RONDAS, Number(params.maxProcesos || MAX_RONDAS))),
+        acumulado: {},
+        errores: [],
         ultimoReporte: null,
         totalTitulosInternos: 0,
         revisadoInternamente: false
@@ -80,109 +75,110 @@
     });
   }
 
-  function ejecutarProceso(ctx) {
-    var generador;
-    var revisor;
-    var prompt;
+  function ejecutarRonda(ctx) {
+    var esCorreccion = ctx.ronda > 1;
+    var promptBase;
+    var tareas;
 
-    if (ctx.proceso > ctx.maxProcesos) {
-      return finalizarConAcumulado(ctx);
+    if (cantidadAcumulada(ctx) === 3) {
+      return Promise.resolve(construirResultado(ctx, 'Se prepararon tres opciones completas y diferentes.'));
     }
 
-    generador = ctx.motores[(ctx.proceso - 1) % ctx.motores.length];
-    revisor = ctx.motores.length > 1
-      ? ctx.motores[ctx.proceso % ctx.motores.length]
-      : generador;
-    prompt = construirPromptGeneracion(ctx);
+    promptBase = esCorreccion
+      ? construirPromptCorreccion(ctx)
+      : construirPromptInicial(ctx);
 
     notificar(ctx.params, {
-      proceso: ctx.proceso,
-      maxProcesos: ctx.maxProcesos,
-      etapa: 'generacion',
-      mensaje: mensajeFaltantes(ctx, 'Generando alternativas')
+      proceso: ctx.ronda,
+      maxProcesos: ctx.maxRondas,
+      ronda: ctx.ronda,
+      maxRondas: ctx.maxRondas,
+      etapa: esCorreccion ? 'correccion_paralela' : 'generacion_paralela',
+      mensaje: esCorreccion
+        ? mensajeFaltantes(ctx, 'Completando en paralelo')
+        : 'Los motores internos están generando alternativas en paralelo.'
     });
 
-    return llamarMotor(ctx.providers, generador, prompt, false, ctx.params).then(
-      function (respuesta) {
-        var reporte = analizarRespuesta(ctx, respuesta);
-        var cantidadAntes = cantidadAcumulada(ctx);
+    tareas = ctx.motores.map(function (motor, index) {
+      var prompt = promptBase + varianteMotor(index, esCorreccion);
 
-        if (!reporte) {
-          registrarError(ctx, 'La respuesta no contenía títulos completos y utilizables.');
-          return siguienteProceso(ctx);
+      return llamarMotor(
+        ctx.providers,
+        motor,
+        prompt,
+        esCorreccion,
+        ctx.params
+      ).then(function (respuesta) {
+        return { ok: true, motor: motor, respuesta: respuesta };
+      }).catch(function (error) {
+        return { ok: false, motor: motor, error: error };
+      });
+    });
+
+    return Promise.all(tareas).then(function (resultados) {
+      var respondieron = 0;
+
+      resultados.forEach(function (resultado) {
+        var reporte;
+
+        if (!resultado.ok) {
+          registrarError(ctx, limpiarError(resultado.error));
+          return;
         }
 
-        combinarReporte(ctx, reporte);
+        respondieron += 1;
+        reporte = analizarRespuesta(ctx, resultado.respuesta);
+        if (reporte) combinarReporte(ctx, reporte);
+        else registrarError(ctx, 'Una respuesta no contenía títulos completos y utilizables.');
+      });
 
-        notificar(ctx.params, {
-          proceso: ctx.proceso,
-          maxProcesos: ctx.maxProcesos,
-          etapa: 'validacion',
-          mensaje: 'Revisando redacción, extensión y enfoque académico.'
-        });
+      notificar(ctx.params, {
+        proceso: ctx.ronda,
+        maxProcesos: ctx.maxRondas,
+        ronda: ctx.ronda,
+        maxRondas: ctx.maxRondas,
+        etapa: 'validacion',
+        mensaje: 'Validando y combinando las mejores opciones obtenidas.'
+      });
 
-        /* Con más de un motor siempre se usa el segundo como revisor. */
-        if (ctx.motores.length > 1) {
-          return revisarConMotor(ctx, revisor, reporte);
-        }
-
-        if (cantidadAcumulada(ctx) === 3) {
-          return construirResultado(ctx, 'Se prepararon tres opciones completas y diferentes.');
-        }
-
-        if (cantidadAcumulada(ctx) === cantidadAntes) {
-          registrarError(ctx, resumirReporte(reporte));
-        }
-        return revisarConMotor(ctx, revisor, reporte);
-      },
-      function (errorMotor) {
-        registrarError(ctx, limpiarError(errorMotor));
-        return siguienteProceso(ctx);
+      if (cantidadAcumulada(ctx) === 3) {
+        return construirResultado(
+          ctx,
+          esCorreccion
+            ? 'Las tres opciones fueron completadas y quedaron listas para elegir.'
+            : 'Los motores internos prepararon tres opciones completas y diferentes.'
+        );
       }
-    );
+
+      if (!respondieron && !cantidadAcumulada(ctx) && ctx.ronda >= ctx.maxRondas) {
+        throw construirErrorFinal(ctx.errores);
+      }
+
+      if (ctx.ronda < ctx.maxRondas) {
+        ctx.ronda += 1;
+        ctx.revisadoInternamente = true;
+        return ejecutarRonda(ctx);
+      }
+
+      return finalizarConAcumulado(ctx);
+    });
   }
 
-  function revisarConMotor(ctx, revisor, reporteBase) {
-    var promptRevision = construirPromptRevision(ctx, reporteBase);
+  function varianteMotor(index, esCorreccion) {
+    var variantes = [
+      'Usa una redacción directa, clara y académica.',
+      'Usa una formulación alternativa, aplicada y distinta de las opciones evidentes.',
+      'Prioriza precisión metodológica y relación clara entre problema, grupo y contexto.'
+    ];
 
-    notificar(ctx.params, {
-      proceso: ctx.proceso,
-      maxProcesos: ctx.maxProcesos,
-      etapa: 'correccion',
-      mensaje: mensajeFaltantes(ctx, 'Revisando y completando')
-    });
-
-    return llamarMotor(ctx.providers, revisor, promptRevision, true, ctx.params).then(
-      function (respuesta) {
-        var reporte = analizarRespuesta(ctx, respuesta);
-
-        ctx.revisadoInternamente = true;
-        if (reporte) combinarReporte(ctx, reporte);
-        else registrarError(ctx, 'La revisión no devolvió títulos completos y utilizables.');
-
-        notificar(ctx.params, {
-          proceso: ctx.proceso,
-          maxProcesos: ctx.maxProcesos,
-          etapa: 'comparacion',
-          mensaje: 'Comparando los resultados y conservando una opción por enfoque.'
-        });
-
-        if (cantidadAcumulada(ctx) === 3) {
-          return construirResultado(ctx, 'Las tres opciones fueron revisadas y quedaron listas para elegir.');
-        }
-
-        if (reporte) registrarError(ctx, resumirReporte(reporte));
-        return siguienteProceso(ctx);
-      },
-      function (errorMotor) {
-        registrarError(ctx, limpiarError(errorMotor));
-
-        if (cantidadAcumulada(ctx) === 3) {
-          return construirResultado(ctx, 'Se conservaron tres opciones completas y diferentes.');
-        }
-        return siguienteProceso(ctx);
-      }
-    );
+    return [
+      '',
+      'VARIANTE INTERNA ' + (index + 1) + ':',
+      variantes[index % variantes.length],
+      esCorreccion
+        ? 'No repitas ninguna opción ya conservada.'
+        : 'Evita títulos genéricos y repeticiones.'
+    ].join('\n');
   }
 
   function analizarRespuesta(ctx, respuesta) {
@@ -204,13 +200,16 @@
     secciones.forEach(function (seccion, index) {
       var numero = numeroSeccion(seccion, index + 1, ctx.core);
       var candidato = mejorCandidatoSeccion(seccion, ctx.core);
+      var opcion;
       var actual;
 
       if (!candidato || numero < 1 || numero > 3) return;
 
+      opcion = crearOpcion(candidato, seccion, numero, ctx.params, ctx.core);
       actual = ctx.acumulado[numero];
-      if (!actual || esCandidatoMejor(candidato, actual)) {
-        ctx.acumulado[numero] = crearOpcion(candidato, seccion, numero, ctx.params, ctx.core);
+
+      if (!actual || esCandidatoMejor(opcion, actual)) {
+        ctx.acumulado[numero] = opcion;
       }
     });
   }
@@ -254,21 +253,6 @@
     return Number(nuevo.puntaje || 0) > Number(actual.puntaje || 0);
   }
 
-  function siguienteProceso(ctx) {
-    ctx.proceso += 1;
-
-    if (ctx.proceso <= ctx.maxProcesos) {
-      notificar(ctx.params, {
-        proceso: ctx.proceso,
-        maxProcesos: ctx.maxProcesos,
-        etapa: 'reinicio',
-        mensaje: mensajeFaltantes(ctx, 'Iniciando una nueva búsqueda para completar')
-      });
-    }
-
-    return ejecutarProceso(ctx);
-  }
-
   function finalizarConAcumulado(ctx) {
     var cantidad = cantidadAcumulada(ctx);
     var mensaje;
@@ -291,8 +275,10 @@
     marcarRecomendadaUnica(opciones);
 
     notificar(ctx.params, {
-      proceso: Math.min(ctx.proceso, ctx.maxProcesos),
-      maxProcesos: ctx.maxProcesos,
+      proceso: ctx.ronda,
+      maxProcesos: ctx.maxRondas,
+      ronda: ctx.ronda,
+      maxRondas: ctx.maxRondas,
       etapa: 'finalizacion',
       mensaje: cantidad === 1
         ? 'Preparando la opción validada.'
@@ -307,13 +293,16 @@
         1
       ),
       revisadoInternamente: ctx.revisadoInternamente === true,
-      procesoUsado: Math.min(ctx.proceso, ctx.maxProcesos),
-      maxProcesos: ctx.maxProcesos,
+      procesoUsado: ctx.ronda,
+      rondaUsada: ctx.ronda,
+      maxProcesos: ctx.maxRondas,
+      maxRondas: ctx.maxRondas,
       totalTitulosInternos: ctx.totalTitulosInternos,
       cantidadOpciones: cantidad,
       opcionesFinales: opciones,
       mejorDisponible: mejorDisponible === true,
       enfoquesCompletos: opciones.map(function (item) { return item.etapa; }),
+      motoresUtilizados: ctx.motores.length,
       mensaje: mensaje
     };
   }
@@ -344,6 +333,98 @@
     }).join(', ') + '.';
   }
 
+  function construirPromptInicial(ctx) {
+    var datos = datosPropuesta(ctx.params);
+
+    return [
+      'Actúa como asesor académico de trabajos de titulación.',
+      'Genera exactamente tres títulos diferentes para UNA MISMA propuesta.',
+      '',
+      'DATOS:',
+      'Carrera: ' + datos.carrera,
+      'Tema general: ' + datos.tema,
+      'Lugar o contexto: ' + datos.contexto,
+      'Grupo de estudio: ' + datos.grupo,
+      'Año o período: ' + datos.periodo,
+      'Problema o necesidad: ' + datos.problema,
+      'Objetivo: ' + datos.objetivo,
+      '',
+      'ENFOQUES OBLIGATORIOS:',
+      '1. Diagnóstico de la situación inicial.',
+      '2. Propuesta, diseño o mejora.',
+      '3. Evaluación, análisis o resultado esperado.',
+      '',
+      'REGLAS:',
+      '- Cada título debe tener entre 20 y 30 palabras.',
+      '- Cada título debe ser una oración completa, clara y académica.',
+      '- Incluye tema, enfoque, grupo o contexto y período cuando corresponda.',
+      '- No escribas justificaciones, explicaciones, encabezados ni texto fuera del JSON.',
+      '- El campo titulo debe contener solamente el título.',
+      '- No repitas títulos ni enfoques.',
+      '',
+      'RESPONDE SOLO CON ESTE JSON:',
+      '{"titulos":[',
+      '{"seccion":1,"etapa":"diagnostico_inicial","titulo":"..."},',
+      '{"seccion":2,"etapa":"propuesta_mejora","titulo":"..."},',
+      '{"seccion":3,"etapa":"evaluacion_resultado","titulo":"..."}',
+      ']}'
+    ].join('\n');
+  }
+
+  function construirPromptCorreccion(ctx) {
+    var datos = datosPropuesta(ctx.params);
+    var faltantes = enfoquesFaltantes(ctx);
+    var existentes = opcionesAcumuladas(ctx);
+
+    return [
+      'Actúa como asesor académico de trabajos de titulación.',
+      'Completa únicamente los enfoques que faltan para esta propuesta.',
+      '',
+      'DATOS:',
+      'Carrera: ' + datos.carrera,
+      'Tema general: ' + datos.tema,
+      'Lugar o contexto: ' + datos.contexto,
+      'Grupo de estudio: ' + datos.grupo,
+      'Año o período: ' + datos.periodo,
+      'Problema o necesidad: ' + datos.problema,
+      'Objetivo: ' + datos.objetivo,
+      '',
+      'ENFOQUES FALTANTES:',
+      faltantes.map(function (numero) {
+        return numero + '. ' + NOMBRES_ENFOQUE[numero] + '.';
+      }).join('\n'),
+      '',
+      'TÍTULOS YA ACEPTADOS; NO LOS REPITAS:',
+      existentes.length
+        ? existentes.map(function (opcion) { return '- ' + opcion.titulo; }).join('\n')
+        : '- Ninguno.',
+      '',
+      'REGLAS:',
+      '- Devuelve exactamente un título por cada enfoque faltante.',
+      '- Cada título debe tener entre 20 y 30 palabras.',
+      '- El campo titulo debe contener únicamente el título académico completo.',
+      '- No escribas justificaciones, etiquetas ni texto fuera del JSON.',
+      '',
+      'RESPONDE SOLO CON JSON:',
+      '{"titulos":[{"seccion":NUMERO,"etapa":"CODIGO","titulo":"..."}]}'
+    ].join('\n');
+  }
+
+  function datosPropuesta(params) {
+    var estudiante = params && params.estudiante || {};
+    var propuesta = params && params.propuesta || {};
+
+    return {
+      carrera: limpiar(estudiante.nombreCarrera || estudiante.carrera || estudiante.NombreCarrera),
+      tema: limpiar(propuesta.temaGeneral || propuesta.tema),
+      contexto: limpiar(propuesta.lugarContexto || propuesta.contexto || propuesta.lugar),
+      grupo: limpiar(propuesta.grupoEstudio || propuesta.grupo || propuesta.poblacion),
+      periodo: limpiar(propuesta.anioPeriodo || propuesta.periodo || propuesta.tiempo),
+      problema: limpiar(propuesta.problemaNecesidad || propuesta.problema || propuesta.necesidad),
+      objetivo: limpiar(propuesta.objetivo || propuesta.objetivoGeneral)
+    };
+  }
+
   function construirParametrosCore(params) {
     var propuesta = clonar(params.propuesta || {});
     var propuestas = [1, 2, 3].map(function (numero) {
@@ -358,50 +439,6 @@
       propuesta: clonar(propuesta),
       numeroPropuesta: Number(params.numeroPropuesta || propuesta.numero || 1)
     };
-  }
-
-  function construirPromptGeneracion(ctx) {
-    var tituloBase = obtenerTituloBase(ctx.params);
-    var faltantes = enfoquesFaltantes(ctx);
-    var existentes = opcionesAcumuladas(ctx);
-
-    return ctx.core.construirPrompt(ctx.paramsCore) + [
-      '',
-      'INSTRUCCIONES OBLIGATORIAS:',
-      '- Entrega tres enfoques distintos: diagnóstico, propuesta o mejora, y evaluación o resultado esperado.',
-      '- Cada enfoque debe contener títulos académicos completos de 20 a 30 palabras.',
-      '- En cada objeto, el campo titulo debe contener únicamente el título. No escribas etiquetas, explicaciones ni justificaciones dentro de titulo.',
-      '- No uses encabezados como Justification, Reason, Explanation, Etapa, Stage o Section dentro de los títulos.',
-      '- No repitas el mismo enfoque ni el mismo título.',
-      '- Responde exclusivamente con JSON válido.',
-      '- Enfoques que todavía faltan: ' + (faltantes.length ? faltantes.map(function (n) { return NOMBRES_ENFOQUE[n]; }).join(', ') : 'ninguno'),
-      '- Opciones válidas ya conservadas: ' + (existentes.length ? existentes.map(function (o) { return o.nombreEtapa + ': ' + o.titulo; }).join(' | ') : 'ninguna'),
-      '- Título escrito por el estudiante: ' + (tituloBase || 'No escribió un título previo.')
-    ].join('\n');
-  }
-
-  function construirPromptRevision(ctx, reporte) {
-    var tituloBase = obtenerTituloBase(ctx.params);
-    var faltantes = enfoquesFaltantes(ctx);
-    var existentes = opcionesAcumuladas(ctx);
-
-    return ctx.core.construirPromptRevision(
-      ctx.paramsCore,
-      reporte && reporte.secciones || [],
-      reporte || {}
-    ) + [
-      '',
-      'INSTRUCCIONES OBLIGATORIAS DE REVISIÓN:',
-      '- Revisa la redacción y completa los enfoques faltantes.',
-      '- Devuelve una opción diferente para diagnóstico, una para propuesta o mejora y una para evaluación o resultado.',
-      '- No conviertas justificaciones, razones o explicaciones en títulos.',
-      '- El campo titulo debe contener únicamente una oración académica completa de 20 a 30 palabras.',
-      '- No uses etiquetas como Justification, Reason, Explanation, Etapa, Stage o Section dentro de titulo.',
-      '- Responde exclusivamente con JSON válido.',
-      '- Enfoques que todavía faltan: ' + (faltantes.length ? faltantes.map(function (n) { return NOMBRES_ENFOQUE[n]; }).join(', ') : 'ninguno; revisa los tres'),
-      '- Opciones válidas que deben conservarse: ' + (existentes.length ? existentes.map(function (o) { return o.nombreEtapa + ': ' + o.titulo; }).join(' | ') : 'ninguna'),
-      '- Título escrito por el estudiante: ' + (tituloBase || 'No escribió un título previo.')
-    ].join('\n');
   }
 
   function numeroSeccion(seccion, fallback, core) {
@@ -443,10 +480,14 @@
   }
 
   function llamarMotor(servicio, motor, prompt, revision, params) {
+    var limiteSolicitado = Number(params.maxTokens || 900);
+
     return servicio.generarTexto(motor, prompt, {
-      timeoutMs: params.timeoutMs,
-      temperatura: revision ? 0.12 : 0.3,
-      maxTokens: Math.max(Number(params.maxTokens || 0), 3000),
+      timeoutMs: Math.min(Number(params.timeoutMs || 20000), 20000),
+      temperatura: revision ? 0.12 : 0.28,
+      maxTokens: revision
+        ? Math.min(Math.max(limiteSolicitado, 600), 750)
+        : Math.min(Math.max(limiteSolicitado, 750), 950),
       modoRevision: revision === true
     });
   }
@@ -498,16 +539,8 @@
     return texto ? texto.split(' ').filter(Boolean).length : 0;
   }
 
-  function resumirReporte(reporte) {
-    var lista = reporte && Array.isArray(reporte.errores) ? reporte.errores : [];
-    if (!lista.length) return 'Las opciones todavía necesitan una revisión adicional.';
-    return lista.slice(0, 6).map(function (item) {
-      return 'Enfoque ' + item.seccion + ': ' + item.mensaje;
-    }).join(' ');
-  }
-
   function registrarError(ctx, mensaje) {
-    ctx.errores.push({ proceso: ctx.proceso, mensaje: limpiar(mensaje).slice(0, 350) });
+    ctx.errores.push({ ronda: ctx.ronda, mensaje: limpiar(mensaje).slice(0, 350) });
   }
 
   function construirErrorFinal(errores) {
@@ -515,6 +548,7 @@
     var huboRespuesta = errores.some(function (item) {
       return /titulo|respuesta|revision|opciones/.test(normalizar(item.mensaje));
     });
+
     return new Error(
       huboRespuesta
         ? 'La IA de Titulación respondió, pero no produjo una opción completa y bien redactada. Intenta nuevamente.'
