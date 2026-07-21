@@ -78,8 +78,12 @@ async function lookupEnvio(env,payload,userRole){
 async function executeAccess(env,payload,userRole){
   const cedula=normalizeCedula(payload.cedula||payload.numeroIdentificacion||payload.identificacion);
   const base=await requestClaves(env,ACCESS_ACTION,{cedula,periodoId:text(payload.periodoId||payload.periodo||payload.periodoLabel)},12000);
-  if(accessHasEnvio(base)&&extractEnvio(base))return base;
   const student=base.estudiante||base.registro||{};
+
+  /*
+    Aunque Claves encuentre el índice, siempre se consulta TITULOS.
+    Así se recupera la resolución más reciente y el título final aprobado.
+  */
   let direct=await lookupEnvio(env,{
     cedula,
     periodo:base.periodoLabel||flexible(student,['periodoLabel','periodo'])||payload.periodo||payload.periodoLabel,
@@ -99,7 +103,7 @@ async function executeAccess(env,payload,userRole){
     permiteReenvio:permitir,
     envio,
     estadoEnvio:estado,
-    fuenteEnvio:'ENVÍOS_RESPALDO_TITULOS_APP',
+    fuenteEnvio:'ENVÍOS_Y_RESOLUCIONES_RESPALDO_TITULOS_APP',
     mensaje:permitir
       ?'El registro fue devuelto y puede corregirse.'
       :aprobado
@@ -114,7 +118,7 @@ async function verifyWithCache(env,action,method,payload,userRole){
   if(verificationInflight.has(key))return verificationInflight.get(key);
   const task=executeRead(env,action,method,payload,userRole).then((result)=>{
     const positive=action===ACCESS_ACTION?accessHasEnvio(result):directHasEnvio(result);
-    return cacheSet(verificationCache,key,result,positive?2*60*1000:5*1000);
+    return cacheSet(verificationCache,key,result,positive?30*1000:5*1000);
   }).finally(()=>verificationInflight.delete(key));
   verificationInflight.set(key,task);return task;
 }
