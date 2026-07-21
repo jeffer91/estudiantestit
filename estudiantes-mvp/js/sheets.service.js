@@ -9,6 +9,22 @@
       .replace(/\s+/g, ' ')
       .trim();
   }
+  function normalizarClave(value) {
+    return texto(value).toLowerCase().normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]/g, '');
+  }
+  function campoFlexible(object, names) {
+    var data = object || {};
+    var map = {};
+    var i;
+    Object.keys(data).forEach(function (key) { map[normalizarClave(key)] = key; });
+    for (i = 0; i < names.length; i += 1) {
+      var real = map[normalizarClave(names[i])];
+      if (real !== undefined && data[real] !== undefined && data[real] !== null) return data[real];
+    }
+    return undefined;
+  }
   function cedula(value) {
     var helper = utils();
     var digits = helper && helper.limpiarCedula
@@ -84,33 +100,55 @@
   function si(value) {
     return value === true || ['SI', 'SÍ', 'TRUE', '1', 'YES'].indexOf(texto(value).toUpperCase()) >= 0;
   }
+  function pareceEnvio(value) {
+    return Boolean(value && typeof value === 'object' && (
+      campoFlexible(value, ['titulo1', 'titulo2', 'titulo3', 'tituloAprobado', 'tituloCorregido', 'tituloElegido', 'idRegistro', 'envioId']) !== undefined
+    ));
+  }
   function estadoEnvio(envio) {
-    return texto(
-      envio && (envio.estado || envio.estadoFinal || envio.estadoProceso || envio.estadoGoogleSheets)
-    ).toUpperCase();
+    return texto(campoFlexible(envio || {}, [
+      'estado', 'estadoFinal', 'estadoProceso', 'estadoGoogleSheets'
+    ])).toUpperCase();
   }
   function extraerEnvio(result) {
-    return result && (
-      result.envio ||
-      result.registroEnvio ||
-      result.data && (result.data.envio || result.data.registro)
-    ) || null;
+    var candidatos;
+    var i;
+    if (!result || typeof result !== 'object') return null;
+    candidatos = [
+      result.envio,
+      result.registroEnvio,
+      result.envioActual,
+      result.data && result.data.envio,
+      result.data && result.data.registroEnvio,
+      result.resultado && result.resultado.envio,
+      result.respuesta && result.respuesta.envio,
+      result.registro
+    ];
+    for (i = 0; i < candidatos.length; i += 1) {
+      if (pareceEnvio(candidatos[i])) return candidatos[i];
+    }
+    return pareceEnvio(result) ? result : null;
   }
   function permiteReenvio(result, envio) {
+    var status;
+    var propio;
+    var valor;
     envio = envio || extraerEnvio(result) || {};
-    var status = estadoEnvio(envio);
-    var valor = envio.permitirReenvio !== undefined
-      ? envio.permitirReenvio
-      : result && result.permiteReenvio;
+    status = estadoEnvio(envio) || texto(campoFlexible(result || {}, ['estado', 'estadoFinal'])).toUpperCase();
+    propio = campoFlexible(envio, ['permitirReenvio', 'permiteReenvio']);
+    valor = propio !== undefined ? propio : campoFlexible(result || {}, ['permitirReenvio', 'permiteReenvio']);
     return status === 'DEVUELTO' && (
       valor === undefined || valor === null || valor === '' || si(valor)
     );
   }
   function evidenciaEnvio(result, student, envio) {
     return Boolean(
-      result && (result.tieneEnvio === true || result.encontradoEnvio === true) ||
+      result && si(campoFlexible(result, ['tieneEnvio', 'encontradoEnvio', 'existeEnvio'])) ||
       envio ||
-      student && (si(student.tieneEnvio) || texto(student.idRegistro))
+      student && (
+        si(campoFlexible(student, ['tieneEnvio', 'tiene envío', 'envioRegistrado'])) ||
+        texto(campoFlexible(student, ['idRegistro', 'envioId', 'tituloId']))
+      )
     );
   }
 
@@ -136,7 +174,7 @@
       var evidencia = evidenciaEnvio(result, student, envio);
       var salida = {
         ok: true,
-        encontrado: result.encontrado === true || result.existe === true || Boolean(student),
+        encontrado: result.encontrado === true || result.existe === true || si(result.encontrado) || si(result.existe) || Boolean(student),
         cedula: id,
         estudiante: student,
         registro: student,
@@ -144,8 +182,9 @@
         encontradoEnvio: evidencia,
         permiteReenvio: permitir,
         envio: envio,
-        periodoId: result.periodoId || student && student.periodoId || '',
-        periodoLabel: result.periodoLabel || student && student.periodoLabel || '',
+        estadoEnvio: estadoEnvio(envio),
+        periodoId: result.periodoId || student && campoFlexible(student, ['periodoId']) || '',
+        periodoLabel: result.periodoLabel || student && campoFlexible(student, ['periodoLabel', 'periodo']) || '',
         fuente: result.fuente || 'INDICES_RESPALDO_TITULOS_APP',
         duracionMs: Number(result.duracionMs || 0),
         cache: result.cache || false,
@@ -153,16 +192,18 @@
         mensaje: result.mensaje || ''
       };
 
-      /* Defensa adicional: si el resumen afirma que ya envió, recuperar
-         los títulos directamente antes de permitir que avance. */
-      if (salida.tieneEnvio && !salida.envio) {
+      /* Antes de permitir el avance, consultar siempre Envios cuando el
+         resumen no entregó el registro completo. Así también se recuperan
+         aprobaciones recientes y períodos con formatos diferentes. */
+      if (!salida.envio) {
         return consultarEnvioPorCedula(id, salida.periodoLabel || salida.periodoId)
           .then(function (directo) {
-            if (directo.ok && directo.encontrado && directo.envio) {
+            if (directo.ok && directo.existe && directo.envio) {
               salida.envio = directo.envio;
               salida.encontradoEnvio = true;
               salida.tieneEnvio = !directo.permiteReenvio;
               salida.permiteReenvio = directo.permiteReenvio;
+              salida.estadoEnvio = directo.estado || estadoEnvio(directo.envio);
               salida.fuente = 'ENVÍOS_RESPALDO_TITULOS_APP';
             }
             return salida;
@@ -194,7 +235,7 @@
       'GET'
     ).then(function (result) {
       var envio = extraerEnvio(result);
-      var encontrado = result.encontrado === true || result.existe === true || Boolean(envio);
+      var encontrado = si(campoFlexible(result, ['encontrado', 'existe', 'tieneEnvio', 'encontradoEnvio'])) || Boolean(envio);
       var permite = permiteReenvio(result, envio);
       return {
         ok: true,
@@ -203,6 +244,7 @@
         permiteReenvio: permite,
         cedula: id,
         envio: envio,
+        estado: estadoEnvio(envio) || texto(campoFlexible(result, ['estado', 'estadoFinal'])).toUpperCase(),
         mensaje: result.mensaje || ''
       };
     }).catch(function (error) {
@@ -306,8 +348,6 @@
     var data = construirPayloadSheets(payload);
     var periodo = data.periodo || data.periodoLabel || data.periodoId;
 
-    /* Segunda comprobación justo antes de guardar. Esta protección evita
-       duplicados por dos pestañas abiertas o por un índice desactualizado. */
     return consultarEnvioPorCedula(data.cedula, periodo).then(function (previo) {
       if (!previo.ok) {
         throw previo.error || new Error(
