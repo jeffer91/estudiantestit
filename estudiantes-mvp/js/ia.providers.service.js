@@ -35,9 +35,8 @@
   }
 
   function mensajeErrorPublico(json,status){
-    return texto(json&&(
-      json.mensaje||json.error||json.message
-    ))||('No fue posible completar la solicitud de IA. Código HTTP '+status+'.');
+    return texto(json&&(json.mensaje||json.error||json.message))||
+      ('No fue posible completar la solicitud de IA. Código HTTP '+status+'.');
   }
 
   function generarTexto(motor,prompt,opciones){
@@ -81,6 +80,59 @@
     });
   }
 
+  function descripcionEstado(estado){
+    var mapa={
+      probando:'Consultando la IA de Titulación',
+      respuesta:'Respuesta recibida; validando títulos',
+      correcto:'Opciones finales preparadas',
+      error:'No se pudo completar este intento'
+    };
+    return mapa[estado]||'Procesando la solicitud';
+  }
+
+  function limpiarInterfazPublica(raiz){
+    raiz=raiz&&raiz.nodeType===1?raiz:document;
+
+    Array.prototype.forEach.call(
+      raiz.querySelectorAll?raiz.querySelectorAll('.ia-diagnostico__punto'):[],
+      function(punto){
+        var descripcion=descripcionEstado(punto.getAttribute('data-estado')||'');
+        punto.setAttribute('title',descripcion);
+        punto.setAttribute('aria-label',descripcion);
+      }
+    );
+
+    Array.prototype.forEach.call(
+      raiz.querySelectorAll?raiz.querySelectorAll('[data-ia-detalle]'):[],
+      function(elemento){
+        var limpio=texto(elemento.textContent)
+          .replace(/Proveedor actual\s*:[^.]+\.?/ig,'')
+          .replace(/Otra IA/ig,'Una revisión interna')
+          .replace(/Una segunda IA/ig,'Una revisión interna')
+          .replace(/otro par de proveedores/ig,'otro proceso interno');
+        if(limpio&&limpio!==elemento.textContent)elemento.textContent=limpio;
+      }
+    );
+  }
+
+  function instalarPrivacidadUI(){
+    if(!document.body)return;
+    limpiarInterfazPublica(document);
+    new MutationObserver(function(cambios){
+      cambios.forEach(function(cambio){
+        if(cambio.target&&cambio.target.nodeType===1)limpiarInterfazPublica(cambio.target);
+        Array.prototype.forEach.call(cambio.addedNodes||[],function(nodo){
+          if(nodo&&nodo.nodeType===1)limpiarInterfazPublica(nodo);
+        });
+      });
+    }).observe(document.body,{
+      childList:true,
+      subtree:true,
+      attributes:true,
+      attributeFilter:['data-estado','title','aria-label']
+    });
+  }
+
   function cargar(src){
     if(document.readyState==='loading'){
       document.write('<script src="'+src+'"><\/script>');
@@ -101,7 +153,7 @@
       generarTitulosPorPropuesta:desactivado,
       generarTresTitulos:desactivado,
       modo:'esperando_motor_por_propuesta',
-      version:'6.0.0'
+      version:'6.0.1'
     });
   }
 
@@ -120,4 +172,10 @@
     normalizarProveedorRuntime:normalizarMotor,
     proxyUrl:proxyUrl
   });
+
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded',instalarPrivacidadUI,{once:true});
+  }else{
+    instalarPrivacidadUI();
+  }
 })(window,document);
