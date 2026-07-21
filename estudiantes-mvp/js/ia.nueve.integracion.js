@@ -1,9 +1,9 @@
 /*
   Integración IA por propuesta:
   - Cada propuesta conserva su propio botón.
-  - Cada clic genera 9 títulos internos para esa propuesta.
-  - Solo se muestran 3 opciones validadas: diagnóstico, proceso y análisis final.
-  - El estudiante elige una opción y puede continuar normalmente.
+  - La IA intenta preparar hasta 3 opciones válidas.
+  - Solo se muestran títulos completos y bien redactados.
+  - Si se obtiene una o dos opciones válidas, no se inventan tarjetas adicionales.
 */
 (function (window, document) {
   'use strict';
@@ -13,7 +13,7 @@
   var enCurso = false;
   var ACCION = 'generar-ia-9';
   var MENSAJE_PUBLICO =
-    'No te preocupes. No fue posible preparar las sugerencias en este momento. ' +
+    'No te preocupes. No fue posible preparar una opción completa en este momento. ' +
     'Puedes intentarlo nuevamente. Si el inconveniente continúa, comunícate con tu coordinador para recibir apoyo.';
 
   function instalar() {
@@ -55,18 +55,21 @@
       validarPropuesta: function (numero) {
         var validacion = validarOriginal(numero);
         var propuesta;
+        var cantidad;
 
         if (!validacion.ok) return validacion;
 
         propuesta = reemplazo.obtenerPropuesta(numero) || {};
-        if (
-          Array.isArray(propuesta.sugerenciasIA) &&
-          propuesta.sugerenciasIA.length === 3 &&
-          !Number(propuesta.sugerenciaSeleccionadaNumero || 0)
-        ) {
+        cantidad = Array.isArray(propuesta.sugerenciasIA)
+          ? propuesta.sugerenciasIA.length
+          : 0;
+
+        if (cantidad > 0 && !Number(propuesta.sugerenciaSeleccionadaNumero || 0)) {
           return {
             ok: false,
-            mensaje: 'Selecciona uno de los 3 títulos sugeridos para la propuesta ' + numero + '.',
+            mensaje: cantidad === 1
+              ? 'Selecciona el título sugerido para la propuesta ' + numero + '.'
+              : 'Selecciona uno de los ' + cantidad + ' títulos sugeridos para la propuesta ' + numero + '.',
             selector: '#p' + numero + 'Sugerencias',
             numeroPropuesta: Number(numero)
           };
@@ -110,7 +113,7 @@
         boton.textContent = 'Generar sugerencias con IA de Titulación';
         boton.setAttribute(
           'title',
-          'Analiza 9 títulos internamente y muestra las 3 mejores opciones para esta propuesta.'
+          'Analiza alternativas internamente y muestra hasta 3 títulos completos para esta propuesta.'
         );
       }
     );
@@ -162,13 +165,13 @@
     emitir('ia-titulacion:3x3-inicio', {
       numeroPropuesta: numeroPropuesta,
       totalEsperado: 9,
-      opcionesFinales: 3,
+      opcionesFinalesMaximas: 3,
       maxProcesos: 3
     });
 
     ui.mostrarEstado(
       '#p' + numeroPropuesta + 'EstadoIA',
-      'Analizando la propuesta y preparando las mejores opciones...',
+      'Analizando la propuesta y preparando opciones bien redactadas...',
       'info'
     );
 
@@ -194,9 +197,11 @@
     })
       .then(function (resultado) {
         aplicarResultado(numeroPropuesta, resultado);
-        emitir('ia-titulacion:3x3-exito', Object.assign({
-          numeroPropuesta: numeroPropuesta
-        }, resultado || {}));
+        emitir('ia-titulacion:3x3-exito', {
+          numeroPropuesta: numeroPropuesta,
+          cantidadOpciones: resultado && resultado.cantidadOpciones || 0,
+          procesoUsado: resultado && resultado.procesoUsado || 1
+        });
       })
       .catch(function (error) {
         console.warn('[IA Titulación por propuesta] Detalle interno:', error);
@@ -213,7 +218,6 @@
 
         emitir('ia-titulacion:3x3-error', {
           numeroPropuesta: numeroPropuesta,
-          error: error,
           mensaje: error && error.message ? error.message : String(error || '')
         });
       })
@@ -255,28 +259,34 @@
     var opciones = resultado && Array.isArray(resultado.opcionesFinales)
       ? resultado.opcionesFinales
       : [];
-    var proveedor = resultado.proveedor || resultado.proveedorNombre || '';
+    var cantidad;
+    var mensaje;
 
-    if (opciones.length !== 3) {
-      throw new Error('El resultado no contiene exactamente tres opciones finales.');
-    }
-
-    opciones = opciones.map(function (item, index) {
-      return Object.assign({}, item, {
-        numero: index + 1
-      });
+    opciones = opciones.filter(function (item) {
+      return item && String(item.titulo || '').trim();
+    }).slice(0, 3).map(function (item, index) {
+      return Object.assign({}, item, { numero: index + 1 });
     });
 
-    state.setSugerenciasIA(numeroPropuesta, opciones, proveedor);
+    cantidad = opciones.length;
+    if (cantidad < 1) {
+      throw new Error('El resultado no contiene una opción de título completa.');
+    }
+
+    state.setSugerenciasIA(numeroPropuesta, opciones);
     ui.pintarSugerencias(numeroPropuesta, opciones);
 
     if (recomendacion && typeof recomendacion.marcarPagina === 'function') {
       recomendacion.marcarPagina(numeroPropuesta, opciones);
     }
 
+    mensaje = cantidad === 1
+      ? 'Se preparó 1 opción validada. Revísala y selecciónala para continuar.'
+      : 'Se prepararon ' + cantidad + ' opciones validadas. Elige la que más te convenga.';
+
     ui.mostrarEstado(
       '#p' + numeroPropuesta + 'EstadoIA',
-      'Se prepararon 3 opciones validadas. Elige la que más te convenga.',
+      mensaje,
       'success'
     );
 
@@ -289,7 +299,8 @@
       recomendacion.mostrarResultado({
         numeroPropuesta: numeroPropuesta,
         opcionesFinales: opciones,
-        mensaje: resultado.mensaje || '',
+        cantidadOpciones: cantidad,
+        mensaje: resultado.mensaje || mensaje,
         procesoUsado: resultado.procesoUsado || 1,
         maxProcesos: resultado.maxProcesos || 3,
         mejorDisponible: resultado.mejorDisponible === true
@@ -329,6 +340,6 @@
     ejecutarGeneracion: ejecutarGeneracion,
     configurarBotones: configurarBotones,
     accion: ACCION,
-    version: '2.0.1'
+    version: '3.1.0'
   });
 })(window, document);
