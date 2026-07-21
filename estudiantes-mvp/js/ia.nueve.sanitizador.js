@@ -1,9 +1,7 @@
 /*
   Sanitizador estricto para IA de Titulación.
-  - Extrae únicamente valores que realmente son títulos.
-  - Recupera campos "titulo" aun cuando el JSON llegue incompleto.
-  - Rechaza etiquetas, justificaciones y fragmentos técnicos.
-  - Nunca inventa opciones para completar tres tarjetas.
+  Solo acepta títulos académicos completos. Nunca convierte justificaciones,
+  etapas, explicaciones ni fragmentos JSON en opciones visibles.
 */
 (function (window) {
   'use strict';
@@ -12,9 +10,9 @@
   var ETAPAS = original && Array.isArray(original.etapas)
     ? original.etapas.slice()
     : [
-        { numero: 1, codigo: 'diagnostico_inicial', nombre: 'Diagnóstico inicial' },
+        { numero: 1, codigo: 'diagnostico_inicial', nombre: 'Diagnóstico' },
         { numero: 2, codigo: 'propuesta_mejora', nombre: 'Propuesta o mejora' },
-        { numero: 3, codigo: 'evaluacion_resultado', nombre: 'Evaluación o resultado esperado' }
+        { numero: 3, codigo: 'evaluacion_resultado', nombre: 'Evaluación o resultado' }
       ];
 
   if (!original) return;
@@ -44,11 +42,20 @@
     return texto ? texto.split(' ').filter(Boolean).length : 0;
   }
 
+  function esEtiquetaNoTitulo(valor) {
+    var texto = limpiar(valor);
+    return /^(?:justificaci[oó]n|justification|reason|rationale|explanation|explicaci[oó]n|motivo|etapa|stage|section|secci[oó]n|diagnostic|diagn[oó]stico\s+inicial)\s*(?:\d+(?:\.\d+)*)?\s*[*#._-]*\s*[:=-]/i.test(texto);
+  }
+
   function limpiarTitulo(valor) {
-    var titulo = limpiar(valor)
+    var titulo = limpiar(valor);
+
+    if (!titulo || esEtiquetaNoTitulo(titulo)) return '';
+
+    titulo = titulo
       .replace(/^\s*[-*•]+\s*/, '')
       .replace(/^\s*\d+\s*[).:-]\s*/, '')
-      .replace(/^\s*(?:t[ií]tulo|title|opci[oó]n|alternativa)\s*\d*\s*["']?\s*[:=-]\s*["']?/i, '')
+      .replace(/^\s*(?:t[ií]tulo|title|opci[oó]n|option|alternativa)\s*\d*(?:\.\d+)?\s*[*#._-]*\s*["']?\s*[:=-]\s*["']?/i, '')
       .replace(/^\s*["']?(?:titulo|título|title)["']?\s*:\s*["']?/i, '')
       .replace(/^[\s“”"']+/, '')
       .replace(/[\s“”"']+$/, '')
@@ -58,11 +65,8 @@
       .replace(/\s+/g, ' ')
       .trim();
 
-    if (titulo) {
-      titulo = titulo.charAt(0).toUpperCase() + titulo.slice(1);
-    }
-
-    return titulo;
+    if (!titulo || esEtiquetaNoTitulo(titulo)) return '';
+    return titulo.charAt(0).toUpperCase() + titulo.slice(1);
   }
 
   function contieneFragmentoTecnico(titulo) {
@@ -72,15 +76,15 @@
     return (
       /[{}\[\]]/.test(crudo) ||
       /["']\s*:\s*["']?/.test(crudo) ||
-      /^(?:etapa|seccion|sección|justificacion|justificación|numero|número|puntaje|recomendada|recomendado|nombreEtapa)\b/i.test(crudo) ||
-      /(?:^|_)(?:etapa|seccion|justificacion|numero|puntaje|recomendada|nombre_etapa)(?:_|$)/.test(clave) ||
+      /^(?:etapa|stage|section|seccion|sección|justificacion|justificación|justification|reason|rationale|explanation|explicacion|explicación|motivo|numero|número|puntaje|score|recomendada|recomendado|nombreEtapa)\b/i.test(crudo) ||
+      /(?:^|_)(?:etapa|stage|section|seccion|justificacion|justification|reason|rationale|explanation|motivo|numero|puntaje|score|recomendada|nombre_etapa)(?:_|$)/.test(clave) ||
       /diagnostico_inicial|propuesta_mejora|evaluacion_resultado/.test(clave)
     );
   }
 
   function terminaIncompleto(titulo) {
-    var limpioTitulo = limpiar(titulo).toLowerCase();
-    return /(?:\bde|\bdel|\bla|\blas|\bel|\blos|\by|\bo|\bpara|\bcon|\ben|\bpor|\bmediante|\bsobre)$/.test(limpioTitulo);
+    var texto = limpiar(titulo).toLowerCase();
+    return /(?:\bde|\bdel|\bla|\blas|\bel|\blos|\by|\bo|\bpara|\bcon|\ben|\bpor|\bmediante|\bsobre)$/.test(texto);
   }
 
   function esTituloValido(valor) {
@@ -105,9 +109,9 @@
     if (numero >= 1 && numero <= 3) return numero;
 
     clave = normalizar(valor);
-    if (/diagnostico|inicial/.test(clave)) return 1;
-    if (/propuesta|mejora|proceso|diseno|optimizacion/.test(clave)) return 2;
-    if (/evaluacion|resultado|impacto|final|efectividad/.test(clave)) return 3;
+    if (/diagnostico|diagnostic|situacion_inicial|initial/.test(clave)) return 1;
+    if (/propuesta|proposal|mejora|improvement|proceso|process|diseno|design|optimizacion/.test(clave)) return 2;
+    if (/evaluacion|evaluation|resultado|result|impacto|impact|final|efectividad|effectiveness/.test(clave)) return 3;
 
     return Number(fallback || 0);
   }
@@ -128,8 +132,8 @@
         numero: titulos.length + 1,
         titulo: titulo,
         justificacion: limpiar(
-          objeto.justificacion || objeto.justificación || objeto.razon ||
-          objeto.razón || objeto.explicacion || objeto.explicación || objeto.motivo || ''
+          objeto.justificacion || objeto.justificación || objeto.razon || objeto.razón ||
+          objeto.explicacion || objeto.explicación || objeto.motivo || ''
         )
       });
     });
@@ -147,7 +151,7 @@
 
     (Array.isArray(secciones) ? secciones : []).forEach(function (seccion) {
       var numero = numeroSeccion(
-        seccion && (seccion.seccion || seccion.numero || seccion.section || seccion.etapa),
+        seccion && (seccion.seccion || seccion.numero || seccion.section || seccion.etapa || seccion.nombreEtapa),
         0
       );
       if (numero >= 1 && numero <= 3) mapa[numero] = crearSeccion(numero, seccion.titulos || []);
@@ -159,24 +163,22 @@
   }
 
   function extraerJson(texto) {
-    var limpioTexto = String(texto || '')
-      .replace(/```(?:json)?/ig, '')
-      .trim();
+    var contenido = String(texto || '').replace(/```(?:json)?/ig, '').trim();
     var inicio;
     var fin;
 
-    try { return JSON.parse(limpioTexto); } catch (e1) {}
+    try { return JSON.parse(contenido); } catch (e1) {}
 
-    inicio = limpioTexto.indexOf('{');
-    fin = limpioTexto.lastIndexOf('}');
+    inicio = contenido.indexOf('{');
+    fin = contenido.lastIndexOf('}');
     if (inicio >= 0 && fin > inicio) {
-      try { return JSON.parse(limpioTexto.slice(inicio, fin + 1)); } catch (e2) {}
+      try { return JSON.parse(contenido.slice(inicio, fin + 1)); } catch (e2) {}
     }
 
-    inicio = limpioTexto.indexOf('[');
-    fin = limpioTexto.lastIndexOf(']');
+    inicio = contenido.indexOf('[');
+    fin = contenido.lastIndexOf(']');
     if (inicio >= 0 && fin > inicio) {
-      try { return JSON.parse(limpioTexto.slice(inicio, fin + 1)); } catch (e3) {}
+      try { return JSON.parse(contenido.slice(inicio, fin + 1)); } catch (e3) {}
     }
 
     return null;
@@ -206,7 +208,7 @@
     if (typeof nodo !== 'object') return salida;
 
     seccion = numeroSeccion(
-      nodo.seccion || nodo.numeroSeccion || nodo.section || nodo.etapa || nodo.nombreEtapa,
+      nodo.seccion || nodo.numeroSeccion || nodo.section || nodo.etapa || nodo.stage || nodo.nombreEtapa,
       seccionHeredada || 0
     );
 
@@ -216,8 +218,8 @@
       salida.push({
         titulo: limpiarTitulo(nodo[clave]),
         justificacion: limpiar(
-          nodo.justificacion || nodo.justificación || nodo.razon || nodo.razón ||
-          nodo.explicacion || nodo.explicación || nodo.motivo || ''
+          nodo.justificacion || nodo.justificación || nodo.justification || nodo.razon || nodo.razón ||
+          nodo.reason || nodo.rationale || nodo.explicacion || nodo.explicación || nodo.explanation || nodo.motivo || ''
         ),
         seccion: seccion
       });
@@ -226,7 +228,7 @@
 
     Object.keys(nodo).forEach(function (clave) {
       var valor = nodo[clave];
-      var esLista = /^(?:titulos|títulos|titles|opciones|alternativas|sugerencias)$/i.test(clave);
+      var esLista = /^(?:titulos|títulos|titles|opciones|options|alternativas|sugerencias)$/i.test(clave);
       if (valor && typeof valor === 'object') {
         recorrerJson(valor, salida, seccion, esLista, profundidad + 1);
       }
@@ -257,10 +259,12 @@
 
     String(texto || '').split(/\n+/).forEach(function (linea) {
       var originalLinea = limpiar(linea);
-      var pareceOpcion = /^\s*(?:[-*•]|\d+\s*[).:-]|t[ií]tulo\s*\d*\s*[:.-]|opci[oó]n\s*\d*\s*[:.-])/i.test(originalLinea);
+      var pareceOpcion = /^\s*(?:[-*•]|\d+\s*[).:-]|t[ií]tulo\s*\d*\s*[:.-]|title\s*\d*\s*[:.-]|opci[oó]n\s*\d*\s*[:.-]|option\s*\d*\s*[:.-])/i.test(originalLinea);
       var titulo;
 
-      if (!pareceOpcion || /["']?(?:etapa|justificacion|justificación|seccion|sección|numero|número)["']?\s*:/i.test(originalLinea)) return;
+      if (!pareceOpcion || esEtiquetaNoTitulo(originalLinea)) return;
+      if (/["']?(?:etapa|stage|justificacion|justificación|justification|reason|rationale|explanation|seccion|sección|section|numero|número)["']?\s*:/i.test(originalLinea)) return;
+
       titulo = limpiarTitulo(originalLinea);
       if (esTituloValido(titulo)) salida.push({ titulo: titulo, seccion: 0 });
     });
@@ -270,24 +274,28 @@
 
   function agrupar(lista) {
     var grupos = [[], [], []];
+    var sinSeccion = [];
     var usadas = {};
-    var limpias = [];
 
     (Array.isArray(lista) ? lista : []).forEach(function (item) {
       var titulo = limpiarTitulo(item && item.titulo || item);
       var clave = normalizar(titulo);
+      var seccion = numeroSeccion(item && (item.seccion || item.etapa || item.nombreEtapa), 0);
+      var registro;
+
       if (!esTituloValido(titulo) || usadas[clave]) return;
       usadas[clave] = true;
-      limpias.push(Object.assign({}, item || {}, { titulo: titulo }));
+      registro = Object.assign({}, item || {}, { titulo: titulo });
+
+      if (seccion >= 1 && seccion <= 3) grupos[seccion - 1].push(registro);
+      else sinSeccion.push(registro);
     });
 
-    limpias.forEach(function (item, index) {
-      var seccion = numeroSeccion(item.seccion || item.etapa || item.nombreEtapa, 0);
-      if (seccion < 1 || seccion > 3) {
-        if (limpias.length === 3) seccion = index + 1;
-        else seccion = Math.min(3, Math.floor(index / 3) + 1);
-      }
-      if (grupos[seccion - 1].length < 3) grupos[seccion - 1].push(item);
+    sinSeccion.forEach(function (item, index) {
+      var seccion;
+      if (sinSeccion.length === 3) seccion = index + 1;
+      else seccion = Math.min(3, Math.floor(index / 3) + 1);
+      grupos[seccion - 1].push(item);
     });
 
     return grupos.map(function (grupo, index) {
@@ -311,7 +319,7 @@
 
     (Array.isArray(secciones) ? secciones : []).forEach(function (seccion, index) {
       var numero = numeroSeccion(
-        seccion && (seccion.seccion || seccion.numero || seccion.section || seccion.etapa),
+        seccion && (seccion.seccion || seccion.numero || seccion.section || seccion.etapa || seccion.nombreEtapa),
         index + 1
       );
       (seccion && Array.isArray(seccion.titulos) ? seccion.titulos : []).forEach(function (item) {
@@ -341,6 +349,7 @@
     limpiarTitulo: limpiarTitulo,
     esTituloValido: esTituloValido,
     sanitizarSecciones: sanitizarSecciones,
-    versionSanitizador: '1.0.0'
+    numeroSeccionSeguro: numeroSeccion,
+    versionSanitizador: '1.1.0'
   }));
 })(window);
