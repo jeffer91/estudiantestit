@@ -2,8 +2,9 @@
   Orquestador robusto de IA de Titulación:
   - Funciona con uno o varios motores internos.
   - El mismo motor puede generar y corregir cuando es el único disponible.
-  - Conserva las opciones válidas y corrige únicamente lo necesario.
-  - Nunca muestra marcas, modelos ni nombres de proveedores al estudiante.
+  - Conserva únicamente títulos completos, limpios y académicamente utilizables.
+  - Intenta obtener tres opciones, pero nunca completa tarjetas con fragmentos JSON.
+  - Si al finalizar solo existe una o dos opciones válidas, muestra únicamente esas.
 */
 (function (window, document) {
   'use strict';
@@ -28,7 +29,7 @@
       generarTitulos3x3: generarOpcionesParaPropuesta,
       __flujoNueveTitulos: true,
       modo: 'motores-internos-privados',
-      version: '5.0.0'
+      version: '5.1.0'
     }));
 
     instalado = true;
@@ -85,7 +86,6 @@
     revisor = ctx.motores.length > 1
       ? ctx.motores[ctx.proceso % ctx.motores.length]
       : generador;
-
     prompt = construirPromptGeneracion(ctx.core, ctx.paramsCore, ctx.params);
 
     notificar(ctx.params, {
@@ -103,26 +103,26 @@
         var base;
 
         if (!total) {
-          registrarError(ctx, 'La respuesta no contenía títulos utilizables.');
+          registrarError(ctx, 'La respuesta no contenía títulos completos y utilizables.');
           return siguienteProceso(ctx);
         }
 
         reporte = ctx.core.validarYRecomendar(secciones, ctx.paramsCore);
-        base = crearCandidato(reporte, total, false, ctx.params);
+        base = crearCandidato(reporte, total, false, ctx.params, ctx.core);
         ctx.mejor = esMejor(base, ctx.mejor) ? base : ctx.mejor;
 
         notificar(ctx.params, {
           proceso: ctx.proceso,
           maxProcesos: ctx.maxProcesos,
           etapa: 'validacion',
-          mensaje: 'Revisando estructura, extensión y relación académica.'
+          mensaje: 'Revisando redacción, extensión y relación académica.'
         });
 
         if (base.aptoFinal) {
           return construirResultado(
             base,
             ctx,
-            'Se prepararon tres opciones relacionadas con la propuesta.'
+            'Se prepararon tres opciones completas y relacionadas con la propuesta.'
           );
         }
 
@@ -158,12 +158,12 @@
         var elegido;
 
         if (!total) {
-          registrarError(ctx, 'La revisión no devolvió títulos utilizables.');
+          registrarError(ctx, 'La revisión no devolvió títulos completos y utilizables.');
           return siguienteProceso(ctx);
         }
 
         reporte = ctx.core.validarYRecomendar(secciones, ctx.paramsCore);
-        revisado = crearCandidato(reporte, total, true, ctx.params);
+        revisado = crearCandidato(reporte, total, true, ctx.params, ctx.core);
         elegido = esMejor(revisado, base) ? revisado : base;
         ctx.mejor = esMejor(elegido, ctx.mejor) ? elegido : ctx.mejor;
 
@@ -171,7 +171,7 @@
           proceso: ctx.proceso,
           maxProcesos: ctx.maxProcesos,
           etapa: 'comparacion',
-          mensaje: 'Comparando las versiones y conservando las opciones más claras.'
+          mensaje: 'Comparando las versiones y conservando las opciones mejor redactadas.'
         });
 
         if (elegido.aptoFinal) {
@@ -179,7 +179,7 @@
             elegido,
             ctx,
             elegido.revisado
-              ? 'Las opciones fueron revisadas y quedaron listas para elegir.'
+              ? 'Las tres opciones fueron revisadas y quedaron listas para elegir.'
               : 'La versión inicial obtuvo una mejor evaluación y quedó lista para elegir.'
           );
         }
@@ -209,21 +209,25 @@
   }
 
   function finalizarConMejorDisponible(ctx) {
-    if (
-      ctx.mejor &&
-      Array.isArray(ctx.mejor.opcionesFinales) &&
-      ctx.mejor.opcionesFinales.length === 3 &&
-      sonMostrables(ctx.mejor.opcionesFinales)
-    ) {
-      return construirResultado(
-        ctx.mejor,
-        ctx,
-        'Se conservaron las tres opciones más sólidas obtenidas para esta propuesta.',
-        true
-      );
+    var cantidad;
+    var mensaje;
+
+    if (!ctx.mejor || !Array.isArray(ctx.mejor.opcionesFinales)) {
+      throw construirErrorFinal(ctx.errores);
     }
 
-    throw construirErrorFinal(ctx.errores);
+    cantidad = ctx.mejor.opcionesFinales.length;
+    if (cantidad < 1 || cantidad > 3 || !sonMostrables(ctx.mejor.opcionesFinales, ctx.core)) {
+      throw construirErrorFinal(ctx.errores);
+    }
+
+    mensaje = cantidad === 1
+      ? 'Se obtuvo una opción completa y bien redactada para esta propuesta.'
+      : cantidad === 2
+        ? 'Se conservaron las dos opciones completas y mejor redactadas para esta propuesta.'
+        : 'Se conservaron las tres opciones más sólidas obtenidas para esta propuesta.';
+
+    return construirResultado(ctx.mejor, ctx, mensaje, cantidad < 3);
   }
 
   function construirParametrosCore(params) {
@@ -244,42 +248,45 @@
 
   function construirPromptGeneracion(core, paramsCore, paramsOriginales) {
     var tituloBase = obtenerTituloBase(paramsOriginales);
+
     return core.construirPrompt(paramsCore) + [
       '',
-      'REGLA ESPECIAL PARA ESTA PROPUESTA:',
+      'REGLAS ESPECIALES PARA ESTA PROPUESTA:',
       '- Los títulos deben abordar exactamente la misma propuesta; solo cambia el enfoque entre diagnóstico, propuesta de mejora y evaluación esperada.',
       '- Al menos una opción del enfoque de propuesta o mejora debe conservar claramente la idea central del título escrito por el estudiante.',
       '- No copies errores de redacción ni inventes información.',
+      '- En cada objeto, el campo titulo debe contener solamente el título académico completo.',
+      '- Nunca coloques etapa, justificación, etiquetas, nombres de campos o fragmentos JSON dentro del campo titulo.',
       '- Título escrito por el estudiante: ' + (tituloBase || 'No escribió un título previo.')
     ].join('\n');
   }
 
   function construirPromptRevision(core, paramsCore, paramsOriginales, reporte) {
     var tituloBase = obtenerTituloBase(paramsOriginales);
+
     return core.construirPromptRevision(
       paramsCore,
       reporte.secciones,
       reporte
     ) + [
       '',
-      'REGLA ESPECIAL DE CORRECCIÓN:',
-      '- Corrige los mismos títulos y conserva todas las opciones que ya son válidas.',
+      'REGLAS ESPECIALES DE CORRECCIÓN:',
+      '- Conserva todas las opciones que ya están completas y bien redactadas.',
+      '- Regenera únicamente los títulos faltantes, cortados, repetidos o inválidos.',
+      '- Cada campo titulo debe contener solo una oración académica completa, sin comillas sobrantes, etiquetas ni fragmentos JSON.',
       '- Mantén una versión mejorada de la idea central del estudiante dentro del enfoque de propuesta o mejora.',
       '- Título escrito por el estudiante: ' + (tituloBase || 'No escribió un título previo.')
     ].join('\n');
   }
 
-  function crearCandidato(reporte, total, revisado, params) {
-    var opcionesFinales = seleccionarOpcionesFinales(reporte, params);
+  function crearCandidato(reporte, total, revisado, params, core) {
+    var opcionesFinales = seleccionarOpcionesFinales(reporte, params, core);
     var tituloBase = obtenerTituloBase(params);
     var opcionProceso = opcionesFinales.find(function (item) {
       return item.etapa === 'propuesta_mejora';
     }) || null;
     var cumpleTituloBase = !tituloBase || !opcionProceso ||
       similitud(opcionProceso.titulo, tituloBase) >= 0.08;
-    var gravesSeleccionados = opcionesFinales.reduce(function (totalGraves, item) {
-      return totalGraves + (Array.isArray(item.erroresGraves) ? item.erroresGraves.length : 0);
-    }, 0);
 
     return {
       reporte: reporte,
@@ -287,30 +294,26 @@
       revisado: revisado === true,
       opcionesFinales: opcionesFinales,
       cumpleTituloBase: cumpleTituloBase,
-      gravesSeleccionados: gravesSeleccionados,
-      aptoFinal: opcionesFinales.length === 3 &&
-        gravesSeleccionados === 0 &&
-        sonMostrables(opcionesFinales)
+      gravesSeleccionados: 0,
+      aptoFinal: opcionesFinales.length === 3 && sonMostrables(opcionesFinales, core)
     };
   }
 
-  function seleccionarOpcionesFinales(reporte, params) {
+  function seleccionarOpcionesFinales(reporte, params, core) {
     var tituloBase = obtenerTituloBase(params);
     var usadas = {};
     var opciones = [];
     var secciones = reporte && Array.isArray(reporte.secciones) ? reporte.secciones : [];
+    var restantes = [];
 
     secciones.slice(0, 3).forEach(function (seccion) {
-      var candidatos = Array.isArray(seccion.titulos) ? seccion.titulos.slice() : [];
+      var candidatos = candidatosValidos(seccion, core);
       var elegida;
 
       candidatos.sort(function (a, b) {
-        var gravesA = Array.isArray(a.erroresGraves) ? a.erroresGraves.length : 0;
-        var gravesB = Array.isArray(b.erroresGraves) ? b.erroresGraves.length : 0;
         var similitudA = seccion.seccion === 2 && tituloBase ? similitud(a.titulo, tituloBase) : 0;
         var similitudB = seccion.seccion === 2 && tituloBase ? similitud(b.titulo, tituloBase) : 0;
 
-        if (gravesA !== gravesB) return gravesA - gravesB;
         if (seccion.seccion === 2 && tituloBase && Math.abs(similitudB - similitudA) > 0.03) {
           return similitudB - similitudA;
         }
@@ -322,56 +325,60 @@
         return clave && !usadas[clave];
       }) || null;
 
-      if (!elegida) return;
-      usadas[normalizar(elegida.titulo)] = true;
-      opciones.push(crearOpcion(elegida, seccion, opciones.length + 1, tituloBase));
+      if (elegida) {
+        usadas[normalizar(elegida.titulo)] = true;
+        opciones.push(crearOpcion(elegida, seccion, opciones.length + 1, tituloBase, core));
+      }
+
+      candidatos.forEach(function (item) {
+        restantes.push({ item: item, seccion: seccion });
+      });
     });
 
-    // Rescate: si una sección llegó vacía, completa con el mejor título único disponible.
-    if (opciones.length < 3) {
-      var restantes = [];
-      secciones.forEach(function (seccion) {
-        (Array.isArray(seccion.titulos) ? seccion.titulos : []).forEach(function (item) {
-          restantes.push({ item: item, seccion: seccion });
-        });
-      });
-      restantes.sort(function (a, b) {
-        var gravesA = Array.isArray(a.item.erroresGraves) ? a.item.erroresGraves.length : 0;
-        var gravesB = Array.isArray(b.item.erroresGraves) ? b.item.erroresGraves.length : 0;
-        if (gravesA !== gravesB) return gravesA - gravesB;
-        return Number(b.item.puntaje || 0) - Number(a.item.puntaje || 0);
-      });
-      restantes.some(function (registro) {
-        var clave = normalizar(registro.item.titulo);
-        if (!clave || usadas[clave]) return false;
-        usadas[clave] = true;
-        opciones.push(crearOpcion(
-          registro.item,
-          registro.seccion,
-          opciones.length + 1,
-          tituloBase
-        ));
-        return opciones.length === 3;
-      });
-    }
+    restantes.sort(function (a, b) {
+      return Number(b.item.puntaje || 0) - Number(a.item.puntaje || 0);
+    });
+
+    restantes.some(function (registro) {
+      var clave = normalizar(registro.item.titulo);
+      if (!clave || usadas[clave]) return false;
+      usadas[clave] = true;
+      opciones.push(crearOpcion(
+        registro.item,
+        registro.seccion,
+        opciones.length + 1,
+        tituloBase,
+        core
+      ));
+      return opciones.length === 3;
+    });
 
     marcarRecomendadaUnica(opciones);
     return opciones.slice(0, 3);
   }
 
-  function crearOpcion(item, seccion, numero, tituloBase) {
+  function candidatosValidos(seccion, core) {
+    return (seccion && Array.isArray(seccion.titulos) ? seccion.titulos : []).filter(function (item) {
+      var graves = Array.isArray(item.erroresGraves) ? item.erroresGraves : [];
+      return graves.length === 0 && esTituloUtilizable(item.titulo, core);
+    });
+  }
+
+  function crearOpcion(item, seccion, numero, tituloBase, core) {
+    var titulo = core && typeof core.limpiarTitulo === 'function'
+      ? core.limpiarTitulo(item.titulo)
+      : limpiar(item.titulo);
+
     return {
       numero: numero,
-      titulo: limpiar(item.titulo),
+      titulo: titulo,
       justificacion: limpiar(item.justificacion) ||
         'Opción seleccionada por su relación con la propuesta y el enfoque académico.',
       puntaje: Number(item.puntaje || 0),
       etapa: seccion.etapa,
       nombreEtapa: seccion.nombreEtapa,
-      erroresGraves: Array.isArray(item.erroresGraves) ? item.erroresGraves.slice() : [],
-      erroresMenores: Array.isArray(item.erroresMenores) ? item.erroresMenores.slice() : [],
       basadaEnTituloEstudiante: seccion.seccion === 2 && tituloBase
-        ? similitud(item.titulo, tituloBase) >= 0.08
+        ? similitud(titulo, tituloBase) >= 0.08
         : false,
       recomendada: false,
       recomendado: false
@@ -393,26 +400,26 @@
     });
   }
 
-  function sonMostrables(opciones) {
+  function esTituloUtilizable(titulo, core) {
+    if (core && typeof core.esTituloValido === 'function') {
+      return core.esTituloValido(titulo);
+    }
+
+    return limpiar(titulo).length >= 35 && contarPalabras(titulo) >= 16;
+  }
+
+  function sonMostrables(opciones, core) {
     var usadas = {};
 
-    if (!Array.isArray(opciones) || opciones.length !== 3) return false;
+    if (!Array.isArray(opciones) || opciones.length < 1 || opciones.length > 3) return false;
 
     return opciones.every(function (item) {
       var titulo = limpiar(item && item.titulo);
       var clave = normalizar(titulo);
 
-      if (
-        titulo.length < 25 ||
-        !clave ||
-        usadas[clave] ||
-        /no_especificado|titulo_academico|primera_alternativa|segunda_alternativa|tercera_alternativa/.test(clave)
-      ) {
-        return false;
-      }
-
+      if (!esTituloUtilizable(titulo, core) || !clave || usadas[clave]) return false;
       usadas[clave] = true;
-      return Number(item.puntaje || 0) > -35;
+      return true;
     });
   }
 
@@ -420,13 +427,10 @@
     if (!a) return false;
     if (!b) return true;
 
-    if (a.aptoFinal !== b.aptoFinal) return a.aptoFinal;
     if (a.opcionesFinales.length !== b.opcionesFinales.length) {
       return a.opcionesFinales.length > b.opcionesFinales.length;
     }
-    if (a.gravesSeleccionados !== b.gravesSeleccionados) {
-      return a.gravesSeleccionados < b.gravesSeleccionados;
-    }
+    if (a.aptoFinal !== b.aptoFinal) return a.aptoFinal;
     if (a.cumpleTituloBase !== b.cumpleTituloBase) return a.cumpleTituloBase;
     if (a.reporte.graves !== b.reporte.graves) return a.reporte.graves < b.reporte.graves;
     if (a.reporte.menores !== b.reporte.menores) return a.reporte.menores < b.reporte.menores;
@@ -441,11 +445,15 @@
   }
 
   function construirResultado(candidato, ctx, mensaje, mejorDisponible) {
+    var cantidad = candidato.opcionesFinales.length;
+
     notificar(ctx.params, {
       proceso: Math.min(ctx.proceso, ctx.maxProcesos),
       maxProcesos: ctx.maxProcesos,
       etapa: 'finalizacion',
-      mensaje: 'Preparando las tres opciones finales.'
+      mensaje: cantidad === 1
+        ? 'Preparando la opción validada.'
+        : 'Preparando las ' + cantidad + ' opciones validadas.'
     });
 
     return {
@@ -459,12 +467,9 @@
       procesoUsado: Math.min(ctx.proceso, ctx.maxProcesos),
       maxProcesos: ctx.maxProcesos,
       totalTitulosInternos: candidato.totalTitulos,
-      seccionesInternas: candidato.reporte.secciones,
+      cantidadOpciones: cantidad,
       opcionesFinales: candidato.opcionesFinales.map(function (item) {
-        var copia = Object.assign({}, item);
-        delete copia.erroresGraves;
-        delete copia.erroresMenores;
-        return copia;
+        return Object.assign({}, item);
       }),
       mejorDisponible: mejorDisponible === true,
       validacion: {
@@ -537,6 +542,14 @@
     });
   }
 
+  function contarPalabras(valor) {
+    var texto = limpiar(valor)
+      .replace(/[“”"'.,;:¿?¡!()[\]{}]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return texto ? texto.split(' ').filter(Boolean).length : 0;
+  }
+
   function resumirReporte(reporte) {
     var lista = reporte && Array.isArray(reporte.errores) ? reporte.errores : [];
     if (!lista.length) return 'Las opciones todavía necesitan una revisión adicional.';
@@ -560,7 +573,7 @@
 
     return new Error(
       huboRespuestaIncompleta
-        ? 'La IA de Titulación respondió, pero no fue posible completar tres opciones válidas. Intenta nuevamente.'
+        ? 'La IA de Titulación respondió, pero no produjo una opción completa y bien redactada. Intenta nuevamente.'
         : 'No fue posible completar la generación en este momento. Intenta nuevamente.'
     );
   }
