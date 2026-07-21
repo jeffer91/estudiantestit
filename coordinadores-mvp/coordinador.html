@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Coordinadores de Titulación</title>
   <link rel="icon" href="data:," />
-  <link rel="stylesheet" href="css/coordinador.css?v=2.8.1" />
+  <link rel="stylesheet" href="css/coordinador.css?v=2.8.2" />
 </head>
 <body>
   <header class="app-header">
@@ -16,27 +16,18 @@
         <h1>Coordinadores de titulación</h1>
         <p>Revisión y aprobación de propuestas académicas.</p>
       </div>
-      <span class="version-badge">v2.8.1</span>
+      <span class="version-badge">v2.8.2</span>
     </div>
   </header>
 
   <main class="app-container">
     <section class="card control-card" aria-label="Selección de período y coordinador">
       <div class="control-grid">
-        <label class="field">
-          <span>Período</span>
-          <select id="periodoSelect"><option value="">Cargando períodos...</option></select>
-        </label>
-        <label class="field">
-          <span>Coordinador</span>
-          <select id="coordinadorSelect" disabled><option value="">Cargando coordinadores...</option></select>
-        </label>
+        <label class="field"><span>Período</span><select id="periodoSelect"><option value="">Cargando períodos...</option></select></label>
+        <label class="field"><span>Coordinador</span><select id="coordinadorSelect" disabled><option value="">Cargando coordinadores...</option></select></label>
         <button type="button" class="btn btn--secondary refresh-btn" data-accion="actualizar-datos">Actualizar</button>
       </div>
-      <div class="coordinator-summary" id="coordinadorResumen" hidden>
-        <strong id="coordinadorNombre">-</strong>
-        <span id="coordinadorCarreras">Sin carreras asignadas</span>
-      </div>
+      <div class="coordinator-summary" id="coordinadorResumen" hidden><strong id="coordinadorNombre">-</strong><span id="coordinadorCarreras">Sin carreras asignadas</span></div>
       <div id="estadoPrincipal" class="status-message is-info">Inicializando conexión...</div>
     </section>
 
@@ -62,18 +53,13 @@
     </section>
 
     <section class="card diagnostico-card is-hidden" id="diagnosticoPanel" hidden>
-      <div class="diagnostic-head">
-        <div><p class="section-kicker">Diagnóstico</p><h2>Estado de la conexión</h2></div>
-        <button type="button" class="btn btn--ghost" data-accion="ocultar-diagnostico">Cerrar</button>
-      </div>
+      <div class="diagnostic-head"><div><p class="section-kicker">Diagnóstico</p><h2>Estado de la conexión</h2></div><button type="button" class="btn btn--ghost" data-accion="ocultar-diagnostico">Cerrar</button></div>
       <pre id="diagnosticoResultado" class="result-box">Diagnóstico pendiente.</pre>
     </section>
     <button type="button" class="diagnostic-link" data-accion="mostrar-diagnostico">Ver diagnóstico</button>
   </main>
 
-  <div class="loading-overlay" id="loadingOverlay" hidden>
-    <div class="loading-card"><div class="loading-spinner" aria-hidden="true"></div><strong id="loadingTexto">Cargando...</strong></div>
-  </div>
+  <div class="loading-overlay" id="loadingOverlay" hidden><div class="loading-card"><div class="loading-spinner" aria-hidden="true"></div><strong id="loadingTexto">Cargando...</strong></div></div>
 
   <section class="modal" id="detalleModal" hidden aria-modal="true" role="dialog" aria-labelledby="modalTitulo">
     <div class="modal__backdrop" data-accion="cerrar-modal"></div>
@@ -88,20 +74,36 @@
           <div><span>Fecha de envío</span><strong id="detalleFechaEnvio">-</strong></div>
           <div><span>Estado</span><strong id="detalleEstado">-</strong></div>
         </div>
+
         <div class="proposal-list">
-          <article class="proposal-card" data-propuesta="1">
-            <div class="proposal-card__head"><div class="proposal-card__title"><h3>Título 1</h3><span class="favorite-badge" data-favorito="1" hidden>★ Favorito del estudiante</span></div><label><input type="radio" name="tituloSeleccionado" value="1" /> Seleccionar</label></div>
+          <article class="proposal-card" data-propuesta="1" role="button" tabindex="0" aria-pressed="false">
+            <div class="proposal-card__head">
+              <div class="proposal-card__title"><h3>Título 1</h3><span class="favorite-badge" data-favorito="1" hidden>★ Favorito del estudiante</span></div>
+              <button type="button" class="proposal-select-btn" data-seleccionar-propuesta="1" aria-pressed="false">Seleccionar este título</button>
+              <input type="radio" class="proposal-radio" name="tituloSeleccionado" value="1" hidden />
+            </div>
             <p id="detalleTitulo1">-</p>
           </article>
-          <article class="proposal-card" data-propuesta="2">
-            <div class="proposal-card__head"><div class="proposal-card__title"><h3>Título 2</h3><span class="favorite-badge" data-favorito="2" hidden>★ Favorito del estudiante</span></div><label><input type="radio" name="tituloSeleccionado" value="2" /> Seleccionar</label></div>
+
+          <article class="proposal-card" data-propuesta="2" role="button" tabindex="0" aria-pressed="false">
+            <div class="proposal-card__head">
+              <div class="proposal-card__title"><h3>Título 2</h3><span class="favorite-badge" data-favorito="2" hidden>★ Favorito del estudiante</span></div>
+              <button type="button" class="proposal-select-btn" data-seleccionar-propuesta="2" aria-pressed="false">Seleccionar este título</button>
+              <input type="radio" class="proposal-radio" name="tituloSeleccionado" value="2" hidden />
+            </div>
             <p id="detalleTitulo2">-</p>
           </article>
-          <article class="proposal-card" data-propuesta="3">
-            <div class="proposal-card__head"><div class="proposal-card__title"><h3>Título 3</h3><span class="favorite-badge" data-favorito="3" hidden>★ Favorito del estudiante</span></div><label><input type="radio" name="tituloSeleccionado" value="3" /> Seleccionar</label></div>
+
+          <article class="proposal-card" data-propuesta="3" role="button" tabindex="0" aria-pressed="false">
+            <div class="proposal-card__head">
+              <div class="proposal-card__title"><h3>Título 3</h3><span class="favorite-badge" data-favorito="3" hidden>★ Favorito del estudiante</span></div>
+              <button type="button" class="proposal-select-btn" data-seleccionar-propuesta="3" aria-pressed="false">Seleccionar este título</button>
+              <input type="radio" class="proposal-radio" name="tituloSeleccionado" value="3" hidden />
+            </div>
             <p id="detalleTitulo3">-</p>
           </article>
         </div>
+
         <div class="resolution-box">
           <label class="field"><span>Título final aprobado o corregido</span><textarea id="tituloFinalInput" rows="3" placeholder="Selecciona una propuesta o escribe el título final"></textarea></label>
           <label class="field"><span>Comentario del coordinador</span><textarea id="comentarioCoordinadorInput" rows="3" placeholder="Obligatorio para devolver"></textarea></label>
@@ -116,9 +118,9 @@
     </div>
   </section>
 
-  <script src="js/coordinador.config.js?v=2.8.1"></script>
-  <script src="js/coordinador.utils.js?v=2.8.1"></script>
-  <script src="js/coordinador.state.js?v=2.8.1"></script>
-  <script src="js/coordinador.bootstrap.independiente.js?v=2.8.1"></script>
+  <script src="js/coordinador.config.js?v=2.8.2"></script>
+  <script src="js/coordinador.utils.js?v=2.8.2"></script>
+  <script src="js/coordinador.state.js?v=2.8.2"></script>
+  <script src="js/coordinador.bootstrap.independiente.js?v=2.8.2"></script>
 </body>
 </html>
