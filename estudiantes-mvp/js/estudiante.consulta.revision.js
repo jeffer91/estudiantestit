@@ -11,6 +11,11 @@
 
   function get(nombre) { return window[nombre] || null; }
   function texto(valor) { return String(valor === null || valor === undefined ? '' : valor).trim(); }
+  function normalizarClave(valor) {
+    return texto(valor).toLowerCase().normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]/g, '');
+  }
   function cedula(valor) {
     var salida = texto(valor).replace(/\D/g, '');
     if (salida.length === 9) salida = '0' + salida;
@@ -18,8 +23,12 @@
   }
   function campo(objeto, claves) {
     var data = objeto || {};
-    for (var i = 0; i < claves.length; i += 1) {
-      if (data[claves[i]] !== undefined && texto(data[claves[i]])) return data[claves[i]];
+    var mapa = {};
+    var i;
+    Object.keys(data).forEach(function (key) { mapa[normalizarClave(key)] = key; });
+    for (i = 0; i < claves.length; i += 1) {
+      var real = mapa[normalizarClave(claves[i])];
+      if (real !== undefined && data[real] !== undefined && texto(data[real])) return data[real];
     }
     return '';
   }
@@ -30,6 +39,9 @@
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#039;');
+  }
+  function si(valor) {
+    return valor === true || ['SI', 'SÍ', 'TRUE', '1', 'YES'].indexOf(texto(valor).toUpperCase()) >= 0;
   }
   function normalizarEstudiante(data, identificacion) {
     data = data || {};
@@ -50,7 +62,7 @@
       'periodoId', 'PeriodoId', 'periodoCanonicoId', 'ultimoPeriodoId', 'periodo', 'Periodo'
     ]));
     estudiante.periodoLabel = texto(campo(estudiante, [
-      'periodoLabel', 'PeriodoLabel', 'periodoCanonicoLabel', 'periodoTexto', 'PeriodoTexto'
+      'periodoLabel', 'PeriodoLabel', 'periodoCanonicoLabel', 'periodoTexto', 'PeriodoTexto', 'periodo'
     ])) || estudiante.periodoId;
     estudiante.sede = texto(campo(estudiante, ['sede', 'Sede']));
     estudiante.modalidad = texto(campo(estudiante, ['modalidad', 'Modalidad']));
@@ -66,9 +78,21 @@
     return { ok: true };
   }
   function normalizarEnvio(envio) {
-    var salida = Object.assign({}, envio || {});
+    var base = envio || {};
+    if (base.envio && typeof base.envio === 'object') base = base.envio;
+    if (base.registroEnvio && typeof base.registroEnvio === 'object') base = base.registroEnvio;
+    var salida = Object.assign({}, base);
     salida._origen = 'envios-respaldo';
     return salida;
+  }
+  function estadoEnvio(envio) {
+    return texto(campo(envio || {}, [
+      'estadoFinal', 'estado', 'estadoProceso', 'estadoGoogleSheets', 'EstadoFinal', 'Estado'
+    ])).toUpperCase();
+  }
+  function esAprobado(estado) {
+    estado = texto(estado).toUpperCase();
+    return estado === 'REEMPLAZADO' || estado.indexOf('APROBADO') >= 0;
   }
   function titulosEnvio(envio) {
     var lista = [];
@@ -82,6 +106,46 @@
       if (titulo && lista.indexOf(titulo) < 0) lista.push(titulo);
     });
     return lista.slice(0, 3);
+  }
+  function numeroTituloSeleccionado(envio) {
+    var valor = texto(campo(envio || {}, [
+      'tituloAprobadoNumero', 'tituloSeleccionadoNumero', 'tituloElegidoNumero',
+      'tituloPreferidoNumero', 'preferido', 'tituloSeleccionado'
+    ]));
+    var coincidencia;
+    if (/^[123]$/.test(valor)) return Number(valor);
+    coincidencia = valor.match(/(?:titulo|título|propuesta|opcion|opción)\s*#?\s*([123])/i);
+    return coincidencia ? Number(coincidencia[1]) : 0;
+  }
+  function tituloAprobado(envio) {
+    var estado = estadoEnvio(envio);
+    var corregido = texto(campo(envio || {}, [
+      'tituloCorregido', 'tituloFinalCorregido', 'tituloAprobadoCorregido'
+    ]));
+    var aprobado = texto(campo(envio || {}, [
+      'tituloAprobado', 'tituloFinalAprobado', 'tituloFinal', 'tituloElegido',
+      'tituloSeleccionadoTexto', 'tituloAprobadoTexto'
+    ]));
+    var numero;
+    var titulos;
+
+    if (corregido) return corregido;
+    if (aprobado) return aprobado;
+
+    numero = numeroTituloSeleccionado(envio);
+    titulos = titulosEnvio(envio);
+    if (numero >= 1 && numero <= 3) return titulos[numero - 1] || '';
+
+    if (esAprobado(estado)) {
+      aprobado = texto(campo(envio || {}, ['tituloPreferidoTexto', 'tituloPreferido']));
+      if (aprobado && !/^[123]$/.test(aprobado)) return aprobado;
+    }
+    return '';
+  }
+  function comentarioCoordinador(envio) {
+    return texto(campo(envio || {}, [
+      'comentarioCoordinador', 'observacion', 'comentario', 'observaciones', 'motivo'
+    ]));
   }
   function panelRevision() {
     var panel = document.getElementById('revisionTitulosPanel');
@@ -133,21 +197,65 @@
   }
   function etiquetaEstado(estado) {
     if (estado === 'DEVUELTO') return 'Registro devuelto para corrección';
-    if (estado === 'APROBADO' || estado === 'REEMPLAZADO') return 'Registro revisado por coordinación';
+    if (esAprobado(estado)) return 'Aprobado por coordinación';
     return 'En revisión por coordinación';
+  }
+  function mostrarAprobacion(estudiante, envio) {
+    var panel = panelRevision();
+    var titulo = tituloAprobado(envio);
+    var comentario = comentarioCoordinador(envio);
+    var bloqueComentario = comentario
+      ? '<div class="approved-comment"><span>Observación de coordinación</span><p>' + escapar(comentario) + '</p></div>'
+      : '';
+
+    mostrarFlujo(false);
+    panel.className = 'review-status-card review-status-card--approved';
+    panel.innerHTML = [
+      '<div class="review-status-card__hero">',
+      '<div class="review-status-card__icon" aria-hidden="true">✓</div>',
+      '<div><p class="review-status-card__eyebrow">Resultado de coordinación</p>',
+      '<h2>Tu tema de titulación fue aprobado</h2>',
+      '<span class="review-status-card__badge">Aprobado por coordinación</span></div></div>',
+      '<p class="review-status-card__message">Este es el título final aprobado. No necesitas realizar un nuevo envío.</p>',
+      '<div class="approved-title-card">',
+      '<span>Título aprobado</span>',
+      '<strong>', escapar(titulo || 'El título fue aprobado. Comunícate con coordinación para confirmar el texto final.'), '</strong>',
+      '</div>',
+      '<div class="review-data">',
+      dato('Estudiante', estudiante.nombres),
+      dato('Cédula', estudiante.cedula),
+      dato('Carrera', estudiante.nombreCarrera),
+      dato('Período', estudiante.periodoLabel || estudiante.periodoId),
+      '</div>',
+      bloqueComentario,
+      '<div class="review-status-card__footer">',
+      '<div class="review-status-card__notice"><strong>Proceso finalizado:</strong> conserva este título para continuar con tu trabajo de titulación.</div>',
+      '<button class="btn btn--secondary" type="button" data-review-action="otra-cedula">Consultar otra cédula</button>',
+      '</div>'
+    ].join('');
+    panel.hidden = false;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
   function mostrarRevision(estudiante, envio) {
     envio = envio || {};
     var panel = panelRevision();
     var titulos = titulosEnvio(envio);
-    var estado = texto(campo(envio, ['estado', 'estadoFinal', 'estadoProceso'])).toUpperCase();
-    var bloqueTitulos = titulos.length
+    var estado = estadoEnvio(envio);
+    var bloqueTitulos;
+
+    if (esAprobado(estado)) {
+      mostrarAprobacion(estudiante, envio);
+      return;
+    }
+
+    bloqueTitulos = titulos.length
       ? '<div class="review-titles"><h3>Propuestas registradas</h3><ol>' +
         titulos.map(function (titulo) { return '<li>' + escapar(titulo) + '</li>'; }).join('') +
         '</ol></div>'
       : '<div class="review-status-card__notice">El registro existe y está protegido. Los títulos se recuperarán desde la base institucional.</div>';
 
     mostrarFlujo(false);
+    panel.className = 'review-status-card';
     panel.innerHTML = [
       '<div class="review-status-card__hero">',
       '<div class="review-status-card__icon" aria-hidden="true">✓</div>',
@@ -219,6 +327,9 @@
     consultaActiva = sheets.consultarAccesoEstudiante(identificacion)
       .then(function (resultado) {
         var raw = resultado && (resultado.estudiante || resultado.registro);
+        var evidencia;
+        var envio;
+        var bloqueado;
         if (!resultado || resultado.encontrado !== true || !raw) {
           throw new Error(resultado && resultado.mensaje || 'No encontramos un estudiante con esa cédula. Revisa el número e intenta nuevamente.');
         }
@@ -226,13 +337,13 @@
         var validacion = validarEstudiante(estudiante);
         if (!validacion.ok) throw new Error(validacion.mensaje);
 
-        var bloqueado = Boolean(
-          resultado.tieneEnvio === true ||
-          resultado.encontradoEnvio === true ||
-          resultado.envio
-        ) && resultado.permiteReenvio !== true;
+        envio = normalizarEnvio(resultado.envio || {});
+        evidencia = si(resultado.tieneEnvio) || si(resultado.encontradoEnvio) || Boolean(resultado.envio) ||
+          si(campo(raw, ['tieneEnvio', 'tiene envío', 'envioRegistrado'])) ||
+          Boolean(texto(campo(raw, ['idRegistro', 'envioId', 'tituloId'])));
+        bloqueado = evidencia && resultado.permiteReenvio !== true;
 
-        if (bloqueado) mostrarRevision(estudiante, normalizarEnvio(resultado.envio || {}));
+        if (bloqueado) mostrarRevision(estudiante, envio);
         else continuar(estudiante);
       })
       .catch(function (error) {
