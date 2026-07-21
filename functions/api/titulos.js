@@ -38,7 +38,11 @@ function flexible(object,names){
   for(const name of names){const key=map[normalizedKey(name)];if(key!==undefined&&object[key]!==undefined&&object[key]!==null)return object[key];}
   return undefined;
 }
-function looksLikeEnvio(value){return Boolean(value&&typeof value==='object'&&(flexible(value,['titulo1','titulo2','titulo3','tituloAprobado','tituloCorregido','tituloElegido','idRegistro','envioId'])!==undefined));}
+function looksLikeEnvio(value){
+  return Boolean(value&&typeof value==='object'&&flexible(value,[
+    'titulo1','titulo2','titulo3','tituloAprobado','tituloCorregido','tituloElegido','tituloFinalAprobado'
+  ])!==undefined);
+}
 function extractEnvio(result){
   if(!result||typeof result!=='object')return null;
   const candidates=[
