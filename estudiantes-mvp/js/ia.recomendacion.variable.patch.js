@@ -1,6 +1,26 @@
-/* Adapta el modal de resultados a la cantidad real de títulos validados. */
+/*
+  Adapta el modal a la cantidad real de títulos validados y carga las
+  correcciones de validación e indicadores de motores internos.
+*/
 (function (window, document) {
   'use strict';
+
+  function cargarActualizacion(src) {
+    if (document.readyState === 'loading') {
+      document.write('<script src="' + src + '"><\/script>');
+      return;
+    }
+
+    var script = document.createElement('script');
+    script.src = src;
+    script.async = false;
+    document.head.appendChild(script);
+  }
+
+  /* Se cargan después de las versiones base y antes de la integración final. */
+  cargarActualizacion('js/ia.nueve.sanitizador.js?v=1.1.0');
+  cargarActualizacion('js/ia.titulacion.robusto.service.js?v=5.2.0');
+  cargarActualizacion('js/ia.indicadores.motores.patch.js?v=1.0.0');
 
   var original = window.EstudianteMVPIARecomendacion;
   var MODAL_ID = 'modalTresTitulosIA';
@@ -94,6 +114,6 @@
     mostrarResultado: mostrarResultado,
     actualizarSeleccionModal: actualizarSeleccionModal,
     __cantidadVariable: true,
-    version: '4.1.0'
+    version: '4.2.0'
   }));
 })(window, document);
