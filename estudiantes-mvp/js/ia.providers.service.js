@@ -98,14 +98,16 @@
     if(punto.getAttribute('aria-label')!==descripcion)punto.setAttribute('aria-label',descripcion);
   }
 
-  function limpiarDetalle(elemento){
+  function limpiarMensaje(elemento){
     var limpio;
-    if(!elemento||!elemento.matches||!elemento.matches('[data-ia-detalle]'))return;
+    if(!elemento||!elemento.matches||!elemento.matches('[data-ia-detalle],[data-ia-etapa-visible]'))return;
     limpio=texto(elemento.textContent)
       .replace(/Proveedor actual\s*:[^.]+\.?/ig,'')
       .replace(/Otra IA/ig,'Una revisión interna')
       .replace(/Una segunda IA/ig,'Una revisión interna')
-      .replace(/otro par de proveedores/ig,'otro proceso interno');
+      .replace(/otro par de proveedores/ig,'otro proceso interno')
+      .replace(/No fue posible conectar con los proveedores/ig,'No fue posible completar la generación')
+      .replace(/No se obtuvieron tres opciones válidas/ig,'Las opciones necesitan una nueva revisión');
     if(limpio&&limpio!==elemento.textContent)elemento.textContent=limpio;
   }
 
@@ -113,7 +115,7 @@
     raiz=raiz&&raiz.nodeType===1?raiz:document;
 
     limpiarPunto(raiz);
-    limpiarDetalle(raiz);
+    limpiarMensaje(raiz);
 
     Array.prototype.forEach.call(
       raiz.querySelectorAll?raiz.querySelectorAll('.ia-diagnostico__punto'):[],
@@ -121,8 +123,8 @@
     );
 
     Array.prototype.forEach.call(
-      raiz.querySelectorAll?raiz.querySelectorAll('[data-ia-detalle]'):[],
-      limpiarDetalle
+      raiz.querySelectorAll?raiz.querySelectorAll('[data-ia-detalle],[data-ia-etapa-visible]'):[],
+      limpiarMensaje
     );
   }
 
@@ -164,7 +166,7 @@
       generarTitulosPorPropuesta:desactivado,
       generarTresTitulos:desactivado,
       modo:'esperando_motor_por_propuesta',
-      version:'6.0.2'
+      version:'6.0.3'
     });
   }
 
