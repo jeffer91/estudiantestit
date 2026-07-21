@@ -31,18 +31,35 @@ function cacheGet(map,key){const item=map.get(key);if(!item)return null;if(item.
 function cacheSet(map,key,value,ttl){trimCache(map);map.set(key,{value,expiresAt:Date.now()+ttl});return value;}
 function clearCaches(){verificationCache.clear();verificationInflight.clear();queryCache.clear();queryInflight.clear();publicStatusCache=null;publicStatusInflight=null;}
 function yes(value){return value===true||['SI','SÍ','TRUE','1','YES'].includes(text(value).toUpperCase());}
-function extractEnvio(result){return result&&(result.envio||result.registro||result.data&&(result.data.envio||result.data.registro))||null;}
-function envioEstado(result){const envio=extractEnvio(result)||{};return text(envio.estado||envio.estadoFinal||envio.estadoProceso||result&&result.estado).toUpperCase();}
-function permiteReenvio(result){const envio=extractEnvio(result)||{};const estado=envioEstado(result);const valor=envio.permitirReenvio!==undefined?envio.permitirReenvio:result&&result.permiteReenvio;return estado==='DEVUELTO'&&(valor===undefined||valor===null||yes(valor));}
-function directHasEnvio(result){return Boolean(result&&(result.existe===true||result.encontrado===true||extractEnvio(result)));}
+function normalizedKey(value){return text(value).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');}
+function flexible(object,names){
+  if(!object||typeof object!=='object')return undefined;
+  const map=Object.keys(object).reduce((out,key)=>{out[normalizedKey(key)]=key;return out;},{});
+  for(const name of names){const key=map[normalizedKey(name)];if(key!==undefined&&object[key]!==undefined&&object[key]!==null)return object[key];}
+  return undefined;
+}
+function looksLikeEnvio(value){return Boolean(value&&typeof value==='object'&&(flexible(value,['titulo1','titulo2','titulo3','tituloAprobado','tituloCorregido','tituloElegido','idRegistro','envioId'])!==undefined));}
+function extractEnvio(result){
+  if(!result||typeof result!=='object')return null;
+  const candidates=[
+    result.envio,result.registroEnvio,result.envioActual,
+    result.data&&result.data.envio,result.data&&result.data.registroEnvio,
+    result.resultado&&result.resultado.envio,result.respuesta&&result.respuesta.envio,
+    result.registro
+  ];
+  for(const candidate of candidates)if(looksLikeEnvio(candidate))return candidate;
+  return looksLikeEnvio(result)?result:null;
+}
+function envioEstado(result){const envio=extractEnvio(result)||{};return text(flexible(envio,['estado','estadoFinal','estadoProceso','estadoGoogleSheets'])||flexible(result,['estado','estadoFinal'])).toUpperCase();}
+function permiteReenvio(result){const envio=extractEnvio(result)||{};const estado=envioEstado(result);const own=flexible(envio,['permitirReenvio','permiteReenvio']);const valor=own!==undefined?own:flexible(result,['permitirReenvio','permiteReenvio']);return estado==='DEVUELTO'&&(valor===undefined||valor===null||valor===''||yes(valor));}
+function directHasEnvio(result){return Boolean(result&&(yes(flexible(result,['existe','encontrado','tieneEnvio','encontradoEnvio']))||extractEnvio(result)));}
 function accessHasEnvio(result){
   const student=result&&(result.estudiante||result.registro)||{};
   const evidencia=Boolean(result&&(
-    result.tieneEnvio===true||
-    result.encontradoEnvio===true||
+    yes(flexible(result,['tieneEnvio','encontradoEnvio','existeEnvio']))||
     extractEnvio(result)||
-    yes(student.tieneEnvio)||
-    text(student.idRegistro)
+    yes(flexible(student,['tieneEnvio','tiene envío','envioRegistrado']))||
+    text(flexible(student,['idRegistro','envioId','tituloId']))
   ));
   return evidencia&&!permiteReenvio(result);
 }
@@ -59,23 +76,31 @@ async function executeAccess(env,payload,userRole){
   const base=await requestClaves(env,ACCESS_ACTION,{cedula,periodoId:text(payload.periodoId||payload.periodo||payload.periodoLabel)},12000);
   if(accessHasEnvio(base)&&extractEnvio(base))return base;
   const student=base.estudiante||base.registro||{};
-  const direct=await lookupEnvio(env,{
+  let direct=await lookupEnvio(env,{
     cedula,
-    periodo:base.periodoLabel||student.periodoLabel||payload.periodo||payload.periodoLabel,
-    periodoLabel:base.periodoLabel||student.periodoLabel||payload.periodoLabel,
-    periodoId:base.periodoId||student.periodoId||payload.periodoId
+    periodo:base.periodoLabel||flexible(student,['periodoLabel','periodo'])||payload.periodo||payload.periodoLabel,
+    periodoLabel:base.periodoLabel||flexible(student,['periodoLabel','periodo'])||payload.periodoLabel,
+    periodoId:base.periodoId||flexible(student,['periodoId'])||payload.periodoId
   },userRole);
+  if(!directHasEnvio(direct))direct=await lookupEnvio(env,{cedula},userRole);
   if(!directHasEnvio(direct))return base;
   const envio=extractEnvio(direct);
   const permitir=permiteReenvio(direct);
+  const estado=envioEstado(direct);
+  const aprobado=estado.includes('APROBADO')||estado==='REEMPLAZADO';
   return{
     ...base,
     tieneEnvio:!permitir,
     encontradoEnvio:true,
     permiteReenvio:permitir,
     envio,
+    estadoEnvio:estado,
     fuenteEnvio:'ENVÍOS_RESPALDO_TITULOS_APP',
-    mensaje:permitir?'El registro fue devuelto y puede corregirse.':'Tus propuestas ya fueron enviadas y están siendo revisadas por coordinación.'
+    mensaje:permitir
+      ?'El registro fue devuelto y puede corregirse.'
+      :aprobado
+        ?'Tu tema de titulación fue aprobado por coordinación.'
+        :'Tus propuestas ya fueron enviadas y están siendo revisadas por coordinación.'
   };
 }
 async function executeRead(env,action,method,payload,userRole){if(action===ACCESS_ACTION)return executeAccess(env,payload,userRole);return executeService(env,action,method,payload,userRole);}
