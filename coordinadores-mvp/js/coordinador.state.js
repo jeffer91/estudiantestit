@@ -64,9 +64,12 @@ Función:
     recalcularFiltros();emitir('periodos');
   }
   function setPeriodoActual(id){
-    id=texto(id);state.periodoActual=state.periodos.find(function(item){return item.id===id;})||null;
+    id=texto(id);
+    state.periodoActual=state.periodos.find(function(item){return item.id===id;})||null;
     if(state.periodoActual)guardarLocal('coordinadores_mvp__ultimo_periodo',state.periodoActual.id);
-    state.envios=[];state.estudianteSeleccionado=null;recalcularFiltros();emitir('periodo');return obtenerPeriodoActual();
+    /* Los envíos ya cargados se conservan y solo se vuelven a filtrar. */
+    state.estudianteSeleccionado=null;
+    recalcularFiltros();emitir('periodo');return obtenerPeriodoActual();
   }
   function obtenerPeriodos(){return clonar(state.periodos);}
   function obtenerPeriodoActual(){return state.periodoActual?clonar(state.periodoActual):null;}
