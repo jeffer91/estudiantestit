@@ -134,7 +134,7 @@
   }
 
   function cargarRevision() {
-    var version = '2.2.0';
+    var version = '2.3.0';
     var estiloId = 'estudiante-revision-estilo';
     var scriptId = 'estudiante-revision-script';
     var estilo;
