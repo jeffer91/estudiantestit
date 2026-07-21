@@ -2,20 +2,13 @@
 (function (window) {
   'use strict';
 
-  function cfg() {
-    return window.EstudianteMVPConfig || null;
-  }
-
-  function utils() {
-    return window.EstudianteMVPUtils || null;
-  }
-
+  function cfg() { return window.EstudianteMVPConfig || null; }
+  function utils() { return window.EstudianteMVPUtils || null; }
   function texto(value) {
     return String(value === null || value === undefined ? '' : value)
       .replace(/\s+/g, ' ')
       .trim();
   }
-
   function cedula(value) {
     var helper = utils();
     var digits = helper && helper.limpiarCedula
@@ -24,16 +17,13 @@
     if (digits.length === 9) digits = '0' + digits;
     return digits.length === 10 ? digits : '';
   }
-
   function esLocal() {
     var host = texto(window.location && window.location.hostname).toLowerCase();
     return ['localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]'].indexOf(host) >= 0;
   }
-
   function esArchivo() {
     return texto(window.location && window.location.protocol).toLowerCase() === 'file:';
   }
-
   function apiBase() {
     var forced = texto(window.TITULOS_API_BASE || '');
     var origin;
@@ -45,11 +35,7 @@
       ? origin.replace(/\/$/, '')
       : 'https://titulos.pages.dev';
   }
-
-  function proxyUrl() {
-    return apiBase() + '/api/titulos';
-  }
-
+  function proxyUrl() { return apiBase() + '/api/titulos'; }
   function enviarProxy(action, data, method) {
     return fetch(proxyUrl(), {
       method: 'POST',
@@ -66,22 +52,19 @@
     }).then(function (response) {
       return response.text().then(function (body) {
         var json = {};
-        try {
-          json = body ? JSON.parse(body) : {};
-        } catch (error) {
-          throw new Error('El servicio de Títulos respondió en un formato no válido.');
-        }
-
+        try { json = body ? JSON.parse(body) : {}; }
+        catch (error) { throw new Error('El servicio de Títulos respondió en un formato no válido.'); }
         if (!response.ok || json.ok === false) {
-          throw new Error(
-            json.mensaje || json.message || json.error || ('Error HTTP ' + response.status)
-          );
+          var fallo = new Error(json.mensaje || json.message || json.error || ('Error HTTP ' + response.status));
+          fallo.status = response.status;
+          fallo.respuesta = json;
+          fallo.duplicado = json.duplicado === true;
+          throw fallo;
         }
         return json;
       });
     });
   }
-
   function leerConfiguracion() {
     return enviarProxy('CONFIGURACION_PUBLICA', {}, 'GET').then(function (result) {
       return {
@@ -95,23 +78,40 @@
       };
     });
   }
-
   function guardarConfiguracion() {
     return Promise.reject(new Error('La configuración se administra en la hoja Claves.'));
   }
-
+  function si(value) {
+    return value === true || ['SI', 'SÍ', 'TRUE', '1', 'YES'].indexOf(texto(value).toUpperCase()) >= 0;
+  }
   function estadoEnvio(envio) {
     return texto(
       envio && (envio.estado || envio.estadoFinal || envio.estadoProceso || envio.estadoGoogleSheets)
     ).toUpperCase();
   }
-
   function extraerEnvio(result) {
     return result && (
       result.envio ||
-      result.registro ||
+      result.registroEnvio ||
       result.data && (result.data.envio || result.data.registro)
     ) || null;
+  }
+  function permiteReenvio(result, envio) {
+    envio = envio || extraerEnvio(result) || {};
+    var status = estadoEnvio(envio);
+    var valor = envio.permitirReenvio !== undefined
+      ? envio.permitirReenvio
+      : result && result.permiteReenvio;
+    return status === 'DEVUELTO' && (
+      valor === undefined || valor === null || valor === '' || si(valor)
+    );
+  }
+  function evidenciaEnvio(result, student, envio) {
+    return Boolean(
+      result && (result.tieneEnvio === true || result.encontradoEnvio === true) ||
+      envio ||
+      student && (si(student.tieneEnvio) || texto(student.idRegistro))
+    );
   }
 
   function consultarAccesoEstudiante(value) {
@@ -131,21 +131,18 @@
       'GET'
     ).then(function (result) {
       var student = result.estudiante || result.registro || null;
-      var envio = result.envio || null;
-      var status = estadoEnvio(envio);
-      var permiteReenvio = result.permiteReenvio === true || (
-        status === 'DEVUELTO' && (!envio || String(envio.permitirReenvio).toUpperCase() !== 'FALSE')
-      );
-
-      return {
+      var envio = extraerEnvio(result);
+      var permitir = permiteReenvio(result, envio);
+      var evidencia = evidenciaEnvio(result, student, envio);
+      var salida = {
         ok: true,
         encontrado: result.encontrado === true || result.existe === true || Boolean(student),
         cedula: id,
         estudiante: student,
         registro: student,
-        tieneEnvio: result.tieneEnvio === true && !permiteReenvio,
-        encontradoEnvio: result.encontradoEnvio === true || Boolean(envio),
-        permiteReenvio: permiteReenvio,
+        tieneEnvio: evidencia && !permitir,
+        encontradoEnvio: evidencia,
+        permiteReenvio: permitir,
         envio: envio,
         periodoId: result.periodoId || student && student.periodoId || '',
         periodoLabel: result.periodoLabel || student && student.periodoLabel || '',
@@ -155,10 +152,27 @@
         indices: result.indices || null,
         mensaje: result.mensaje || ''
       };
+
+      /* Defensa adicional: si el resumen afirma que ya envió, recuperar
+         los títulos directamente antes de permitir que avance. */
+      if (salida.tieneEnvio && !salida.envio) {
+        return consultarEnvioPorCedula(id, salida.periodoLabel || salida.periodoId)
+          .then(function (directo) {
+            if (directo.ok && directo.encontrado && directo.envio) {
+              salida.envio = directo.envio;
+              salida.encontradoEnvio = true;
+              salida.tieneEnvio = !directo.permiteReenvio;
+              salida.permiteReenvio = directo.permiteReenvio;
+              salida.fuente = 'ENVÍOS_RESPALDO_TITULOS_APP';
+            }
+            return salida;
+          });
+      }
+      return salida;
     });
   }
 
-  function consultarEnvioPorCedula(value) {
+  function consultarEnvioPorCedula(value, periodo) {
     var id = cedula(value);
     if (!id) {
       return Promise.resolve({
@@ -170,17 +184,22 @@
 
     return enviarProxy(
       'CONSULTAR_ENVIO_CEDULA',
-      { cedula: id, numeroIdentificacion: id },
+      {
+        cedula: id,
+        numeroIdentificacion: id,
+        periodo: texto(periodo),
+        periodoLabel: texto(periodo),
+        periodoId: texto(periodo)
+      },
       'GET'
     ).then(function (result) {
       var envio = extraerEnvio(result);
       var encontrado = result.encontrado === true || result.existe === true || Boolean(envio);
-      var status = estadoEnvio(envio);
-      var permite = status === 'DEVUELTO' && (!envio || envio.permitirReenvio !== false);
-
+      var permite = permiteReenvio(result, envio);
       return {
         ok: true,
         encontrado: encontrado && !permite,
+        existe: encontrado,
         permiteReenvio: permite,
         cedula: id,
         envio: envio,
@@ -204,7 +223,6 @@
       item.tituloFinal || item.titulo || item.tituloMejorado || item.texto || item.title || ''
     );
   }
-
   function normalizarPropuestas(payload) {
     var list = payload && (payload.titulosEnviados || payload.propuestas) || [];
     return (Array.isArray(list) ? list : []).map(function (item, index) {
@@ -216,7 +234,6 @@
       return output;
     });
   }
-
   function construirPayloadSheets(payload) {
     payload = payload || {};
     var student = payload.estudiante || {};
@@ -282,13 +299,31 @@
       creadoEnLocal: payload.creadoEnLocal || '',
       enviadoEnLocal: payload.enviadoEnLocal || date
     };
-
     return Object.assign({ accion: 'ENVIO_ESTUDIANTE', tipo: 'ENVIO', datos: data }, data);
   }
 
   function enviarEnvio(payload) {
     var data = construirPayloadSheets(payload);
-    return enviarProxy('ENVIO_ESTUDIANTE', data, 'POST').then(function (result) {
+    var periodo = data.periodo || data.periodoLabel || data.periodoId;
+
+    /* Segunda comprobación justo antes de guardar. Esta protección evita
+       duplicados por dos pestañas abiertas o por un índice desactualizado. */
+    return consultarEnvioPorCedula(data.cedula, periodo).then(function (previo) {
+      if (!previo.ok) {
+        throw previo.error || new Error(
+          previo.mensaje || 'No se pudo verificar si ya existe un envío.'
+        );
+      }
+      if (previo.encontrado && !previo.permiteReenvio) {
+        var duplicado = new Error(
+          'Tus propuestas ya fueron enviadas y están siendo revisadas por coordinación.'
+        );
+        duplicado.duplicado = true;
+        duplicado.envio = previo.envio;
+        throw duplicado;
+      }
+      return enviarProxy('ENVIO_ESTUDIANTE', data, 'POST');
+    }).then(function (result) {
       return {
         ok: true,
         estado: 'PENDIENTE_REVISION',
