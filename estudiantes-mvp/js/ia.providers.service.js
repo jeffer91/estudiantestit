@@ -166,17 +166,19 @@
       generarTitulosPorPropuesta:desactivado,
       generarTresTitulos:desactivado,
       modo:'esperando_motor_por_propuesta',
-      version:'6.0.3'
+      version:'6.0.4'
     });
   }
 
   asegurarBase();
   cargar('js/ia.diagnostico.service.js?v=4.0.0');
   cargar('js/ia.nueve.core.js?v=2.0.0');
+  cargar('js/ia.nueve.sanitizador.js?v=1.0.0');
   cargar('js/ia.nueve.ajustes.js?v=1.1.0');
-  cargar('js/ia.titulacion.robusto.service.js?v=5.0.0');
+  cargar('js/ia.titulacion.robusto.service.js?v=5.1.0');
   cargar('js/ia.recomendacion.ui.js?v=4.0.0');
-  cargar('js/ia.nueve.integracion.js?v=3.0.0');
+  cargar('js/ia.recomendacion.variable.patch.js?v=1.0.0');
+  cargar('js/ia.nueve.integracion.js?v=3.1.0');
   cargar('js/estudiante.arquitectura.v2.js?v=2.1.0');
   cargar('js/estudiante.envio.modal.js?v=1.0.1');
 
