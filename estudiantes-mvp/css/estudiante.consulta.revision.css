@@ -1,13 +1,31 @@
-/* Pantalla visible para títulos enviados, en revisión o aprobados. */
+/* Pantalla compacta para títulos enviados, en revisión o aprobados. */
+
+/* El CSS general de .stepper utiliza display:grid y puede anular hidden. */
+.stepper[hidden],
+#estadoPrincipal[hidden],
+[data-step-panel][hidden] {
+  display: none !important;
+}
+
+/* Al mostrar el resultado final, se elimina el solapamiento reservado al stepper. */
+body:has(#revisionTitulosPanel:not([hidden])) .app-header {
+  padding-bottom: 30px;
+}
+
+body:has(#revisionTitulosPanel:not([hidden])) .app-container {
+  margin-top: 22px;
+}
+
 .review-status-card {
-  width: 100%;
-  margin: 24px 0 40px;
-  padding: clamp(24px, 4vw, 44px);
-  border: 1px solid rgba(201, 164, 76, 0.55);
-  border-radius: 28px;
-  background: linear-gradient(135deg, rgba(9, 45, 87, 0.98), rgba(18, 64, 108, 0.96));
-  box-shadow: 0 22px 55px rgba(6, 29, 58, 0.2);
-  color: #ffffff;
+  width: min(100%, 1080px);
+  margin: 0 auto 34px;
+  padding: 28px;
+  border: 1px solid #d8e0ec;
+  border-top: 5px solid #c9ad63;
+  border-radius: 20px;
+  background: #ffffff;
+  box-shadow: 0 16px 38px rgba(15, 23, 42, 0.09);
+  color: #101827;
 }
 
 .review-status-card[hidden] {
@@ -15,243 +33,264 @@
 }
 
 .review-status-card--approved {
-  border-color: rgba(83, 188, 123, 0.75);
-  background:
-    radial-gradient(circle at top right, rgba(126, 226, 159, 0.18), transparent 34%),
-    linear-gradient(135deg, #073b2b 0%, #0d5a3d 58%, #12744b 100%);
-  box-shadow: 0 24px 60px rgba(5, 65, 43, 0.24);
+  border-color: #d8e0ec;
+  border-top-color: #23945c;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdfc 100%);
+  box-shadow: 0 16px 38px rgba(15, 23, 42, 0.09);
 }
 
 .review-status-card__hero {
   display: flex;
   align-items: center;
-  gap: 22px;
-  padding-bottom: 26px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+  gap: 16px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid #e5ebf2;
 }
 
 .review-status-card__icon {
   display: grid;
-  flex: 0 0 76px;
-  width: 76px;
-  height: 76px;
+  flex: 0 0 54px;
+  width: 54px;
+  height: 54px;
   place-items: center;
-  border: 2px solid #d7b663;
+  border: 2px solid #c9ad63;
   border-radius: 50%;
-  background: rgba(215, 182, 99, 0.14);
-  color: #f4d98e;
-  font-size: 42px;
+  background: #fff7df;
+  color: #8a6b24;
+  font-size: 30px;
   font-weight: 900;
   line-height: 1;
 }
 
 .review-status-card--approved .review-status-card__icon {
-  border-color: #9be4b5;
-  background: rgba(155, 228, 181, 0.15);
-  color: #d7ffe5;
+  border-color: #23945c;
+  background: #e9f8ef;
+  color: #167044;
 }
 
 .review-status-card__eyebrow {
-  margin: 0 0 8px;
-  color: #f4d98e;
-  font-size: 0.86rem;
+  margin: 0 0 4px;
+  color: #8a6b24;
+  font-size: 0.76rem;
   font-weight: 900;
-  letter-spacing: 0.13em;
+  letter-spacing: 0.11em;
   text-transform: uppercase;
 }
 
 .review-status-card--approved .review-status-card__eyebrow {
-  color: #c9f7d8;
+  color: #167044;
 }
 
 .review-status-card h2 {
-  margin: 0 0 14px;
-  color: #ffffff;
-  font-size: clamp(2rem, 4vw, 3.35rem);
-  line-height: 1.05;
+  margin: 0 0 9px;
+  color: #0b2345;
+  font-size: clamp(1.65rem, 3vw, 2.15rem);
+  line-height: 1.12;
+  letter-spacing: -0.025em;
 }
 
 .review-status-card__badge {
   display: inline-flex;
   align-items: center;
-  min-height: 38px;
-  padding: 8px 16px;
-  border: 1px solid rgba(244, 217, 142, 0.7);
+  min-height: 30px;
+  padding: 5px 11px;
+  border: 1px solid #d9c486;
   border-radius: 999px;
-  background: rgba(244, 217, 142, 0.13);
-  color: #fff2c7;
-  font-size: 0.94rem;
+  background: #fff7df;
+  color: #765817;
+  font-size: 0.8rem;
   font-weight: 800;
 }
 
 .review-status-card--approved .review-status-card__badge {
-  border-color: rgba(201, 247, 216, 0.7);
-  background: rgba(201, 247, 216, 0.14);
-  color: #e8fff0;
+  border-color: #a9ddbd;
+  background: #e9f8ef;
+  color: #146c3f;
 }
 
 .review-status-card__message {
-  max-width: 940px;
-  margin: 26px 0;
-  color: rgba(255, 255, 255, 0.92);
-  font-size: clamp(1.05rem, 2vw, 1.28rem);
-  line-height: 1.65;
+  max-width: 900px;
+  margin: 18px 0 16px;
+  color: #526174;
+  font-size: 1rem;
+  line-height: 1.55;
 }
 
 .approved-title-card {
-  margin: 24px 0;
-  padding: clamp(22px, 4vw, 34px);
-  border: 2px solid rgba(201, 247, 216, 0.8);
-  border-radius: 24px;
-  background: #ffffff;
-  box-shadow: 0 18px 42px rgba(0, 43, 28, 0.18);
-  color: #073b2b;
+  margin: 16px 0;
+  padding: 20px 22px;
+  border: 1px solid #d8e0ec;
+  border-left: 5px solid #c9ad63;
+  border-radius: 14px;
+  background: #f8fafc;
+  box-shadow: none;
+  color: #0b2345;
 }
 
 .approved-title-card span,
 .approved-comment span {
   display: block;
-  margin-bottom: 10px;
-  color: #18714d;
-  font-size: 0.8rem;
+  margin-bottom: 7px;
+  color: #64748b;
+  font-size: 0.74rem;
   font-weight: 900;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.09em;
   text-transform: uppercase;
 }
 
 .approved-title-card strong {
   display: block;
   overflow-wrap: anywhere;
-  font-size: clamp(1.35rem, 3vw, 2.15rem);
+  color: #0b2345;
+  font-size: clamp(1.25rem, 2.4vw, 1.65rem);
   line-height: 1.35;
 }
 
 .approved-comment {
-  margin-top: 18px;
-  padding: 18px 20px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.09);
+  margin-top: 14px;
+  padding: 14px 16px;
+  border: 1px solid #d8e0ec;
+  border-left: 4px solid #23945c;
+  border-radius: 12px;
+  background: #f8fafc;
 }
 
 .approved-comment span {
-  color: #c9f7d8;
+  color: #167044;
 }
 
 .approved-comment p {
   margin: 0;
-  color: #ffffff;
-  line-height: 1.6;
+  color: #334155;
+  line-height: 1.5;
 }
 
 .review-data {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .review-data__item {
   min-width: 0;
-  padding: 18px 20px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.08);
+  padding: 13px 14px;
+  border: 1px solid #e0e7f0;
+  border-radius: 12px;
+  background: #f8fafc;
 }
 
 .review-data__item span {
   display: block;
-  margin-bottom: 7px;
-  color: #f4d98e;
-  font-size: 0.78rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
+  margin-bottom: 5px;
+  color: #64748b;
+  font-size: 0.7rem;
+  font-weight: 900;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
 }
 
 .review-status-card--approved .review-data__item span {
-  color: #c9f7d8;
+  color: #64748b;
 }
 
 .review-data__item strong {
   display: block;
   overflow-wrap: anywhere;
-  color: #ffffff;
-  font-size: 1.08rem;
+  color: #172033;
+  font-size: 0.93rem;
   line-height: 1.35;
 }
 
 .review-titles {
-  margin-top: 24px;
-  padding: 22px;
-  border-radius: 20px;
-  background: #ffffff;
+  margin-top: 16px;
+  padding: 18px 20px;
+  border: 1px solid #d8e0ec;
+  border-left: 5px solid #c9ad63;
+  border-radius: 14px;
+  background: #f8fafc;
   color: #102f52;
 }
 
 .review-titles h3 {
-  margin: 0 0 14px;
+  margin: 0 0 10px;
   color: #0b2f57;
-  font-size: 1.15rem;
+  font-size: 1.05rem;
 }
 
 .review-titles ol {
   margin: 0;
-  padding-left: 24px;
+  padding-left: 22px;
 }
 
 .review-titles li {
-  padding: 8px 0;
-  color: #243e5b;
-  line-height: 1.5;
+  padding: 5px 0;
+  color: #334155;
+  line-height: 1.45;
 }
 
 .review-status-card__footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 18px;
-  margin-top: 26px;
+  gap: 14px;
+  margin-top: 18px;
 }
 
 .review-status-card__notice {
   flex: 1;
-  padding: 15px 18px;
-  border-left: 4px solid #d7b663;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.92);
-  line-height: 1.5;
+  padding: 12px 14px;
+  border-left: 4px solid #c9ad63;
+  border-radius: 10px;
+  background: #fff8e7;
+  color: #49566a;
+  font-size: 0.92rem;
+  line-height: 1.45;
 }
 
 .review-status-card--approved .review-status-card__notice {
-  border-left-color: #9be4b5;
+  border-left-color: #23945c;
+  background: #edf8f1;
+  color: #315444;
 }
 
-.review-status-card .btn--secondary {
-  flex: 0 0 auto;
-  border-color: #f4d98e;
-  background: #ffffff;
-  color: #0b2f57;
-}
-
+.review-status-card .btn--secondary,
 .review-status-card--approved .btn--secondary {
-  border-color: #b8eeca;
-  color: #0d5a3d;
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 10px 18px;
+  border: 1px solid #0b2345;
+  border-radius: 999px;
+  background: #0b2345;
+  color: #ffffff;
+  box-shadow: 0 8px 18px rgba(11, 35, 69, 0.14);
 }
 
 .review-status-card .btn--secondary:hover,
-.review-status-card .btn--secondary:focus-visible {
-  background: #f8edca;
-}
-
+.review-status-card .btn--secondary:focus-visible,
 .review-status-card--approved .btn--secondary:hover,
 .review-status-card--approved .btn--secondary:focus-visible {
-  background: #e7faee;
+  background: #123a6b;
+  color: #ffffff;
+}
+
+@media (max-width: 920px) {
+  .review-data {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 760px) {
+  body:has(#revisionTitulosPanel:not([hidden])) .app-header {
+    padding-bottom: 24px;
+  }
+
+  body:has(#revisionTitulosPanel:not([hidden])) .app-container {
+    margin-top: 16px;
+  }
+
   .review-status-card {
-    border-radius: 22px;
+    padding: 22px;
+    border-radius: 18px;
   }
 
   .review-status-card__hero {
@@ -259,14 +298,10 @@
   }
 
   .review-status-card__icon {
-    flex-basis: 58px;
-    width: 58px;
-    height: 58px;
-    font-size: 31px;
-  }
-
-  .review-data {
-    grid-template-columns: 1fr;
+    flex-basis: 48px;
+    width: 48px;
+    height: 48px;
+    font-size: 27px;
   }
 
   .review-status-card__footer {
@@ -279,8 +314,24 @@
   }
 }
 
-@media (max-width: 520px) {
+@media (max-width: 560px) {
+  .review-status-card {
+    padding: 18px;
+  }
+
   .review-status-card__hero {
-    flex-direction: column;
+    gap: 12px;
+  }
+
+  .review-status-card h2 {
+    font-size: 1.45rem;
+  }
+
+  .review-data {
+    grid-template-columns: 1fr;
+  }
+
+  .approved-title-card {
+    padding: 17px;
   }
 }
