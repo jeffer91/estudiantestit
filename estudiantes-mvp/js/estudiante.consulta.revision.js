@@ -1,377 +1,332 @@
-/* Consulta pública y bloqueo de registros previamente enviados. */
-(function (window, document) {
+/* Consulta pública, estados de coordinación y reenvío. */
+(function (w, d) {
   'use strict';
-
-  if (window.__ESTUDIANTE_CONSULTA_REVISION_CARGADA__) return;
-  window.__ESTUDIANTE_CONSULTA_REVISION_CARGADA__ = true;
+  if (w.__ESTUDIANTE_CONSULTA_REVISION_CARGADA__) return;
+  w.__ESTUDIANTE_CONSULTA_REVISION_CARGADA__ = true;
 
   var intentos = 0;
-  var consultaActiva = null;
-  var ultimaCedula = '';
+  var consulta = null;
 
-  function get(nombre) { return window[nombre] || null; }
-  function texto(valor) { return String(valor === null || valor === undefined ? '' : valor).trim(); }
-  function normalizarClave(valor) {
-    return texto(valor).toLowerCase().normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-z0-9]/g, '');
+  function mod(n) { return w[n] || null; }
+  function txt(v) { return String(v == null ? '' : v).trim(); }
+  function key(v) {
+    return txt(v).toLowerCase().normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
   }
-  function cedula(valor) {
-    var salida = texto(valor).replace(/\D/g, '');
-    if (salida.length === 9) salida = '0' + salida;
-    return salida.length === 10 ? salida : '';
-  }
-  function campo(objeto, claves) {
-    var data = objeto || {};
-    var mapa = {};
-    var i;
-    Object.keys(data).forEach(function (key) { mapa[normalizarClave(key)] = key; });
-    for (i = 0; i < claves.length; i += 1) {
-      var real = mapa[normalizarClave(claves[i])];
-      if (real !== undefined && data[real] !== undefined && texto(data[real])) return data[real];
+  function val(o, names) {
+    var map = {}, real, i;
+    o = o || {};
+    Object.keys(o).forEach(function (k) { map[key(k)] = k; });
+    for (i = 0; i < names.length; i += 1) {
+      real = map[key(names[i])];
+      if (real !== undefined && o[real] != null && txt(o[real])) return o[real];
     }
     return '';
   }
-  function escapar(valor) {
-    return texto(valor)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
+  function esc(v) {
+    return txt(v).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
       .replace(/'/g, '&#039;');
   }
-  function si(valor) {
-    return valor === true || ['SI', 'SÍ', 'TRUE', '1', 'YES'].indexOf(texto(valor).toUpperCase()) >= 0;
+  function ci(v) {
+    var n = txt(v).replace(/\D/g, '');
+    if (n.length === 9) n = '0' + n;
+    return n.length === 10 ? n : '';
   }
-  function normalizarEstudiante(data, identificacion) {
-    data = data || {};
-    var estudiante = Object.assign({}, data);
-    estudiante.cedula = cedula(
-      campo(estudiante, ['cedula', 'numeroIdentificacion', 'identificacion']) || identificacion
-    );
-    estudiante.numeroIdentificacion = estudiante.cedula;
-    estudiante.nombres = texto(campo(estudiante, [
-      'nombres', 'Nombres', 'nombreCompleto', 'NombreCompleto', 'nombre', 'Nombre'
-    ]));
-    estudiante.nombreCarrera = texto(campo(estudiante, [
-      'nombreCarrera', 'NombreCarrera', 'carrera', 'Carrera'
-    ]));
-    estudiante.carrera = estudiante.nombreCarrera;
-    estudiante.codigoCarrera = texto(campo(estudiante, ['codigoCarrera', 'CodigoCarrera']));
-    estudiante.periodoId = texto(campo(estudiante, [
-      'periodoId', 'PeriodoId', 'periodoCanonicoId', 'ultimoPeriodoId', 'periodo', 'Periodo'
-    ]));
-    estudiante.periodoLabel = texto(campo(estudiante, [
-      'periodoLabel', 'PeriodoLabel', 'periodoCanonicoLabel', 'periodoTexto', 'PeriodoTexto', 'periodo'
-    ])) || estudiante.periodoId;
-    estudiante.sede = texto(campo(estudiante, ['sede', 'Sede']));
-    estudiante.modalidad = texto(campo(estudiante, ['modalidad', 'Modalidad']));
-    estudiante.correoInstitucional = texto(campo(estudiante, ['correoInstitucional', 'CorreoInstitucional']));
-    estudiante.correoPersonal = texto(campo(estudiante, ['correoPersonal', 'CorreoPersonal']));
-    estudiante.celular = texto(campo(estudiante, ['celular', 'Celular']));
-    return estudiante;
+  function yes(v) {
+    return v === true || ['SI', 'SÍ', 'TRUE', '1', 'YES']
+      .indexOf(txt(v).toUpperCase()) >= 0;
   }
-  function validarEstudiante(estudiante) {
-    if (!estudiante || !estudiante.cedula) return { ok: false, mensaje: 'El registro no contiene una cédula válida.' };
-    if (!estudiante.nombres) return { ok: false, mensaje: 'El registro no contiene los nombres del estudiante.' };
-    if (!estudiante.nombreCarrera) return { ok: false, mensaje: 'El registro no contiene la carrera del estudiante.' };
-    return { ok: true };
+  function json(v) {
+    if (!v) return null;
+    if (typeof v === 'object') return v;
+    try { return JSON.parse(v); } catch (_e) { return null; }
   }
-  function normalizarEnvio(envio) {
-    var base = envio || {};
-    if (base.envio && typeof base.envio === 'object') base = base.envio;
-    if (base.registroEnvio && typeof base.registroEnvio === 'object') base = base.registroEnvio;
-    var salida = Object.assign({}, base);
-    salida._origen = 'envios-respaldo';
-    return salida;
+  function student(raw, ced) {
+    return {
+      cedula: ci(val(raw, ['cedula', 'numeroIdentificacion']) || ced),
+      numeroIdentificacion: ci(val(raw, ['cedula', 'numeroIdentificacion']) || ced),
+      nombres: txt(val(raw, ['nombres', 'Nombres', 'nombreCompleto', 'nombre'])),
+      nombreCarrera: txt(val(raw, ['nombreCarrera', 'NombreCarrera', 'carrera'])),
+      carrera: txt(val(raw, ['nombreCarrera', 'NombreCarrera', 'carrera'])),
+      codigoCarrera: txt(val(raw, ['codigoCarrera', 'CodigoCarrera'])),
+      periodoId: txt(val(raw, ['periodoId', 'periodId', 'periodo'])),
+      periodoLabel: txt(val(raw, ['periodoLabel', 'periodo', 'PeriodoLabel'])),
+      sede: txt(val(raw, ['sede', 'Sede'])),
+      modalidad: txt(val(raw, ['modalidad', 'Modalidad']))
+    };
   }
-  function estadoEnvio(envio) {
-    return texto(campo(envio || {}, [
-      'estadoFinal', 'estado', 'estadoProceso', 'estadoGoogleSheets', 'EstadoFinal', 'Estado'
-    ])).toUpperCase();
-  }
-  function esAprobado(estado) {
-    estado = texto(estado).toUpperCase();
-    return estado === 'REEMPLAZADO' || estado.indexOf('APROBADO') >= 0;
-  }
-  function titulosEnvio(envio) {
-    var lista = [];
-    [1, 2, 3].forEach(function (numero) {
-      var titulo = texto(campo(envio || {}, [
-        'titulo' + numero,
-        'titulo_' + numero,
-        'tituloFinal' + numero,
-        'tituloFinal_' + numero
-      ]));
-      if (titulo && lista.indexOf(titulo) < 0) lista.push(titulo);
-    });
-    return lista.slice(0, 3);
-  }
-  function numeroTituloSeleccionado(envio) {
-    var valor = texto(campo(envio || {}, [
-      'tituloAprobadoNumero', 'tituloSeleccionadoNumero', 'tituloElegidoNumero',
-      'tituloPreferidoNumero', 'preferido', 'tituloSeleccionado'
-    ]));
-    var coincidencia;
-    if (/^[123]$/.test(valor)) return Number(valor);
-    coincidencia = valor.match(/(?:titulo|título|propuesta|opcion|opción)\s*#?\s*([123])/i);
-    return coincidencia ? Number(coincidencia[1]) : 0;
-  }
-  function tituloAprobado(envio) {
-    var estado = estadoEnvio(envio);
-    var corregido = texto(campo(envio || {}, [
-      'tituloCorregido', 'tituloFinalCorregido', 'tituloAprobadoCorregido'
-    ]));
-    var aprobado = texto(campo(envio || {}, [
-      'tituloAprobado', 'tituloFinalAprobado', 'tituloFinal', 'tituloElegido',
-      'tituloSeleccionadoTexto', 'tituloAprobadoTexto'
-    ]));
-    var numero;
-    var titulos;
-
-    if (corregido) return corregido;
-    if (aprobado) return aprobado;
-
-    numero = numeroTituloSeleccionado(envio);
-    titulos = titulosEnvio(envio);
-    if (numero >= 1 && numero <= 3) return titulos[numero - 1] || '';
-
-    if (esAprobado(estado)) {
-      aprobado = texto(campo(envio || {}, ['tituloPreferidoTexto', 'tituloPreferido']));
-      if (aprobado && !/^[123]$/.test(aprobado)) return aprobado;
-    }
-    return '';
-  }
-  function comentarioCoordinador(envio) {
-    return texto(campo(envio || {}, [
-      'comentarioCoordinador', 'observacion', 'comentario', 'observaciones', 'motivo'
-    ]));
-  }
-  function panelRevision() {
-    var panel = document.getElementById('revisionTitulosPanel');
-    var main = document.querySelector('.app-container');
-    var estado = document.getElementById('estadoPrincipal');
-    if (panel) return panel;
-
-    panel = document.createElement('section');
-    panel.id = 'revisionTitulosPanel';
-    panel.className = 'review-status-card';
-    panel.hidden = true;
-    panel.setAttribute('aria-live', 'polite');
-
-    if (main && estado && estado.parentNode === main) main.insertBefore(panel, estado.nextSibling);
-    else if (main) main.appendChild(panel);
-
-    panel.addEventListener('click', function (evento) {
-      var boton = evento.target && evento.target.closest
-        ? evento.target.closest('[data-review-action="otra-cedula"]')
-        : null;
-      if (!boton) return;
-      evento.preventDefault();
-      reiniciar();
-    });
-    return panel;
-  }
-  function mostrarFlujo(visible) {
-    var stepper = document.querySelector('.stepper');
-    var estado = document.getElementById('estadoPrincipal');
-    var panel = document.getElementById('revisionTitulosPanel');
-    if (stepper) stepper.hidden = !visible;
-    if (estado) estado.hidden = !visible;
-    if (panel && visible) panel.hidden = true;
-
-    if (!visible) {
-      Array.prototype.forEach.call(document.querySelectorAll('[data-step-panel]'), function (item) {
-        item.hidden = true;
-        item.classList.remove('is-active');
+  function envio(result) {
+    var base = result && result.envio && typeof result.envio === 'object'
+      ? result.envio : {};
+    var res = json(val(base, ['resolucion', 'ultimaResolucion'])) ||
+      json(val(result || {}, ['resolucion', 'ultimaResolucion'])) || {};
+    var out = Object.assign({}, base, res);
+    if (txt(result && result.estadoEnvio)) out.estado = result.estadoEnvio;
+    ['estado', 'estadoFinal', 'tituloAprobado', 'tituloCorregido',
+      'tituloFinal', 'tituloElegido', 'comentarioCoordinador',
+      'comentario', 'observacion', 'coordinador', 'fechaResolucion',
+      'fechaRevision', 'telegram', 'preferido', 'tituloPreferidoNumero']
+      .forEach(function (k) {
+        if (txt(result && result[k])) out[k] = result[k];
       });
-      if (estado) {
-        estado.textContent = '';
-        estado.className = 'status-message';
-      }
+    return out;
+  }
+  function estado(e) {
+    return txt(val(e, ['estadoFinal', 'estado', 'estadoEnvio',
+      'estadoProceso', 'estadoGoogleSheets'])).toUpperCase();
+  }
+  function aprobado(s) {
+    s = txt(s).toUpperCase();
+    return s === 'REEMPLAZADO' || s.indexOf('APROBADO') >= 0;
+  }
+  function comentario(e) {
+    return txt(val(e, ['comentarioCoordinador', 'observacion',
+      'comentario', 'observaciones', 'motivo']));
+  }
+  function titulo(e, n) {
+    return txt(val(e, ['titulo' + n, 'titulo_' + n,
+      'tituloFinal' + n, 'tituloFinal_' + n]));
+  }
+  function favorito(e) {
+    var v = txt(val(e, ['tituloPreferidoNumero', 'preferido',
+      'tituloSeleccionadoNumero', 'tituloElegidoNumero']));
+    return /^[123]$/.test(v) ? Number(v) : 0;
+  }
+  function tituloAprobado(e) {
+    var t = txt(val(e, ['tituloCorregido', 'tituloAprobado',
+      'tituloFinal', 'tituloElegido']));
+    return t || titulo(e, favorito(e));
+  }
+  function dato(label, value) {
+    return '<div class="review-data__item"><span>' + esc(label) +
+      '</span><strong>' + esc(value || 'No registrado') + '</strong></div>';
+  }
+  function panelFinal() {
+    var p = d.getElementById('revisionTitulosPanel');
+    var main = d.querySelector('.app-container');
+    var st = d.getElementById('estadoPrincipal');
+    if (p) return p;
+    p = d.createElement('section');
+    p.id = 'revisionTitulosPanel';
+    p.className = 'review-status-card';
+    p.hidden = true;
+    if (main && st) main.insertBefore(p, st.nextSibling);
+    p.addEventListener('click', function (ev) {
+      if (ev.target.closest('[data-review-action="otra-cedula"]')) reset();
+    });
+    return p;
+  }
+  function panelDevuelto() {
+    var p = d.getElementById('devolucionDatosPanel');
+    var step = d.querySelector('[data-step-panel="datos"]');
+    var grid = step && step.querySelector('.data-grid');
+    if (p) return p;
+    p = d.createElement('section');
+    p.id = 'devolucionDatosPanel';
+    p.className = 'returned-review';
+    p.hidden = true;
+    if (step && grid) step.insertBefore(p, grid.nextSibling);
+    return p;
+  }
+  function flow(show) {
+    var stepper = d.querySelector('.stepper');
+    var status = d.getElementById('estadoPrincipal');
+    var final = d.getElementById('revisionTitulosPanel');
+    if (stepper) stepper.hidden = !show;
+    if (status) status.hidden = !show;
+    if (final && show) final.hidden = true;
+    if (!show) {
+      Array.prototype.forEach.call(d.querySelectorAll('[data-step-panel]'),
+        function (x) { x.hidden = true; x.classList.remove('is-active'); });
     }
   }
-  function dato(etiqueta, valor) {
-    return '<div class="review-data__item"><span>' + escapar(etiqueta) +
-      '</span><strong>' + escapar(texto(valor) || 'No registrado') + '</strong></div>';
+  function clearReturned() {
+    var p = d.getElementById('devolucionDatosPanel');
+    var b = d.querySelector('[data-step-panel="datos"] [data-paso="telegram"]');
+    if (p) { p.hidden = true; p.innerHTML = ''; }
+    if (b) { b.textContent = 'Continuar'; b.removeAttribute('data-reenvio-activo'); }
   }
-  function etiquetaEstado(estado) {
-    if (estado === 'DEVUELTO') return 'Registro devuelto para corrección';
-    if (esAprobado(estado)) return 'Aprobado por coordinación';
-    return 'En revisión por coordinación';
-  }
-  function mostrarAprobacion(estudiante, envio) {
-    var panel = panelRevision();
-    var titulo = tituloAprobado(envio);
-    var comentario = comentarioCoordinador(envio);
-    var bloqueComentario = comentario
-      ? '<div class="approved-comment"><span>Observación de coordinación</span><p>' + escapar(comentario) + '</p></div>'
-      : '';
-
-    mostrarFlujo(false);
-    panel.className = 'review-status-card review-status-card--approved';
-    panel.innerHTML = [
-      '<div class="review-status-card__hero">',
-      '<div class="review-status-card__icon" aria-hidden="true">✓</div>',
+  function finalView(stu, e, isApproved) {
+    var p = panelFinal();
+    var titles = [titulo(e, 1), titulo(e, 2), titulo(e, 3)].filter(Boolean);
+    var comm = comentario(e);
+    clearReturned();
+    flow(false);
+    p.className = 'review-status-card' +
+      (isApproved ? ' review-status-card--approved' : '');
+    p.innerHTML = isApproved ? [
+      '<div class="review-status-card__hero"><div class="review-status-card__icon">✓</div>',
       '<div><p class="review-status-card__eyebrow">Resultado de coordinación</p>',
       '<h2>Tu tema de titulación fue aprobado</h2>',
       '<span class="review-status-card__badge">Aprobado por coordinación</span></div></div>',
       '<p class="review-status-card__message">Este es el título final aprobado. No necesitas realizar un nuevo envío.</p>',
-      '<div class="approved-title-card">',
-      '<span>Título aprobado</span>',
-      '<strong>', escapar(titulo || 'El título fue aprobado. Comunícate con coordinación para confirmar el texto final.'), '</strong>',
-      '</div>',
-      '<div class="review-data">',
-      dato('Estudiante', estudiante.nombres),
-      dato('Cédula', estudiante.cedula),
-      dato('Carrera', estudiante.nombreCarrera),
-      dato('Período', estudiante.periodoLabel || estudiante.periodoId),
-      '</div>',
-      bloqueComentario,
-      '<div class="review-status-card__footer">',
-      '<div class="review-status-card__notice"><strong>Proceso finalizado:</strong> conserva este título para continuar con tu trabajo de titulación.</div>',
-      '<button class="btn btn--secondary" type="button" data-review-action="otra-cedula">Consultar otra cédula</button>',
-      '</div>'
-    ].join('');
-    panel.hidden = false;
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
-  function mostrarRevision(estudiante, envio) {
-    envio = envio || {};
-    var panel = panelRevision();
-    var titulos = titulosEnvio(envio);
-    var estado = estadoEnvio(envio);
-    var bloqueTitulos;
-
-    if (esAprobado(estado)) {
-      mostrarAprobacion(estudiante, envio);
-      return;
-    }
-
-    bloqueTitulos = titulos.length
-      ? '<div class="review-titles"><h3>Propuestas registradas</h3><ol>' +
-        titulos.map(function (titulo) { return '<li>' + escapar(titulo) + '</li>'; }).join('') +
-        '</ol></div>'
-      : '<div class="review-status-card__notice">El registro existe y está protegido. Los títulos se recuperarán desde la base institucional.</div>';
-
-    mostrarFlujo(false);
-    panel.className = 'review-status-card';
-    panel.innerHTML = [
-      '<div class="review-status-card__hero">',
-      '<div class="review-status-card__icon" aria-hidden="true">✓</div>',
+      '<div class="approved-title-card"><span>Título aprobado</span><strong>',
+      esc(tituloAprobado(e) || 'Comunícate con coordinación para confirmar el título final.'),
+      '</strong></div>'
+    ].join('') : [
+      '<div class="review-status-card__hero"><div class="review-status-card__icon">✓</div>',
       '<div><p class="review-status-card__eyebrow">Registro confirmado</p>',
       '<h2>Tus propuestas ya fueron enviadas</h2>',
-      '<span class="review-status-card__badge">', escapar(etiquetaEstado(estado)), '</span></div></div>',
+      '<span class="review-status-card__badge">En revisión por coordinación</span></div></div>',
       '<p class="review-status-card__message">Tus títulos están siendo revisados por el coordinador de titulación.</p>',
-      '<div class="review-data">',
-      dato('Estudiante', estudiante.nombres),
-      dato('Cédula', estudiante.cedula),
-      dato('Carrera', estudiante.nombreCarrera),
-      dato('Período', estudiante.periodoLabel || estudiante.periodoId),
-      '</div>',
-      bloqueTitulos,
-      '<div class="review-status-card__footer">',
-      '<div class="review-status-card__notice"><strong>Importante:</strong> este registro está protegido para evitar envíos duplicados.</div>',
-      '<button class="btn btn--secondary" type="button" data-review-action="otra-cedula">Consultar otra cédula</button>',
-      '</div>'
+      titles.length ? '<div class="review-titles"><h3>Propuestas registradas</h3><ol>' +
+        titles.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') +
+        '</ol></div>' : ''
     ].join('');
-    panel.hidden = false;
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    p.innerHTML += '<div class="review-data">' +
+      dato('Estudiante', stu.nombres) + dato('Cédula', stu.cedula) +
+      dato('Carrera', stu.nombreCarrera) +
+      dato('Período', stu.periodoLabel || stu.periodoId) + '</div>' +
+      (comm ? '<div class="approved-comment"><span>Comentario del coordinador</span><p>' +
+        esc(comm) + '</p></div>' : '') +
+      '<div class="review-status-card__footer"><div class="review-status-card__notice">' +
+      (isApproved ? '<strong>Proceso finalizado:</strong> conserva este título.' :
+        '<strong>Importante:</strong> el registro está protegido para evitar duplicados.') +
+      '</div><button class="btn btn--secondary" type="button" data-review-action="otra-cedula">' +
+      'Consultar otra cédula</button></div>';
+    p.hidden = false;
+    w.scrollTo({ top: 0, behavior: 'smooth' });
   }
-  function continuar(estudiante) {
-    var state = get('EstudianteMVPState');
-    var ui = get('EstudianteMVPUI');
-    var app = get('EstudianteMVPApp');
-    mostrarFlujo(true);
-    if (state && typeof state.setEstudiante === 'function') state.setEstudiante(estudiante);
-    if (ui && typeof ui.pintarEstudiante === 'function') ui.pintarEstudiante(estudiante);
-    if (ui && typeof ui.mostrarEstado === 'function') ui.mostrarEstado('#estadoPrincipal', '', '');
-    if (app && typeof app.irPaso === 'function') app.irPaso('datos');
+  function priorProposals(e) {
+    var raw = json(val(e, ['propuestas', 'propuestasEnviadas'])) || [];
+    return [1, 2, 3].map(function (n) {
+      var item = raw[n - 1] || {};
+      var t = txt(val(item, ['tituloFinal', 'titulo'])) || titulo(e, n);
+      return {
+        numero: n, tituloFinal: t,
+        temaGeneral: txt(val(item, ['temaGeneral', 'tema'])),
+        lugarContexto: txt(val(item, ['lugarContexto', 'contexto'])),
+        grupoEstudio: txt(val(item, ['grupoEstudio', 'grupo'])),
+        problemaNecesidad: txt(val(item, ['problemaNecesidad', 'problema'])),
+        objetivo: txt(val(item, ['objetivo'])),
+        anioPeriodo: txt(val(item, ['anioPeriodo', 'periodo'])),
+        tituloDefinidoConfirmado: true
+      };
+    });
   }
-  function reiniciar() {
-    var app = get('EstudianteMVPApp');
-    var input = document.getElementById('cedulaInput');
-    consultaActiva = null;
-    ultimaCedula = '';
-    mostrarFlujo(true);
-    if (app && typeof app.nuevoRegistro === 'function') app.nuevoRegistro();
-    else if (app && typeof app.irPaso === 'function') app.irPaso('consulta');
+  function returnedView(stu, e) {
+    var state = mod('EstudianteMVPState');
+    var ui = mod('EstudianteMVPUI');
+    var app = mod('EstudianteMVPApp');
+    var memory = mod('EstudianteMVPMemoria');
+    var p = panelDevuelto();
+    var proposals = priorProposals(e);
+    var fav = favorito(e);
+    var b = d.querySelector('[data-step-panel="datos"] [data-paso="telegram"]');
+    if (memory && memory.borrar) memory.borrar();
+    if (state && state.reiniciarTodo) state.reiniciarTodo();
+    if (state && state.setEstudiante) state.setEstudiante(stu);
+    if (state && state.setTelegram && txt(val(e, ['telegram']))) {
+      state.setTelegram(txt(val(e, ['telegram'])));
+    }
+    if (state && state.setPropuestas) state.setPropuestas(proposals);
+    if (state && state.setTituloPreferidoNumero && fav) state.setTituloPreferidoNumero(fav);
+    if (ui && ui.aplicarEstadoEnFormulario && state) {
+      ui.aplicarEstadoEnFormulario(state.obtenerEstado());
+    }
+    if (ui && ui.pintarEstudiante) ui.pintarEstudiante(stu);
+    flow(true);
+    p.innerHTML = '<div class="returned-review__header">' +
+      '<div class="returned-review__icon">!</div><div>' +
+      '<p class="returned-review__eyebrow">Resultado de coordinación</p>' +
+      '<h3>Tus propuestas fueron devueltas para corrección</h3>' +
+      '<p>Revisa el comentario, corrige los títulos y vuelve a enviarlos.</p></div></div>' +
+      '<div class="returned-review__comment"><span>Comentario del coordinador</span><p>' +
+      esc(comentario(e) || 'La coordinación solicitó correcciones.') + '</p></div>' +
+      '<div class="returned-review__titles"><h4>Propuestas enviadas anteriormente</h4><ol>' +
+      proposals.map(function (x) {
+        return '<li' + (x.numero === fav ? ' class="is-favorite"' : '') +
+          '><div><b>Propuesta ' + x.numero + '</b>' +
+          (x.numero === fav ? '<span>Favorito anterior</span>' : '') +
+          '</div><p>' + esc(x.tituloFinal || 'Sin título registrado.') + '</p></li>';
+      }).join('') + '</ol></div>' +
+      '<div class="returned-review__notice"><strong>Los títulos anteriores ya fueron cargados.</strong> ' +
+      'Puedes modificarlos y enviarlos nuevamente.</div>';
+    p.hidden = false;
+    if (b) { b.textContent = 'Corregir y reenviar'; b.setAttribute('data-reenvio-activo', 'true'); }
+    if (ui && ui.mostrarEstado) ui.mostrarEstado('#estadoPrincipal',
+      'Tus propuestas fueron devueltas. Revisa el comentario y corrige los títulos.', 'warning');
+    if (app && app.irPaso) app.irPaso('datos');
+  }
+  function continueView(stu) {
+    var state = mod('EstudianteMVPState'), ui = mod('EstudianteMVPUI');
+    var app = mod('EstudianteMVPApp');
+    clearReturned(); flow(true);
+    if (state && state.setEstudiante) state.setEstudiante(stu);
+    if (ui && ui.pintarEstudiante) ui.pintarEstudiante(stu);
+    if (ui && ui.mostrarEstado) ui.mostrarEstado('#estadoPrincipal', '', '');
+    if (app && app.irPaso) app.irPaso('datos');
+  }
+  function reset() {
+    var app = mod('EstudianteMVPApp');
+    var input = d.getElementById('cedulaInput');
+    consulta = null; clearReturned(); flow(true);
+    if (app && app.nuevoRegistro) app.nuevoRegistro();
+    else if (app && app.irPaso) app.irPaso('consulta');
     if (input) { input.value = ''; input.focus(); }
   }
-  function mostrarError(mensaje) {
-    var ui = get('EstudianteMVPUI');
-    var input = document.getElementById('cedulaInput');
-    mostrarFlujo(true);
-    if (ui && typeof ui.mostrarEstado === 'function') ui.mostrarEstado('#estadoPrincipal', mensaje, 'error');
+  function fail(msg) {
+    var ui = mod('EstudianteMVPUI'), input = d.getElementById('cedulaInput');
+    clearReturned(); flow(true);
+    if (ui && ui.mostrarEstado) ui.mostrarEstado('#estadoPrincipal', msg, 'error');
     if (input) input.focus();
   }
-  function consultar(evento) {
-    var ui = get('EstudianteMVPUI');
-    var sheets = get('EstudianteMVPSheets');
-    var input = document.getElementById('cedulaInput');
-    var identificacion = cedula(input ? input.value : '');
-
-    evento.preventDefault();
-    evento.stopPropagation();
-    evento.stopImmediatePropagation();
-
-    if (!identificacion) { mostrarError('La cédula debe tener 10 números.'); return; }
-    if (consultaActiva && ultimaCedula === identificacion) return;
-
-    ultimaCedula = identificacion;
-    input.value = identificacion;
-    mostrarFlujo(true);
-    if (ui && typeof ui.setCargando === 'function') ui.setCargando(true, 'Buscando tus datos y verificando envíos previos...');
-    if (ui && typeof ui.mostrarEstado === 'function') ui.mostrarEstado('#estadoPrincipal', 'Verificando tu registro...', 'info');
-
-    consultaActiva = sheets.consultarAccesoEstudiante(identificacion)
-      .then(function (resultado) {
-        var raw = resultado && (resultado.estudiante || resultado.registro);
-        var evidencia;
-        var envio;
-        var bloqueado;
-        if (!resultado || resultado.encontrado !== true || !raw) {
-          throw new Error(resultado && resultado.mensaje || 'No encontramos un estudiante con esa cédula. Revisa el número e intenta nuevamente.');
-        }
-        var estudiante = normalizarEstudiante(raw, identificacion);
-        var validacion = validarEstudiante(estudiante);
-        if (!validacion.ok) throw new Error(validacion.mensaje);
-
-        envio = normalizarEnvio(resultado.envio || {});
-        evidencia = si(resultado.tieneEnvio) || si(resultado.encontradoEnvio) || Boolean(resultado.envio) ||
-          si(campo(raw, ['tieneEnvio', 'tiene envío', 'envioRegistrado'])) ||
-          Boolean(texto(campo(raw, ['idRegistro', 'envioId', 'tituloId'])));
-        bloqueado = evidencia && resultado.permiteReenvio !== true;
-
-        if (bloqueado) mostrarRevision(estudiante, envio);
-        else continuar(estudiante);
-      })
-      .catch(function (error) {
-        mostrarError(error && error.message || 'No se pudo consultar la información. Intenta nuevamente.');
-      })
-      .then(function () {
-        consultaActiva = null;
-        if (ui && typeof ui.setCargando === 'function') ui.setCargando(false);
-      });
+  function submit(ev) {
+    var ui = mod('EstudianteMVPUI'), sheets = mod('EstudianteMVPSheets');
+    var input = d.getElementById('cedulaInput'), id = ci(input && input.value);
+    ev.preventDefault(); ev.stopPropagation(); ev.stopImmediatePropagation();
+    if (!id) return fail('La cédula debe tener 10 números.');
+    if (consulta) return;
+    input.value = id; clearReturned(); flow(true);
+    if (ui && ui.setCargando) ui.setCargando(true,
+      'Buscando datos, período y estado de tus propuestas...');
+    if (ui && ui.mostrarEstado) ui.mostrarEstado('#estadoPrincipal',
+      'Verificando tu registro...', 'info');
+    consulta = sheets.consultarAccesoEstudiante(id).then(function (r) {
+      var raw = r && (r.estudiante || r.registro);
+      if (!r || r.encontrado !== true || !raw) {
+        throw new Error(r && r.mensaje || 'No encontramos un estudiante con esa cédula.');
+      }
+      var stu = student(raw, id), e = envio(r), s = estado(e);
+      if (!stu.cedula || !stu.nombres || !stu.nombreCarrera) {
+        throw new Error('El registro académico está incompleto.');
+      }
+      if (aprobado(s)) finalView(stu, e, true);
+      else if (s === 'DEVUELTO' && r.permiteReenvio === true) returnedView(stu, e);
+      else if (yes(r.tieneEnvio) || yes(r.encontradoEnvio) || r.envio) finalView(stu, e, false);
+      else continueView(stu);
+    }).catch(function (e) {
+      fail(e && e.message || 'No se pudo consultar la información.');
+    }).then(function () {
+      consulta = null;
+      if (ui && ui.setCargando) ui.setCargando(false);
+    });
   }
-  function instalar() {
-    var form = document.getElementById('formConsulta');
-    var input = document.getElementById('cedulaInput');
-    var sheets = get('EstudianteMVPSheets');
-    if (window.__ESTUDIANTE_CONSULTA_REVISION_INSTALADA__) return;
-    if (!form || !input || !get('EstudianteMVPUI') || !get('EstudianteMVPState') ||
-        !get('EstudianteMVPApp') || !sheets || typeof sheets.consultarAccesoEstudiante !== 'function') {
+  function styles() {
+    if (d.getElementById('estudianteDevolucionCss')) return;
+    var link = d.createElement('link');
+    link.id = 'estudianteDevolucionCss';
+    link.rel = 'stylesheet';
+    link.href = 'css/estudiante.devolucion.css?v=2.3.4';
+    d.head.appendChild(link);
+  }
+  function install() {
+    var form = d.getElementById('formConsulta');
+    var input = d.getElementById('cedulaInput');
+    var sheets = mod('EstudianteMVPSheets');
+    if (w.__ESTUDIANTE_CONSULTA_REVISION_INSTALADA__) return;
+    if (!form || !input || !mod('EstudianteMVPUI') || !mod('EstudianteMVPState') ||
+        !mod('EstudianteMVPApp') || !sheets || !sheets.consultarAccesoEstudiante) {
       intentos += 1;
-      if (intentos <= 150) window.setTimeout(instalar, 100);
+      if (intentos < 150) w.setTimeout(install, 100);
       return;
     }
-    window.__ESTUDIANTE_CONSULTA_REVISION_INSTALADA__ = true;
-    panelRevision();
-    input.setAttribute('maxlength', '10');
-    input.setAttribute('pattern', '[0-9]{9,10}');
-    form.addEventListener('submit', consultar, true);
+    w.__ESTUDIANTE_CONSULTA_REVISION_INSTALADA__ = true;
+    styles(); panelFinal(); panelDevuelto();
+    input.maxLength = 10; input.pattern = '[0-9]{9,10}';
+    form.addEventListener('submit', submit, true);
   }
-
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', instalar, { once: true });
-  else instalar();
+  if (d.readyState === 'loading') d.addEventListener('DOMContentLoaded', install, { once: true });
+  else install();
 })(window, document);
