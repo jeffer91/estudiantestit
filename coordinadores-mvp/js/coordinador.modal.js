@@ -4,6 +4,9 @@
 
   var envioActual=null;
   var iniciado=false;
+  var guardando=false;
+  var borradoresMemoria={};
+  var PREFIJO_BORRADOR='coordinador_revision_borrador_v1:';
 
   function state(){return window.CoordinadorMVPState||null;}
   function ui(){return window.CoordinadorMVPUI||null;}
@@ -48,12 +51,13 @@
     var finalInput=$('tituloFinalInput');
     if(finalInput){
       finalInput.addEventListener('input',function(){
-        var numero=obtenerNumeroTituloSeleccionado();
-        if(!numero)return;
-        var original=obtenerTituloPorNumero(numero);
-        if(normalizarComparacion(finalInput.value)!==normalizarComparacion(original))limpiarSeleccionVisual();
+        actualizarEstadoEdicion();
+        guardarBorradorActual();
       });
     }
+
+    var comentario=$('comentarioCoordinadorInput');
+    if(comentario)comentario.addEventListener('input',guardarBorradorActual);
     return true;
   }
 
@@ -63,23 +67,88 @@
     return Boolean(envio&&texto(envio.titulo1)&&texto(envio.titulo2)&&texto(envio.titulo3));
   }
 
+  function claveBorrador(envio){
+    envio=envio||{};
+    var id=texto(envio.id||envio.idRegistro||envio._clave||'');
+    if(!id)id=texto(envio.cedula)+'__'+texto(envio.periodoId||envio.periodoLabel||envio.periodo);
+    return id?PREFIJO_BORRADOR+id:'';
+  }
+
+  function leerBorrador(envio){
+    var clave=claveBorrador(envio);
+    if(!clave)return null;
+    try{
+      var guardado=window.sessionStorage&&window.sessionStorage.getItem(clave);
+      if(guardado)return JSON.parse(guardado);
+    }catch(error){}
+    return borradoresMemoria[clave]||null;
+  }
+
+  function escribirBorrador(envio,borrador){
+    var clave=claveBorrador(envio);
+    if(!clave)return false;
+    borradoresMemoria[clave]=borrador;
+    try{if(window.sessionStorage)window.sessionStorage.setItem(clave,JSON.stringify(borrador));}catch(error){}
+    return true;
+  }
+
+  function eliminarBorrador(envio){
+    var clave=claveBorrador(envio);
+    if(!clave)return;
+    delete borradoresMemoria[clave];
+    try{if(window.sessionStorage)window.sessionStorage.removeItem(clave);}catch(error){}
+  }
+
+  function guardarBorradorActual(){
+    if(!envioActual||guardando||!esPendiente(envioActual))return false;
+    var numero=obtenerNumeroTituloSeleccionado();
+    var final=texto($('tituloFinalInput')&&$('tituloFinalInput').value);
+    var comentario=texto($('comentarioCoordinadorInput')&&$('comentarioCoordinadorInput').value);
+    if(!numero&&!final&&!comentario){eliminarBorrador(envioActual);return true;}
+    return escribirBorrador(envioActual,{tituloSeleccionadoNumero:numero,tituloFinal:final,comentarioCoordinador:comentario,actualizadoEn:new Date().toISOString()});
+  }
+
+  function restaurarBorrador(envio){
+    if(!esPendiente(envio))return false;
+    var borrador=leerBorrador(envio);
+    if(!borrador)return false;
+    var numero=Number(borrador.tituloSeleccionadoNumero||0);
+    if(numero>=1&&numero<=3){
+      var radio=document.querySelector('input[name="tituloSeleccionado"][value="'+numero+'"]');
+      if(radio)radio.checked=true;
+    }
+    setValor('tituloFinalInput',borrador.tituloFinal||'');
+    setValor('comentarioCoordinadorInput',borrador.comentarioCoordinador||'');
+    actualizarEstadoEdicion();
+    mostrarEstado('Se recuperó el borrador de esta revisión. Puedes continuar y guardarlo.','info');
+    return true;
+  }
+
   function abrir(envio){
     envioActual=envio||null;
+    guardando=false;
     if(!envioActual){mostrarEstado('No se encontró el estudiante seleccionado.','error');return;}
     limpiarFormulario();
     pintarDatos(envioActual);
     pintarTitulos(envioActual);
     configurarModo(envioActual);
-    $('detalleModal').hidden=false;
+    restaurarBorrador(envioActual);
+    var modal=$('detalleModal');
+    if(modal)modal.hidden=false;
     document.body.style.overflow='hidden';
   }
 
-  function cerrar(){
+  function cerrar(opciones){
+    opciones=opciones||{};
+    if(guardando&&opciones.forzar!==true)return false;
+    if(envioActual&&opciones.descartar!==true)guardarBorradorActual();
     var modal=$('detalleModal');
     if(modal)modal.hidden=true;
     document.body.style.overflow='';
     envioActual=null;
+    guardando=false;
     limpiarFormulario();
+    return true;
   }
 
   function pintarDatos(envio){
@@ -154,10 +223,10 @@
     var aprobar=$('btnAprobarEnvio');
     var devolver=$('btnDevolverEnvio');
 
-    if(finalInput){finalInput.readOnly=!pendiente;if(!pendiente)finalInput.value=texto(envio.tituloAprobado);}
-    if(comentario){comentario.readOnly=!pendiente;comentario.value=texto(envio.comentarioCoordinador);}
-    if(aprobar)aprobar.hidden=!pendiente;
-    if(devolver)devolver.hidden=!pendiente;
+    if(finalInput){finalInput.readOnly=!pendiente;if(!pendiente)finalInput.value=texto(envio.tituloAprobado||envio.tituloFinal||envio.tituloCorregido);}
+    if(comentario){comentario.readOnly=!pendiente;if(!pendiente)comentario.value=texto(envio.comentarioCoordinador||envio.comentario||envio.observacion);}
+    if(aprobar){aprobar.hidden=!pendiente;aprobar.disabled=false;aprobar.textContent='Aprobar título';}
+    if(devolver){devolver.hidden=!pendiente;devolver.disabled=false;devolver.textContent='Devolver';}
 
     document.querySelectorAll('input[name="tituloSeleccionado"]').forEach(function(radio){radio.disabled=!pendiente;});
     document.querySelectorAll('.proposal-card').forEach(function(tarjeta){
@@ -174,34 +243,42 @@
   }
 
   function seleccionarTitulo(numero){
-    if(numero<1||numero>3||!envioActual||!esPendiente(envioActual)||!tieneTitulosCompletos(envioActual))return false;
+    if(numero<1||numero>3||guardando||!envioActual||!esPendiente(envioActual)||!tieneTitulosCompletos(envioActual))return false;
     var titulo=obtenerTituloPorNumero(numero);
     if(!titulo)return false;
     var radio=document.querySelector('input[name="tituloSeleccionado"][value="'+numero+'"]');
     if(radio)radio.checked=true;
-    actualizarSeleccionVisual(numero);
     setValor('tituloFinalInput',titulo);
-    mostrarEstado('Título '+numero+' seleccionado. Ya puedes aprobarlo o editar el texto final.','success');
+    actualizarSeleccionVisual(numero,false);
+    guardarBorradorActual();
+    mostrarEstado('Título '+numero+' seleccionado. Puedes aprobarlo o editar el texto final sin perder la selección.','success');
     return true;
   }
 
-  function actualizarSeleccionVisual(numero){
+  function actualizarSeleccionVisual(numero,editado){
     document.querySelectorAll('.proposal-card').forEach(function(tarjeta){
       var seleccionada=Number(tarjeta.getAttribute('data-propuesta')||0)===numero;
       tarjeta.classList.toggle('is-selected',seleccionada);
+      tarjeta.classList.toggle('is-edited',seleccionada&&editado===true);
       tarjeta.setAttribute('aria-pressed',seleccionada?'true':'false');
     });
     document.querySelectorAll('[data-seleccionar-propuesta]').forEach(function(boton){
       var seleccionada=Number(boton.getAttribute('data-seleccionar-propuesta')||0)===numero;
       boton.classList.toggle('is-selected',seleccionada);
+      boton.classList.toggle('is-edited',seleccionada&&editado===true);
       boton.setAttribute('aria-pressed',seleccionada?'true':'false');
-      boton.textContent=seleccionada?'✓ Título seleccionado':'Seleccionar este título';
+      boton.textContent=seleccionada?(editado?'✓ Seleccionado · corregido':'✓ Título seleccionado'):'Seleccionar este título';
     });
   }
 
-  function limpiarSeleccionVisual(){
-    document.querySelectorAll('input[name="tituloSeleccionado"]').forEach(function(radio){radio.checked=false;});
-    actualizarSeleccionVisual(0);
+  function actualizarEstadoEdicion(){
+    var numero=obtenerNumeroTituloSeleccionado();
+    if(!numero){actualizarSeleccionVisual(0,false);return false;}
+    var original=obtenerTituloPorNumero(numero);
+    var final=texto($('tituloFinalInput')&&$('tituloFinalInput').value);
+    var editado=Boolean(final&&normalizarComparacion(final)!==normalizarComparacion(original));
+    actualizarSeleccionVisual(numero,editado);
+    return editado;
   }
 
   function obtenerTituloPorNumero(numero){
@@ -235,6 +312,7 @@
     }
     if(tipo==='devolver'&&comentario.length<4)return{ok:false,mensaje:'Escribe una observación para devolver.',selector:'#comentarioCoordinadorInput'};
 
+    guardarBorradorActual();
     return{ok:true,data:{tipo:tipo,envio:utils()&&utils().clonar?utils().clonar(envioActual):Object.assign({},envioActual),tituloSeleccionadoNumero:numero,tituloOriginal:original,tituloFinal:final,comentarioCoordinador:comentario,coordinador:{id:coordinador.id,nombre:coordinador.nombre,carreras:coordinador.carreras||[]}}};
   }
 
@@ -250,16 +328,55 @@
     return resultado;
   }
 
+  function establecerGuardando(activo,mensaje){
+    guardando=activo===true;
+    var pendiente=Boolean(envioActual&&esPendiente(envioActual)&&tieneTitulosCompletos(envioActual));
+    var aprobar=$('btnAprobarEnvio'),devolver=$('btnDevolverEnvio'),finalInput=$('tituloFinalInput'),comentario=$('comentarioCoordinadorInput');
+    if(aprobar){aprobar.disabled=guardando;aprobar.textContent=guardando?'Guardando...':'Aprobar título';}
+    if(devolver){devolver.disabled=guardando;devolver.textContent=guardando?'Guardando...':'Devolver';}
+    if(finalInput)finalInput.readOnly=guardando||!pendiente;
+    if(comentario)comentario.readOnly=guardando||!pendiente;
+    document.querySelectorAll('input[name="tituloSeleccionado"]').forEach(function(radio){radio.disabled=guardando||!pendiente;});
+    document.querySelectorAll('[data-seleccionar-propuesta]').forEach(function(boton){boton.disabled=guardando||!pendiente;});
+    document.querySelectorAll('.proposal-card').forEach(function(tarjeta){
+      tarjeta.classList.toggle('is-disabled',guardando||!pendiente);
+      tarjeta.setAttribute('aria-disabled',guardando||!pendiente?'true':'false');
+      tarjeta.tabIndex=guardando||!pendiente?-1:0;
+    });
+    if(mensaje)mostrarEstado(mensaje,guardando?'info':'error');
+  }
+
+  function confirmarGuardado(mensaje){
+    var envio=envioActual;
+    guardando=true;
+    eliminarBorrador(envio);
+    var aprobar=$('btnAprobarEnvio'),devolver=$('btnDevolverEnvio'),finalInput=$('tituloFinalInput'),comentario=$('comentarioCoordinadorInput');
+    if(aprobar){aprobar.disabled=true;aprobar.textContent='✓ Guardado';}
+    if(devolver)devolver.disabled=true;
+    if(finalInput)finalInput.readOnly=true;
+    if(comentario)comentario.readOnly=true;
+    document.querySelectorAll('input[name="tituloSeleccionado"]').forEach(function(radio){radio.disabled=true;});
+    document.querySelectorAll('[data-seleccionar-propuesta]').forEach(function(boton){boton.disabled=true;});
+    document.querySelectorAll('.proposal-card').forEach(function(tarjeta){tarjeta.classList.add('is-disabled');tarjeta.setAttribute('aria-disabled','true');tarjeta.tabIndex=-1;});
+    mostrarEstado(mensaje||'La resolución se guardó correctamente.','success');
+  }
+
+  function errorGuardado(mensaje){
+    establecerGuardando(false);
+    mostrarEstado(mensaje||'No se pudo guardar la resolución. El borrador se conserva.','error');
+    guardarBorradorActual();
+  }
+
   function limpiarFormulario(){
     document.querySelectorAll('input[name="tituloSeleccionado"]').forEach(function(radio){radio.checked=false;radio.disabled=false;});
-    document.querySelectorAll('.proposal-card').forEach(function(tarjeta){tarjeta.classList.remove('is-selected','is-favorite','is-disabled');tarjeta.removeAttribute('aria-label');tarjeta.setAttribute('aria-pressed','false');tarjeta.setAttribute('aria-disabled','false');tarjeta.tabIndex=0;});
+    document.querySelectorAll('.proposal-card').forEach(function(tarjeta){tarjeta.classList.remove('is-selected','is-edited','is-favorite','is-disabled');tarjeta.removeAttribute('aria-label');tarjeta.setAttribute('aria-pressed','false');tarjeta.setAttribute('aria-disabled','false');tarjeta.tabIndex=0;});
     document.querySelectorAll('.favorite-badge').forEach(function(insignia){insignia.hidden=true;});
-    document.querySelectorAll('[data-seleccionar-propuesta]').forEach(function(boton){boton.disabled=false;boton.classList.remove('is-selected');boton.setAttribute('aria-pressed','false');boton.textContent='Seleccionar este título';});
+    document.querySelectorAll('[data-seleccionar-propuesta]').forEach(function(boton){boton.disabled=false;boton.classList.remove('is-selected','is-edited');boton.setAttribute('aria-pressed','false');boton.textContent='Seleccionar este título';});
     setValor('tituloFinalInput','');
     setValor('comentarioCoordinadorInput','');
     var aprobar=$('btnAprobarEnvio'),devolver=$('btnDevolverEnvio'),finalInput=$('tituloFinalInput'),comentario=$('comentarioCoordinadorInput');
-    if(aprobar)aprobar.hidden=false;
-    if(devolver)devolver.hidden=false;
+    if(aprobar){aprobar.hidden=false;aprobar.disabled=false;aprobar.textContent='Aprobar título';}
+    if(devolver){devolver.hidden=false;devolver.disabled=false;devolver.textContent='Devolver';}
     if(finalInput)finalInput.readOnly=false;
     if(comentario)comentario.readOnly=false;
     mostrarEstado('','info');
@@ -268,5 +385,19 @@
   function mostrarEstado(mensaje,tipo){if(ui())ui().mostrarEstado('estadoModal',mensaje,tipo||'info');}
   function obtenerEnvioActual(){return envioActual?(utils()&&utils().clonar?utils().clonar(envioActual):Object.assign({},envioActual)):null;}
 
-  window.CoordinadorMVPModal=Object.freeze({iniciar:iniciar,abrir:abrir,cerrar:cerrar,seleccionarTitulo:seleccionarTitulo,obtenerNumeroFavorito:obtenerNumeroFavorito,obtenerResolucionAprobar:obtenerResolucionAprobar,obtenerResolucionDevolver:obtenerResolucionDevolver,obtenerEnvioActual:obtenerEnvioActual,mostrarEstado:mostrarEstado});
+  window.CoordinadorMVPModal=Object.freeze({
+    iniciar:iniciar,
+    abrir:abrir,
+    cerrar:cerrar,
+    seleccionarTitulo:seleccionarTitulo,
+    obtenerNumeroFavorito:obtenerNumeroFavorito,
+    obtenerResolucionAprobar:obtenerResolucionAprobar,
+    obtenerResolucionDevolver:obtenerResolucionDevolver,
+    obtenerEnvioActual:obtenerEnvioActual,
+    guardarBorradorActual:guardarBorradorActual,
+    establecerGuardando:establecerGuardando,
+    confirmarGuardado:confirmarGuardado,
+    errorGuardado:errorGuardado,
+    mostrarEstado:mostrarEstado
+  });
 })(window,document);
