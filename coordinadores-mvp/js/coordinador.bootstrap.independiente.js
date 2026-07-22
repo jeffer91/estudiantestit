@@ -1,7 +1,7 @@
 /* Cargador autónomo de Coordinadores. */
 (function(window,document){
   'use strict';
-  var VERSION='2.8.2';
+  var VERSION='2.8.3';
 
   function texto(valor){return String(valor===null||valor===undefined?'':valor).trim();}
   function esLocal(){var host=texto(window.location&&window.location.hostname).toLowerCase();return['localhost','127.0.0.1','0.0.0.0','::1','[::1]'].indexOf(host)>=0;}
