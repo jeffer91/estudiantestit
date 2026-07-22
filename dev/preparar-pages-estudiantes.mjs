@@ -6,6 +6,7 @@ const root = process.cwd();
 const source = path.join(root, 'estudiantes-mvp');
 const output = path.join(root, '.pages-estudiantes');
 const publicStudent = path.join(output, 'estudiantes');
+const VERSION = '2.3.2';
 
 if (!fs.existsSync(source) || !fs.statSync(source).isDirectory()) {
   throw new Error('No se encontró la carpeta estudiantes-mvp.');
@@ -27,6 +28,26 @@ fs.cpSync(source, publicStudent, {
   recursive: true,
   force: true
 });
+
+/*
+  La consulta optimizada se carga después de sheets.service.js y antes del
+  controlador de revisión. Así el modal aparece desde el primer clic y el
+  controlador utiliza el endpoint rápido /api/acceso-estudiante.
+*/
+const copiedEntry = path.join(publicStudent, 'estudiante.html');
+let studentHtml = fs.readFileSync(copiedEntry, 'utf8');
+studentHtml = studentHtml.replace(/\?v=2\.3\.1/g, `?v=${VERSION}`);
+
+const optimizedScript = `  <script src="js/estudiante.consulta.optimizada.js?v=${VERSION}"></script>\n`;
+if (!studentHtml.includes('estudiante.consulta.optimizada.js')) {
+  const revisionScript = /\s*<script src="js\/estudiante\.consulta\.revision\.js[^>]*><\/script>/;
+  if (revisionScript.test(studentHtml)) {
+    studentHtml = studentHtml.replace(revisionScript, `\n${optimizedScript}$&`);
+  } else {
+    studentHtml = studentHtml.replace('</body>', `${optimizedScript}</body>`);
+  }
+}
+fs.writeFileSync(copiedEntry, studentHtml, 'utf8');
 
 const indexHtml = `<!doctype html>
 <html lang="es">
@@ -82,5 +103,6 @@ for (const directory of forbidden) {
 
 console.log('[Pages estudiantes] Carpeta preparada en .pages-estudiantes.');
 console.log('[Pages estudiantes] Ruta pública: /estudiantes/estudiante');
+console.log(`[Pages estudiantes] Consulta optimizada activa (${VERSION}).`);
 console.log('[Pages estudiantes] Coordinadores y administrador no fueron copiados.');
 console.log('[Pages estudiantes] La carpeta functions permanece en la raíz para habilitar /api/*.');
