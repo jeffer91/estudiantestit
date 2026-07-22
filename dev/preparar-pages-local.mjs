@@ -4,6 +4,7 @@ import process from 'node:process';
 
 const root = process.cwd();
 const output = path.join(root, '.pages-local');
+const VERSION_ESTUDIANTES = '2.3.2';
 
 const staticDirectories = [
   'estudiantes-mvp',
@@ -51,6 +52,26 @@ function copyFile(name) {
   return true;
 }
 
+function prepararEstudiantesLocal() {
+  const entry = path.join(output, 'estudiantes-mvp', 'estudiante.html');
+  if (!fs.existsSync(entry)) return;
+
+  let html = fs.readFileSync(entry, 'utf8');
+  html = html.replace(/\?v=2\.3\.1/g, `?v=${VERSION_ESTUDIANTES}`);
+
+  const optimizedScript = `  <script src="js/estudiante.consulta.optimizada.js?v=${VERSION_ESTUDIANTES}"></script>\n`;
+  if (!html.includes('estudiante.consulta.optimizada.js')) {
+    const revisionScript = /\s*<script src="js\/estudiante\.consulta\.revision\.js[^>]*><\/script>/;
+    if (revisionScript.test(html)) {
+      html = html.replace(revisionScript, `\n${optimizedScript}$&`);
+    } else {
+      html = html.replace('</body>', `${optimizedScript}</body>`);
+    }
+  }
+
+  fs.writeFileSync(entry, html, 'utf8');
+}
+
 fs.rmSync(output, { recursive: true, force: true });
 fs.mkdirSync(output, { recursive: true });
 
@@ -66,6 +87,8 @@ if (!copiedDirectories.includes('coordinadores-mvp')) {
 if (!copiedDirectories.includes('administrador')) {
   throw new Error('No se encontró administrador para preparar Pages local.');
 }
+
+prepararEstudiantesLocal();
 
 if (!copiedFiles.includes('index.html')) {
   const index = `<!doctype html>
@@ -86,4 +109,5 @@ if (!copiedFiles.includes('index.html')) {
 }
 
 console.log('[Pages local] Carpeta estática preparada en .pages-local.');
+console.log(`[Pages local] Consulta optimizada de estudiantes activa (${VERSION_ESTUDIANTES}).`);
 console.log('[Pages local] La carpeta functions permanece fuera de los archivos estáticos para habilitar /api/*.');
