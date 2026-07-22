@@ -5,6 +5,7 @@ export const ALLOWED_ORIGINS = new Set([
   'https://titulos.pages.dev',
   'https://titulos-administrador.pages.dev',
   'https://titulos-coordinadores.pages.dev',
+  'https://coordinadores.pages.dev',
   'http://127.0.0.1:5500',
   'http://localhost:5500',
   'http://127.0.0.1:8788',
@@ -31,7 +32,12 @@ export function role(request) {
   const origin = requestOrigin(request).toLowerCase();
 
   if (origin.includes('titulos-administrador.pages.dev')) return 'admin';
-  if (origin.includes('titulos-coordinadores.pages.dev')) return 'coordinator';
+  if (
+    origin.includes('titulos-coordinadores.pages.dev') ||
+    origin.includes('coordinadores.pages.dev')
+  ) {
+    return 'coordinator';
+  }
   if (origin.includes('titulos.pages.dev')) return 'student';
 
   if (
