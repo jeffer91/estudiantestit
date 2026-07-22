@@ -23,8 +23,34 @@ function cargarCatalogos(forzar){
 }
 function cargarTitulos(forzar){state().setCargando(true);return sheets().listarEnvios({forzar:forzar===true}).then(function(lista){state().setEnvios(lista||[]);resumen();return lista||[];}).catch(function(e){estado('No se pudieron actualizar los envíos: '+textoError(e),'error');return[];}).finally(function(){state().setCargando(false);});}
 function abrirDetalle(id){var envio=state().seleccionarEstudiante(id);if(!envio){estado('No se encontró el estudiante.','error');return;}state().setEstudianteSeleccionado(envio);modal().abrir(envio);}
-function aprobar(){var r=modal().obtenerResolucionAprobar();if(!r.ok)return;state().setCargando(true);sheets().aprobarEnvio(r.data.envio,r.data).then(function(x){modal().cerrar();estado(x.mensaje||'Título aprobado.','success');if(sheets().invalidarCacheEnvios)sheets().invalidarCacheEnvios();return cargarTitulos(true);}).catch(function(e){modal().mostrarEstado('No se guardó la aprobación: '+textoError(e),'error');}).finally(function(){state().setCargando(false);});}
-function devolver(){var r=modal().obtenerResolucionDevolver();if(!r.ok)return;if(!window.confirm('¿Confirmas que deseas devolver estas propuestas al estudiante?'))return;state().setCargando(true);sheets().devolverEnvio(r.data.envio,r.data).then(function(x){modal().cerrar();estado(x.mensaje||'Título devuelto.','success');if(sheets().invalidarCacheEnvios)sheets().invalidarCacheEnvios();return cargarTitulos(true);}).catch(function(e){modal().mostrarEstado('No se realizó la devolución: '+textoError(e),'error');}).finally(function(){state().setCargando(false);});}
+function cerrarTrasGuardar(mensaje){
+ modal().confirmarGuardado(mensaje);
+ window.setTimeout(function(){
+   modal().cerrar({forzar:true,descartar:true});
+   cargarTitulos(true);
+ },1100);
+}
+function aprobar(){
+ var r=modal().obtenerResolucionAprobar();
+ if(!r.ok)return;
+ modal().establecerGuardando(true,'Guardando el título y el comentario...');
+ sheets().aprobarEnvio(r.data.envio,r.data).then(function(x){
+   estado(x.mensaje||'Título aprobado.','success');
+   if(sheets().invalidarCacheEnvios)sheets().invalidarCacheEnvios();
+   cerrarTrasGuardar(x.mensaje||'Título y comentario guardados correctamente.');
+ }).catch(function(e){modal().errorGuardado('No se guardó la aprobación: '+textoError(e));});
+}
+function devolver(){
+ var r=modal().obtenerResolucionDevolver();
+ if(!r.ok)return;
+ if(!window.confirm('¿Confirmas que deseas devolver estas propuestas al estudiante?'))return;
+ modal().establecerGuardando(true,'Guardando la devolución y el comentario...');
+ sheets().devolverEnvio(r.data.envio,r.data).then(function(x){
+   estado(x.mensaje||'Título devuelto.','success');
+   if(sheets().invalidarCacheEnvios)sheets().invalidarCacheEnvios();
+   cerrarTrasGuardar(x.mensaje||'Devolución y comentario guardados correctamente.');
+ }).catch(function(e){modal().errorGuardado('No se realizó la devolución: '+textoError(e));});
+}
 function diagnostico(){ui().mostrarDiagnostico();ui().escribirDiagnostico({estado:'probando',fuentePrincipal:fuenteActual});Promise.allSettled([sheets().leerConfiguracion(),sheets().diagnostico(),sheets().listarCoordinadores(),sheets().listarPeriodos()]).then(function(p){ui().escribirDiagnostico({fuentePrincipal:fuenteActual,configuracion:p[0].status==='fulfilled'?p[0].value:{error:textoError(p[0].reason)},conexion:p[1].status==='fulfilled'?p[1].value:{error:textoError(p[1].reason)},coordinadores:p[2].status==='fulfilled'?p[2].value.length:textoError(p[2].reason),periodos:p[3].status==='fulfilled'?p[3].value.periodos.length:textoError(p[3].reason),consultaEnvios:sheets().obtenerDiagnosticoConsulta?sheets().obtenerDiagnosticoConsulta():{},filtros:state().obtenerDiagnosticoFiltros(),fecha:new Date().toISOString()});});}
 function eventos(){var p=$('periodoSelect'),c=$('coordinadorSelect'),b=$('buscadorInput');if(p)p.addEventListener('change',function(){state().setPeriodoActual(p.value);});if(c)c.addEventListener('change',function(){state().setCoordinadorActual(c.value);});if(b)b.addEventListener('input',function(){state().setBusqueda(b.value);});document.addEventListener('click',function(e){var x=e.target&&e.target.closest?e.target.closest('[data-accion]'):null;if(!x)return;var a=x.getAttribute('data-accion');if(a==='cambiar-vista')state().setVistaActual(x.getAttribute('data-vista'));else if(a==='actualizar-datos')cargarCatalogos(true);else if(a==='ver-detalle')abrirDetalle(x.getAttribute('data-envio-id'));else if(a==='cerrar-modal')modal().cerrar();else if(a==='aprobar-envio')aprobar();else if(a==='devolver-envio')devolver();else if(a==='mostrar-diagnostico')diagnostico();else if(a==='ocultar-diagnostico')ui().ocultarDiagnostico();});document.addEventListener('keydown',function(e){if(e.key==='Escape')modal().cerrar();});}
 function iniciar(){if(iniciado)return;iniciado=true;try{validar();state().iniciar();ui().iniciar();modal().iniciar();eventos();cargarCatalogos(false);}catch(e){var el=$('estadoPrincipal');if(el){el.className='status-message is-error';el.textContent=textoError(e);}console.error('[CoordinadorMVPApp]',e);}}
