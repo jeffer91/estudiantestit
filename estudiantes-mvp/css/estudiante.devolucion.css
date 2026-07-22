@@ -1,0 +1,199 @@
+/* Estado de devolución integrado en el paso Datos. */
+.returned-review[hidden] {
+  display: none !important;
+}
+
+.returned-review {
+  margin-top: 22px;
+  padding: 22px;
+  border: 1px solid #f0c4c4;
+  border-left: 6px solid #c62828;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #fffafa 0%, #ffffff 100%);
+  box-shadow: 0 12px 26px rgba(85, 18, 18, 0.08);
+}
+
+.returned-review__header {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.returned-review__icon {
+  display: grid;
+  flex: 0 0 46px;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  border-radius: 50%;
+  background: #fde8e8;
+  color: #a71919;
+  font-size: 1.55rem;
+  font-weight: 900;
+}
+
+.returned-review__eyebrow {
+  margin: 0 0 4px;
+  color: #a71919;
+  font-size: 0.74rem;
+  font-weight: 900;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.returned-review h3 {
+  margin: 0;
+  color: #10223d;
+  font-size: clamp(1.3rem, 2.4vw, 1.7rem);
+  line-height: 1.2;
+}
+
+.returned-review__header p:last-child {
+  margin: 7px 0 0;
+  color: #5e6b7d;
+  line-height: 1.5;
+}
+
+.returned-review__comment {
+  margin-top: 18px;
+  padding: 17px 18px;
+  border: 1px solid #f1c7c7;
+  border-radius: 13px;
+  background: #fff3f3;
+}
+
+.returned-review__comment span,
+.returned-review__meta span {
+  display: block;
+  margin-bottom: 6px;
+  color: #8f1d1d;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.returned-review__comment p {
+  margin: 0;
+  color: #2f3948;
+  font-size: 1rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.returned-review__meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.returned-review__meta > div {
+  padding: 12px 14px;
+  border: 1px solid #e3e8ef;
+  border-radius: 11px;
+  background: #f8fafc;
+}
+
+.returned-review__meta span {
+  color: #64748b;
+}
+
+.returned-review__meta strong {
+  display: block;
+  overflow-wrap: anywhere;
+  color: #172033;
+  line-height: 1.35;
+}
+
+.returned-review__titles {
+  margin-top: 18px;
+}
+
+.returned-review__titles h4 {
+  margin: 0 0 10px;
+  color: #10223d;
+  font-size: 1rem;
+}
+
+.returned-review__titles ol {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.returned-review__titles li {
+  padding: 14px 16px;
+  border: 1px solid #dbe3ed;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.returned-review__titles li.is-favorite {
+  border-color: #d4ae45;
+  background: #fff9e8;
+}
+
+.returned-review__titles li > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.returned-review__titles b {
+  color: #0b315d;
+}
+
+.returned-review__titles li span {
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #f3d574;
+  color: #614800;
+  font-size: 0.68rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.returned-review__titles p {
+  margin: 8px 0 0;
+  color: #334155;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.returned-review__notice {
+  margin-top: 16px;
+  padding: 13px 15px;
+  border-left: 4px solid #0d4f89;
+  border-radius: 10px;
+  background: #eef6ff;
+  color: #334a63;
+  line-height: 1.48;
+}
+
+[data-reenvio-activo="true"] {
+  min-width: 210px;
+}
+
+@media (max-width: 700px) {
+  .returned-review {
+    padding: 18px;
+  }
+
+  .returned-review__meta {
+    grid-template-columns: 1fr;
+  }
+
+  .returned-review__titles li > div {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  [data-reenvio-activo="true"] {
+    width: 100%;
+    min-width: 0;
+  }
+}
