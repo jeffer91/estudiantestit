@@ -7,6 +7,9 @@
 
   var consultaEnCurso = null;
   var intentosInstalacion = 0;
+  var temporizadoresModal = [];
+  var MODAL_ID = 'modalConsultaRegistro';
+  var MODAL_STYLE_ID = 'modalConsultaRegistroStyles';
 
   function modulo(nombre) {
     return window[nombre] || null;
@@ -56,14 +59,23 @@
     return limpia.length === 10 ? limpia : '';
   }
 
-  function parsearJson(valor) {
-    if (!valor) return null;
-    if (typeof valor === 'object') return valor;
-    try {
-      return JSON.parse(valor);
-    } catch (_error) {
-      return null;
+  function parsearCapasJson(valor) {
+    var actual = valor;
+    var i;
+    for (i = 0; i < 6 && typeof actual === 'string'; i += 1) {
+      if (!texto(actual)) return {};
+      try {
+        actual = JSON.parse(actual);
+      } catch (_error) {
+        break;
+      }
     }
+    return actual;
+  }
+
+  function parsearJson(valor) {
+    var parsed = parsearCapasJson(valor);
+    return parsed && typeof parsed === 'object' ? parsed : null;
   }
 
   function apiBase() {
@@ -79,9 +91,99 @@
     return origen && origen !== 'null' ? origen.replace(/\/$/, '') : 'https://titulos.pages.dev';
   }
 
+  function asegurarEstilosModal() {
+    var style;
+    if (document.getElementById(MODAL_STYLE_ID)) return;
+    style = document.createElement('style');
+    style.id = MODAL_STYLE_ID;
+    style.textContent =
+      '.consulta-modal{position:fixed;inset:0;z-index:99999;display:grid;place-items:center;padding:20px;background:rgba(3,18,42,.72);backdrop-filter:blur(5px)}' +
+      '.consulta-modal[hidden]{display:none!important}' +
+      '.consulta-modal__card{width:min(520px,100%);box-sizing:border-box;background:#fff;border:1px solid rgba(214,172,84,.7);border-radius:24px;padding:30px;box-shadow:0 28px 80px rgba(0,0,0,.28);text-align:center}' +
+      '.consulta-modal__spinner{width:58px;height:58px;margin:0 auto 18px;border:6px solid #e6edf6;border-top-color:#123b70;border-radius:50%;animation:consultaSpin .8s linear infinite}' +
+      '.consulta-modal__badge{display:inline-block;margin-bottom:10px;padding:7px 13px;border:1px solid #d6ac54;border-radius:999px;color:#123b70;font-weight:800;font-size:13px;letter-spacing:.08em;text-transform:uppercase}' +
+      '.consulta-modal__card h2{margin:0 0 9px;color:#071b39;font-size:clamp(24px,4vw,32px)}' +
+      '.consulta-modal__card p{margin:0;color:#53647b;font-size:16px;line-height:1.55}' +
+      '.consulta-modal__steps{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:22px}' +
+      '.consulta-modal__step{height:7px;border-radius:999px;background:#dfe7f1;transition:background .25s ease,transform .25s ease}' +
+      '.consulta-modal__step.is-active{background:#d6ac54;transform:scaleY(1.2)}' +
+      '.consulta-modal__time{display:block;margin-top:16px;color:#7b8798;font-size:13px}' +
+      '@keyframes consultaSpin{to{transform:rotate(360deg)}}' +
+      '@media(max-width:520px){.consulta-modal__card{padding:24px 18px;border-radius:20px}}';
+    document.head.appendChild(style);
+  }
+
+  function obtenerModal() {
+    var modal = document.getElementById(MODAL_ID);
+    if (modal) return modal;
+    asegurarEstilosModal();
+    modal = document.createElement('div');
+    modal.id = MODAL_ID;
+    modal.className = 'consulta-modal';
+    modal.hidden = true;
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-labelledby', MODAL_ID + 'Titulo');
+    modal.innerHTML =
+      '<div class="consulta-modal__card">' +
+        '<div class="consulta-modal__spinner" aria-hidden="true"></div>' +
+        '<span class="consulta-modal__badge">Consulta segura</span>' +
+        '<h2 id="' + MODAL_ID + 'Titulo">Verificando tu registro</h2>' +
+        '<p id="' + MODAL_ID + 'Mensaje" aria-live="polite">Consultando tus datos académicos…</p>' +
+        '<div class="consulta-modal__steps" aria-hidden="true">' +
+          '<span class="consulta-modal__step is-active"></span>' +
+          '<span class="consulta-modal__step"></span>' +
+          '<span class="consulta-modal__step"></span>' +
+        '</div>' +
+        '<small class="consulta-modal__time">Esto puede tardar algunos segundos.</small>' +
+      '</div>';
+    document.body.appendChild(modal);
+    return modal;
+  }
+
+  function limpiarTemporizadoresModal() {
+    temporizadoresModal.forEach(function (id) { window.clearTimeout(id); });
+    temporizadoresModal = [];
+  }
+
+  function actualizarModal(mensaje, paso) {
+    var modal = obtenerModal();
+    var textoModal = modal.querySelector('#' + MODAL_ID + 'Mensaje');
+    var pasos = modal.querySelectorAll('.consulta-modal__step');
+    var indice = Math.max(1, Math.min(3, Number(paso || 1)));
+    if (textoModal) textoModal.textContent = mensaje;
+    Array.prototype.forEach.call(pasos, function (item, posicion) {
+      item.classList.toggle('is-active', posicion < indice);
+    });
+  }
+
+  function abrirModalConsulta() {
+    var modal = obtenerModal();
+    limpiarTemporizadoresModal();
+    actualizarModal('Consultando tus datos académicos…', 1);
+    modal.hidden = false;
+    document.documentElement.style.overflow = 'hidden';
+    temporizadoresModal.push(window.setTimeout(function () {
+      actualizarModal('Verificando los títulos que enviaste…', 2);
+    }, 2200));
+    temporizadoresModal.push(window.setTimeout(function () {
+      actualizarModal('Revisando la resolución del coordinador…', 3);
+    }, 5200));
+    temporizadoresModal.push(window.setTimeout(function () {
+      actualizarModal('Consolidando el resultado de tu registro…', 3);
+    }, 10000));
+  }
+
+  function cerrarModalConsulta() {
+    var modal = document.getElementById(MODAL_ID);
+    limpiarTemporizadoresModal();
+    if (modal) modal.hidden = true;
+    document.documentElement.style.overflow = '';
+  }
+
   function consultarAcceso(identificacion) {
     var controller = typeof AbortController === 'function' ? new AbortController() : null;
-    var timer = controller ? window.setTimeout(function () { controller.abort(); }, 45000) : null;
+    var timer = controller ? window.setTimeout(function () { controller.abort(); }, 32000) : null;
     var opciones = {
       method: 'POST',
       cache: 'no-store',
@@ -104,10 +206,13 @@
     return fetch(apiBase() + '/api/acceso-estudiante', opciones)
       .then(function (respuesta) {
         return respuesta.text().then(function (cuerpo) {
-          var json = {};
+          var json;
           try {
-            json = cuerpo ? JSON.parse(cuerpo) : {};
+            json = parsearCapasJson(cuerpo || '{}');
           } catch (_error) {
+            throw new Error('La consulta respondió en un formato no válido.');
+          }
+          if (!json || typeof json !== 'object') {
             throw new Error('La consulta respondió en un formato no válido.');
           }
           if (!respuesta.ok || json.ok === false || json.consultaCompleta === false) {
@@ -195,10 +300,8 @@
 
   function favorito(envio) {
     var valor = texto(campo(envio || {}, [
-      'tituloPreferidoNumero',
-      'preferido',
-      'tituloSeleccionadoNumero',
-      'tituloElegidoNumero'
+      'tituloPreferidoNumero', 'preferido', 'tituloPreferido',
+      'tituloSeleccionadoNumero', 'tituloElegidoNumero'
     ]));
     if (/^[123]$/.test(valor)) return Number(valor);
     var coincidencia = valor.match(/(?:t[ií]tulo|propuesta|opci[oó]n|favorito)\s*#?\s*([123])/i);
@@ -314,8 +417,8 @@
         (observacion ? '<div class="student-process-panel__comment"><span>Comentario del coordinador' +
           (revisor ? ': ' + escapar(revisor) : '') + '</span><p>' + escapar(observacion) + '</p></div>' : '');
       if (continuar) continuar.hidden = true;
-    } else {
-      if (continuar) continuar.hidden = true;
+    } else if (continuar) {
+      continuar.hidden = true;
     }
 
     panel.className = 'student-process-panel student-process-panel--' + clase;
@@ -376,20 +479,16 @@
 
     envio = resultado.envioOriginal || resultado.envio || null;
     resolucion = resultado.resolucion || null;
-    estado = estadoEfectivo(resultado);
+    estado = estadoEfectivo(resultado) || 'SIN_ENVIO';
 
     limpiarPanel();
-
     if (estado === 'DEVUELTO') prepararReenvio(estudiante, envio || resultado.envio || {});
     else prepararEstudianteNuevo(estudiante);
 
     if (ui && typeof ui.pintarEstudiante === 'function') ui.pintarEstudiante(estudiante);
     if (ui && typeof ui.mostrarEstado === 'function') ui.mostrarEstado('#estadoPrincipal', '', '');
     if (app && typeof app.irPaso === 'function') app.irPaso('datos');
-
-    if (estado !== 'SIN_ENVIO') {
-      mostrarPanel(resultado, estado, envio || resultado.envio || {}, resolucion || {});
-    }
+    if (estado !== 'SIN_ENVIO') mostrarPanel(resultado, estado, envio || resultado.envio || {}, resolucion || {});
   }
 
   function mostrarError(mensaje) {
@@ -400,6 +499,12 @@
       ui.mostrarEstado('#estadoPrincipal', mensaje, 'error');
     }
     if (input) input.focus();
+  }
+
+  function finalizarConsulta(ui) {
+    consultaEnCurso = null;
+    cerrarModalConsulta();
+    if (ui && typeof ui.setCargando === 'function') ui.setCargando(false);
   }
 
   function manejarConsulta(evento) {
@@ -419,23 +524,27 @@
 
     input.value = identificacion;
     limpiarPanel();
-    if (ui && typeof ui.setCargando === 'function') {
-      ui.setCargando(true, 'Consultando datos, envíos y resoluciones...');
-    }
-    if (ui && typeof ui.mostrarEstado === 'function') {
-      ui.mostrarEstado('#estadoPrincipal', 'Verificando tu proceso de titulación...', 'info');
-    }
+    if (ui && typeof ui.setCargando === 'function') ui.setCargando(false);
+    if (ui && typeof ui.mostrarEstado === 'function') ui.mostrarEstado('#estadoPrincipal', '', '');
 
-    consultaEnCurso = consultarAcceso(identificacion)
+    /* El modal se abre antes de iniciar cualquier solicitud. */
+    abrirModalConsulta();
+
+    consultaEnCurso = new Promise(function (resolve) {
+      window.requestAnimationFrame(function () {
+        window.requestAnimationFrame(resolve);
+      });
+    })
+      .then(function () { return consultarAcceso(identificacion); })
       .then(function (resultado) {
+        actualizarModal('Registro verificado. Preparando la información…', 3);
         procesarResultado(resultado, identificacion);
       })
       .catch(function (error) {
-        mostrarError(error && error.message || 'No se pudo consultar la información.');
+        mostrarError(error && error.message || 'No fue posible verificar tu registro.');
       })
       .then(function () {
-        consultaEnCurso = null;
-        if (ui && typeof ui.setCargando === 'function') ui.setCargando(false);
+        finalizarConsulta(ui);
       });
   }
 
@@ -453,6 +562,7 @@
     input.maxLength = 10;
     input.pattern = '[0-9]{9,10}';
     panelEstado();
+    obtenerModal();
     form.addEventListener('submit', manejarConsulta, true);
   }
 
