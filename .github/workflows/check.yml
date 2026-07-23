@@ -15,9 +15,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Verificar sintaxis
-        run: npm run check:syntax
-      - name: Verificar aplicaciones
-        run: npm run check:apps
-      - name: Verificar arquitectura
-        run: npm run check:architecture
+      - name: Verificar proyecto completo
+        run: npm run check
+      - name: Verificar build de Estudiantes
+        run: npm run build:estudiantes
