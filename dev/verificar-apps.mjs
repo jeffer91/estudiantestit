@@ -87,12 +87,11 @@ assert(/\/api\/titulos/.test(studentSheets), 'Estudiantes no utiliza la API de T
 assert(/\/api\/acceso-estudiante/.test(studentReview), 'La consulta inicial de Estudiantes no utiliza la API unificada.');
 assert(/abrirModalConsulta\(\)/.test(studentReview), 'El modal de consulta no se abre inmediatamente.');
 assert(/parsearCapasJson/.test(studentReview), 'El frontend no procesa respuestas JSON anidadas.');
-assert(/Promise\.allSettled/.test(accessApi), 'La API unificada no ejecuta consultas paralelas.');
-assert(/CONSULTAR_ENVIO_BASE_CEDULA/.test(accessApi), 'La API unificada no consulta Envios de forma independiente.');
-assert(/CONSULTAR_RESOLUCION_CEDULA/.test(accessApi), 'La API unificada no consulta Resoluciones de forma independiente.');
-assert(/CONSULTAR_ENVIO_CEDULA/.test(accessApi), 'La API unificada no conserva el fallback de compatibilidad.');
-assert(!/legacyPromise/.test(accessApi), 'La compatibilidad antigua todavía se inicia en todas las consultas.');
-assert(/Fallback único y condicional/.test(accessApi), 'La compatibilidad no está limitada a un fallback condicional.');
+assert(/Promise\.allSettled/.test(accessApi), 'La API unificada no ejecuta las consultas del programa en paralelo.');
+assert(/CONSULTAR_ENVIO_CEDULA/.test(accessApi), 'La API unificada no utiliza el flujo de Títulos actualmente publicado.');
+assert(!/CONSULTAR_ENVIO_BASE_CEDULA/.test(accessApi), 'El programa todavía depende de una acción de Apps Script aún no migrada.');
+assert(!/CONSULTAR_RESOLUCION_CEDULA/.test(accessApi), 'El programa todavía depende de una acción de Apps Script aún no migrada.');
+assert(/flujoTitulos:\s*['"]CONSULTAR_ENVIO_CEDULA['"]/.test(accessApi), 'La respuesta no identifica el flujo real de Títulos.');
 assert(/periodEquivalent/.test(accessApi), 'La API unificada no compara etiquetas e identificadores de período.');
 assert(/origen:\s*['"]RESOLUCIONES['"]/.test(accessApi), 'Resoluciones no tiene la mayor jerarquía.');
 assert(/origen:\s*['"]ENVIOS['"]/.test(accessApi), 'Envíos no tiene la segunda jerarquía.');
@@ -128,6 +127,6 @@ if (errors.length) {
   process.exit(1);
 }
 
-console.log('[Apps] Estudiantes: controlador único, tres consultas iniciales, fallback condicional y jerarquía correctos.');
+console.log('[Apps] Estudiantes: controlador único, Requisitos y flujo publicado de Títulos correctamente integrados.');
 console.log('[Apps] Coordinadores: archivos, API y elementos principales correctos.');
 console.log('[Apps] Administrador: archivos, API central y elementos principales correctos.');

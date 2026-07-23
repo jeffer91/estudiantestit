@@ -6,7 +6,7 @@ const root = process.cwd();
 const source = path.join(root, 'estudiantes-mvp');
 const output = path.join(root, '.pages-estudiantes');
 const publicStudent = path.join(output, 'estudiantes');
-const VERSION = '2.4.1';
+const VERSION = '2.4.2';
 const LEGACY_SCRIPTS = [
   'estudiante.consulta.optimizada.js',
   'estudiante.devolucion.runtime.js',
@@ -94,7 +94,7 @@ for (const directory of ['coordinadores-mvp', 'administrador']) {
 console.log('[Pages estudiantes] Carpeta preparada en .pages-estudiantes.');
 console.log('[Pages estudiantes] Ruta pública: /estudiantes/estudiante');
 console.log(`[Pages estudiantes] Consulta unificada activa (${VERSION}).`);
-console.log('[Pages estudiantes] Modal inmediato y compatibilidad de resoluciones activos.');
+console.log('[Pages estudiantes] Modal inmediato y flujo publicado de Títulos activos.');
 console.log('[Pages estudiantes] Sin controladores duplicados ni parches de runtime.');
 console.log('[Pages estudiantes] Coordinadores y administrador no fueron copiados.');
 console.log('[Pages estudiantes] La carpeta functions permanece en la raíz para habilitar /api/*.');
