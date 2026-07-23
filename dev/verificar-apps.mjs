@@ -77,7 +77,7 @@ const accessApi = read('functions/api/acceso-estudiante.js');
 const requirementsApi = read('functions/api/requisitos.js');
 const studentBuild = read('dev/preparar-pages-estudiantes.mjs');
 const localBuild = read('dev/preparar-pages-local.mjs');
-const appsScript = read('apps-script/RESPALDO-TITULOS-APP/Codigo.gs');
+const appsScript = read('apps-script/RESPALDO-TITULOS-APP/consulta-estudiantes.gs');
 
 assert(/API_PUBLICA\s*=\s*['"]https:\/\/titulos\.pages\.dev['"]/.test(adminApi), 'Administrador no apunta a la API central en producción.');
 assert(/https:\/\/titulos-coordinadores\.pages\.dev/.test(coordinatorBootstrap), 'Coordinadores no apunta a su API oficial en producción.');
@@ -100,8 +100,8 @@ assert(!/estudiante\.resolucion\.patch|estudiante\.consulta\.optimizada|estudian
 assert(!/estudiante\.consulta\.optimizada|estudiante\.devolucion\.runtime/.test(studentBuild), 'El build de Estudiantes todavía inserta controladores adicionales.');
 assert(!/estudiante\.consulta\.optimizada|estudiante\.devolucion\.runtime/.test(localBuild), 'El build local todavía inserta controladores adicionales.');
 assert(!/createElement\(['"]script['"]\)[\s\S]*estudiante\.consulta\.revision/.test(studentRequirements), 'Requisitos vuelve a cargar dinámicamente el controlador de consulta.');
-assert(/CONSULTAR_ENVIO_BASE_CEDULA/.test(appsScript), 'Código.gs no expone la consulta separada de Envios.');
-assert(/CONSULTAR_RESOLUCION_CEDULA/.test(appsScript), 'Código.gs no expone la consulta separada de Resoluciones.');
+assert(/CONSULTAR_ENVIO_BASE_CEDULA/.test(appsScript), 'El módulo de Apps Script no expone la consulta separada de Envios.');
+assert(/CONSULTAR_RESOLUCION_CEDULA/.test(appsScript), 'El módulo de Apps Script no expone la consulta separada de Resoluciones.');
 
 const studentOrder = [
   'requisitos.estudiantes.service.js',
