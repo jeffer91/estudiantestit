@@ -105,7 +105,7 @@ function sameCedula(item, cedula) {
 
 function recordPeriod(item) {
   return text(flexible(item || {}, [
-    'periodoId', 'periodId', 'periodoLabel', 'periodo', 'Periodo'
+    'periodoLabel', 'periodo', 'Periodo', 'periodoId', 'periodId'
   ]));
 }
 
