@@ -6,7 +6,12 @@ const root = process.cwd();
 const source = path.join(root, 'estudiantes-mvp');
 const output = path.join(root, '.pages-estudiantes');
 const publicStudent = path.join(output, 'estudiantes');
-const VERSION = '2.3.6';
+const VERSION = '2.3.8';
+const LEGACY_SCRIPTS = [
+  'estudiante.consulta.optimizada.js',
+  'estudiante.devolucion.runtime.js',
+  'estudiante.resolucion.patch.js'
+];
 
 if (!fs.existsSync(source) || !fs.statSync(source).isDirectory()) {
   throw new Error('No se encontró la carpeta estudiantes-mvp.');
@@ -17,55 +22,24 @@ if (!fs.existsSync(studentEntry)) {
   throw new Error('No se encontró estudiantes-mvp/estudiante.html.');
 }
 
-const runtimeFix = path.join(source, 'js', 'estudiante.devolucion.runtime.js');
-if (!fs.existsSync(runtimeFix)) {
-  throw new Error('No se encontró estudiante.devolucion.runtime.js. Ejecuta git pull origin main.');
-}
-
 fs.rmSync(output, { recursive: true, force: true });
 fs.mkdirSync(output, { recursive: true });
+fs.cpSync(source, publicStudent, { recursive: true, force: true });
 
-/*
-  Se publica solamente la aplicación de estudiantes.
-  Coordinadores y administrador permanecen fuera de los archivos estáticos.
-*/
-fs.cpSync(source, publicStudent, {
-  recursive: true,
-  force: true
-});
-
-/*
-  La consulta optimizada se carga después de sheets.service.js y antes del
-  controlador de revisión. El runtime de devolución se carga al final para
-  combinar datos académicos, Envios y Resoluciones incluso si una respuesta
-  de Apps Script llega como JSON anidado.
-*/
 const copiedEntry = path.join(publicStudent, 'estudiante.html');
 let studentHtml = fs.readFileSync(copiedEntry, 'utf8');
-studentHtml = studentHtml.replace(/\?v=2\.3\.\d+/g, `?v=${VERSION}`);
 
-const optimizedScript = `  <script src="js/estudiante.consulta.optimizada.js?v=${VERSION}"></script>\n`;
-if (!studentHtml.includes('estudiante.consulta.optimizada.js')) {
-  const revisionScript = /\s*<script src="js\/estudiante\.consulta\.revision\.js[^>]*><\/script>/;
-  if (revisionScript.test(studentHtml)) {
-    studentHtml = studentHtml.replace(revisionScript, `\n${optimizedScript}$&`);
-  } else {
-    studentHtml = studentHtml.replace('</body>', `${optimizedScript}</body>`);
+for (const legacy of LEGACY_SCRIPTS) {
+  if (studentHtml.includes(legacy)) {
+    throw new Error('El HTML de Estudiantes todavía carga un controlador antiguo: ' + legacy);
   }
 }
 
-const runtimeScript = `  <script src="js/estudiante.devolucion.runtime.js?v=${VERSION}"></script>\n`;
-if (!studentHtml.includes('estudiante.devolucion.runtime.js')) {
-  studentHtml = studentHtml.replace('</body>', `${runtimeScript}</body>`);
+if (!studentHtml.includes('estudiante.consulta.revision.js')) {
+  throw new Error('El HTML de Estudiantes no carga la consulta unificada.');
 }
 
-if (!studentHtml.includes('estado de tus propuestas')) {
-  throw new Error('El estudiante.html local está desactualizado. Ejecuta git pull origin main antes de desplegar.');
-}
-if (!studentHtml.includes('estudiante.devolucion.runtime.js')) {
-  throw new Error('No se pudo insertar el runtime de devoluciones.');
-}
-
+studentHtml = studentHtml.replace(/\?v=\d+\.\d+\.\d+/g, `?v=${VERSION}`);
 fs.writeFileSync(copiedEntry, studentHtml, 'utf8');
 
 const indexHtml = `<!doctype html>
@@ -110,19 +84,16 @@ fs.writeFileSync(path.join(output, 'index.html'), indexHtml, 'utf8');
 fs.writeFileSync(path.join(output, '404.html'), notFoundHtml, 'utf8');
 fs.writeFileSync(path.join(output, '_headers'), headers, 'utf8');
 
-const forbidden = [
-  path.join(output, 'coordinadores-mvp'),
-  path.join(output, 'administrador')
-];
-
-for (const directory of forbidden) {
-  if (fs.existsSync(directory)) {
-    throw new Error(`Se incluyó una carpeta privada por error: ${directory}`);
+for (const directory of ['coordinadores-mvp', 'administrador']) {
+  const forbidden = path.join(output, directory);
+  if (fs.existsSync(forbidden)) {
+    throw new Error('Se incluyó una carpeta privada por error: ' + forbidden);
   }
 }
 
 console.log('[Pages estudiantes] Carpeta preparada en .pages-estudiantes.');
 console.log('[Pages estudiantes] Ruta pública: /estudiantes/estudiante');
-console.log(`[Pages estudiantes] Consulta y devolución activas (${VERSION}).`);
+console.log(`[Pages estudiantes] Consulta unificada activa (${VERSION}).`);
+console.log('[Pages estudiantes] Sin controladores duplicados ni parches de runtime.');
 console.log('[Pages estudiantes] Coordinadores y administrador no fueron copiados.');
 console.log('[Pages estudiantes] La carpeta functions permanece en la raíz para habilitar /api/*.');
