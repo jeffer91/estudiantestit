@@ -51,6 +51,35 @@ function normalizePeriod(value) {
     .trim();
 }
 
+const MONTH_NUMBER = Object.freeze({
+  enero: '01', febrero: '02', marzo: '03', abril: '04', mayo: '05', junio: '06',
+  julio: '07', agosto: '08', septiembre: '09', setiembre: '09', octubre: '10',
+  noviembre: '11', diciembre: '12'
+});
+
+function periodSignature(value) {
+  const normalized = normalizePeriod(value);
+  if (!normalized) return '';
+
+  const numeric = Array.from(normalized.matchAll(/\b(20\d{2})\s+(0?[1-9]|1[0-2])\b/g))
+    .map((match) => match[1] + '-' + String(match[2]).padStart(2, '0'));
+  if (numeric.length >= 2) return numeric[0] + '__' + numeric[1];
+
+  const named = Array.from(normalized.matchAll(/\b(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\s+(20\d{2})\b/g))
+    .map((match) => match[2] + '-' + MONTH_NUMBER[match[1]]);
+  return named.length >= 2 ? named[0] + '__' + named[1] : '';
+}
+
+function periodEquivalent(left, right) {
+  const a = normalizePeriod(left);
+  const b = normalizePeriod(right);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const signatureA = periodSignature(a);
+  const signatureB = periodSignature(b);
+  return Boolean(signatureA && signatureB && signatureA === signatureB);
+}
+
 function flexible(object, names) {
   if (!object || typeof object !== 'object') return undefined;
   const map = Object.keys(object).reduce((output, key) => {
@@ -168,10 +197,10 @@ function selectRecord(result, predicate, cedula, academicPeriod, kind) {
 
   const target = normalizePeriod(academicPeriod);
   if (target) {
-    const exact = list.filter((item) => normalizePeriod(recordPeriod(item)) === target);
+    const exact = list.filter((item) => periodEquivalent(recordPeriod(item), academicPeriod));
     if (exact.length) return latest(exact, kind);
     const withPeriod = list.filter((item) => normalizePeriod(recordPeriod(item)));
-    if (withPeriod.length > 1) return null;
+    if (withPeriod.length) return null;
   }
 
   return latest(list, kind);
@@ -283,37 +312,6 @@ async function queryTitles(env, action, cedula, period = '') {
   return decoded;
 }
 
-function querySourceWithCompatibility(primaryPromise, legacyPromise, predicate, cedula, period, kind) {
-  const promises = [primaryPromise, legacyPromise];
-  return new Promise((resolve, reject) => {
-    const fulfilled = [];
-    const errors = [];
-    let pending = promises.length;
-
-    promises.forEach((promise) => {
-      Promise.resolve(promise).then((value) => {
-        fulfilled.push(value);
-        if (selectRecord(value, predicate, cedula, period, kind)) {
-          resolve(fulfilled.slice());
-          return;
-        }
-        pending -= 1;
-        if (pending === 0) {
-          if (fulfilled.length) resolve(fulfilled);
-          else reject(errors[0] || new Error('Consulta no disponible.'));
-        }
-      }).catch((error) => {
-        errors.push(error);
-        pending -= 1;
-        if (pending === 0) {
-          if (fulfilled.length) resolve(fulfilled);
-          else reject(errors[0] || new Error('Consulta no disponible.'));
-        }
-      });
-    });
-  });
-}
-
 function normalizeStudentResult(academic, cedula, requestedPeriod) {
   const decoded = decodeNestedJson(academic);
   if (!studentFound(decoded)) return decoded;
@@ -352,7 +350,8 @@ export const __test = Object.freeze({
   looksLikeEnvio,
   looksLikeResolution,
   selectRecord,
-  effectiveState
+  effectiveState,
+  periodEquivalent
 });
 
 export async function onRequest({ request, env }) {
@@ -377,31 +376,14 @@ export async function onRequest({ request, env }) {
     if (!cedula) throw new Error('No se recibió una cédula válida.');
 
     /*
-      Tres consultas lógicas simultáneas. La compatibilidad antigua se comparte
-      entre Envíos y Resoluciones para no agregar una segunda espera secuencial.
+      Flujo normal: exactamente tres consultas iniciales y simultáneas.
+      La compatibilidad antigua solo se usa después, si una fuente no devuelve
+      un registro válido para el período académico del estudiante.
     */
-    const legacyPromise = queryTitles(env, 'CONSULTAR_ENVIO_CEDULA', cedula, requestedPeriod);
-    const envioTask = querySourceWithCompatibility(
-      queryTitles(env, 'CONSULTAR_ENVIO_BASE_CEDULA', cedula, requestedPeriod),
-      legacyPromise,
-      looksLikeEnvio,
-      cedula,
-      requestedPeriod,
-      'envio'
-    );
-    const resolutionTask = querySourceWithCompatibility(
-      queryTitles(env, 'CONSULTAR_RESOLUCION_CEDULA', cedula, requestedPeriod),
-      legacyPromise,
-      looksLikeResolution,
-      cedula,
-      requestedPeriod,
-      'resolution'
-    );
-
     const [academicSettled, envioSettled, resolutionSettled] = await Promise.allSettled([
       lookupStudent(env, cedula, requestedPeriod),
-      envioTask,
-      resolutionTask
+      queryTitles(env, 'CONSULTAR_ENVIO_BASE_CEDULA', cedula, requestedPeriod),
+      queryTitles(env, 'CONSULTAR_RESOLUCION_CEDULA', cedula, requestedPeriod)
     ]);
 
     const failures = [];
@@ -411,26 +393,16 @@ export async function onRequest({ request, env }) {
         mensaje: text(academicSettled.reason && academicSettled.reason.message) || 'Consulta no disponible.'
       });
     }
-    if (envioSettled.status === 'rejected') {
-      failures.push({ fuente: 'ENVIOS', mensaje: 'No fue posible consultar los envíos.' });
-    }
-    if (resolutionSettled.status === 'rejected') {
-      failures.push({ fuente: 'RESOLUCIONES', mensaje: 'No fue posible consultar las resoluciones.' });
-    }
 
-    const envioSources = envioSettled.status === 'fulfilled' && Array.isArray(envioSettled.value)
-      ? envioSettled.value
-      : [];
-    const resolutionSources = resolutionSettled.status === 'fulfilled' && Array.isArray(resolutionSettled.value)
-      ? resolutionSettled.value
-      : [];
+    const envioSources = envioSettled.status === 'fulfilled' ? [envioSettled.value] : [];
+    const resolutionSources = resolutionSettled.status === 'fulfilled' ? [resolutionSettled.value] : [];
 
     if (failures.length) {
       return jsonReply(request, {
         ok: false,
         consultaCompleta: false,
         fuentesFallidas: failures,
-        mensaje: 'No fue posible verificar completamente tu registro. Intenta nuevamente.',
+        mensaje: 'No fue posible consultar tus datos académicos. Intenta nuevamente.',
         duracionMs: Date.now() - startedAt
       }, 502);
     }
@@ -452,8 +424,45 @@ export async function onRequest({ request, env }) {
       academic.periodoLabel || academic.periodoId || requestedPeriod
     );
 
-    const envio = selectRecord(envioSources, looksLikeEnvio, cedula, academicPeriod, 'envio');
-    const resolucion = selectRecord(resolutionSources, looksLikeResolution, cedula, academicPeriod, 'resolution');
+    let envio = selectRecord(envioSources, looksLikeEnvio, cedula, academicPeriod, 'envio');
+    let resolucion = selectRecord(resolutionSources, looksLikeResolution, cedula, academicPeriod, 'resolution');
+    let compatibilidadTitulos = false;
+    let compatibilidadDisponible = false;
+
+    /*
+      Fallback único y condicional. También refuerza la búsqueda por período
+      cuando el estudiante posee registros históricos de otros ciclos.
+    */
+    if (!envio || !resolucion || envioSettled.status === 'rejected' || resolutionSettled.status === 'rejected') {
+      try {
+        const legacy = await queryTitles(env, 'CONSULTAR_ENVIO_CEDULA', cedula, academicPeriod);
+        compatibilidadTitulos = true;
+        compatibilidadDisponible = true;
+        envioSources.push(legacy);
+        resolutionSources.push(legacy);
+        if (!envio) envio = selectRecord(envioSources, looksLikeEnvio, cedula, academicPeriod, 'envio');
+        if (!resolucion) resolucion = selectRecord(resolutionSources, looksLikeResolution, cedula, academicPeriod, 'resolution');
+      } catch (_legacyError) {
+        compatibilidadTitulos = true;
+      }
+    }
+
+    if (envioSettled.status === 'rejected' && !envio && !compatibilidadDisponible) {
+      failures.push({ fuente: 'ENVIOS', mensaje: 'No fue posible comprobar los títulos enviados.' });
+    }
+    if (resolutionSettled.status === 'rejected' && !resolucion && !compatibilidadDisponible) {
+      failures.push({ fuente: 'RESOLUCIONES', mensaje: 'No fue posible comprobar la resolución del coordinador.' });
+    }
+    if (failures.length) {
+      return jsonReply(request, {
+        ok: false,
+        consultaCompleta: false,
+        fuentesFallidas: failures,
+        mensaje: 'No fue posible verificar completamente tu registro. Intenta nuevamente.',
+        duracionMs: Date.now() - startedAt
+      }, 502);
+    }
+
     const decision = effectiveState(envio, resolucion);
     const permiteReenvio = decision.estado === 'DEVUELTO';
     const tieneEnvio = Boolean(envio);
@@ -478,12 +487,16 @@ export async function onRequest({ request, env }) {
       origenDecision: decision.origen,
       permiteReenvio,
       consultaCompleta: true,
-      consultaPeriodoReforzada: false,
-      consultas: { requisitos: 'ok', envios: 'ok', resoluciones: 'ok' },
+      consultaPeriodoReforzada: compatibilidadTitulos && Boolean(academicPeriod),
+      consultas: {
+        requisitos: 'ok',
+        envios: envioSettled.status === 'fulfilled' ? 'ok' : (compatibilidadDisponible ? 'compatibilidad' : 'error'),
+        resoluciones: resolutionSettled.status === 'fulfilled' ? 'ok' : (compatibilidadDisponible ? 'compatibilidad' : 'error')
+      },
       fuente: academic.fuente || 'CONSULTA_ACCESO_PARALELA',
       fuenteEnvio: 'RESPALDO_TITULOS_APP_ENVÍOS',
       fuenteResolucion: 'RESPALDO_TITULOS_APP_RESOLUCIONES',
-      compatibilidadTitulos: true,
+      compatibilidadTitulos,
       mensaje: permiteReenvio
         ? 'Tus propuestas fueron devueltas y pueden corregirse.'
         : decision.estado === 'APROBADO' || decision.estado === 'REEMPLAZADO'

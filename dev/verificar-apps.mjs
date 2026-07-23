@@ -71,6 +71,7 @@ const coordinatorBootstrap = read('coordinadores-mvp/js/coordinador.bootstrap.in
 const studentRequirements = read('estudiantes-mvp/js/requisitos.estudiantes.service.js');
 const studentSheets = read('estudiantes-mvp/js/sheets.service.js');
 const studentReview = read('estudiantes-mvp/js/estudiante.consulta.revision.js');
+const studentApp = read('estudiantes-mvp/js/estudiante.app.js');
 const accessApi = read('functions/api/acceso-estudiante.js');
 const requirementsApi = read('functions/api/requisitos.js');
 const studentBuild = read('dev/preparar-pages-estudiantes.mjs');
@@ -89,8 +90,10 @@ assert(/parsearCapasJson/.test(studentReview), 'El frontend no procesa respuesta
 assert(/Promise\.allSettled/.test(accessApi), 'La API unificada no ejecuta consultas paralelas.');
 assert(/CONSULTAR_ENVIO_BASE_CEDULA/.test(accessApi), 'La API unificada no consulta Envios de forma independiente.');
 assert(/CONSULTAR_RESOLUCION_CEDULA/.test(accessApi), 'La API unificada no consulta Resoluciones de forma independiente.');
-assert(/CONSULTAR_ENVIO_CEDULA/.test(accessApi), 'La API unificada no conserva la compatibilidad de Títulos.');
-assert(/legacyPromise/.test(accessApi), 'La compatibilidad antigua no se inicia en paralelo.');
+assert(/CONSULTAR_ENVIO_CEDULA/.test(accessApi), 'La API unificada no conserva el fallback de compatibilidad.');
+assert(!/legacyPromise/.test(accessApi), 'La compatibilidad antigua todavía se inicia en todas las consultas.');
+assert(/Fallback único y condicional/.test(accessApi), 'La compatibilidad no está limitada a un fallback condicional.');
+assert(/periodEquivalent/.test(accessApi), 'La API unificada no compara etiquetas e identificadores de período.');
 assert(/origen:\s*['"]RESOLUCIONES['"]/.test(accessApi), 'Resoluciones no tiene la mayor jerarquía.');
 assert(/origen:\s*['"]ENVIOS['"]/.test(accessApi), 'Envíos no tiene la segunda jerarquía.');
 assert(/origen:\s*['"]REQUISITOS['"]/.test(accessApi), 'Requisitos no tiene la tercera jerarquía.');
@@ -103,6 +106,8 @@ assert(!/optimizedScript|runtimeScript|insertar.*consulta|inyectar.*consulta/i.t
 assert(/LEGACY_SCRIPTS/.test(studentBuild), 'El build de Estudiantes no bloquea controladores antiguos.');
 assert(/LEGACY_SCRIPTS/.test(localBuild), 'El build local no bloquea controladores antiguos.');
 assert(!/createElement\(['"]script['"]\)[\s\S]*estudiante\.consulta\.revision/.test(studentRequirements), 'Requisitos vuelve a cargar dinámicamente el controlador de consulta.');
+assert(!/formConsulta\.addEventListener[\s\S]*manejarConsulta/.test(studentApp), 'estudiante.app.js todavía registra un segundo controlador de consulta.');
+assert(/No se envió al servidor/.test(studentApp), 'La contingencia local no diferencia un envío real de un respaldo local.');
 assert(/CONSULTAR_ENVIO_BASE_CEDULA/.test(appsScript), 'El módulo Apps Script no expone la consulta separada de Envios.');
 assert(/CONSULTAR_RESOLUCION_CEDULA/.test(appsScript), 'El módulo Apps Script no expone la consulta separada de Resoluciones.');
 
@@ -123,6 +128,6 @@ if (errors.length) {
   process.exit(1);
 }
 
-console.log('[Apps] Estudiantes: modal inmediato, consulta paralela, compatibilidad y jerarquía correctos.');
+console.log('[Apps] Estudiantes: controlador único, tres consultas iniciales, fallback condicional y jerarquía correctos.');
 console.log('[Apps] Coordinadores: archivos, API y elementos principales correctos.');
 console.log('[Apps] Administrador: archivos, API central y elementos principales correctos.');

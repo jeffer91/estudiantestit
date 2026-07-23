@@ -5,6 +5,12 @@ const cedula = '1313244988';
 const periodo = 'Noviembre 2025 a Mayo 2026';
 const periodoId = '2025-11__2026-05';
 
+assert.equal(
+  __test.periodEquivalent(periodo, periodoId),
+  true,
+  'La etiqueta y el identificador del mismo período deben ser equivalentes.'
+);
+
 const respuestaAnidada = {
   respuesta: JSON.stringify({
     data: JSON.stringify({

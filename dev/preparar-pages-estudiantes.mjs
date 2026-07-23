@@ -6,7 +6,7 @@ const root = process.cwd();
 const source = path.join(root, 'estudiantes-mvp');
 const output = path.join(root, '.pages-estudiantes');
 const publicStudent = path.join(output, 'estudiantes');
-const VERSION = '2.3.9';
+const VERSION = '2.4.1';
 const LEGACY_SCRIPTS = [
   'estudiante.consulta.optimizada.js',
   'estudiante.devolucion.runtime.js',

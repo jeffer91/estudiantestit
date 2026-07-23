@@ -196,7 +196,6 @@
   }
 
   function conectarEventos() {
-    var formConsulta;
     var formTelegram;
     var formPropuestas;
     var formEnvio;
@@ -222,17 +221,9 @@
       manejarInputGeneral
     );
 
-    formConsulta = document.getElementById('formConsulta');
     formTelegram = document.getElementById('formTelegram');
     formPropuestas = document.getElementById('formPropuestas');
     formEnvio = document.getElementById('formEnvio');
-
-    if (formConsulta) {
-      formConsulta.addEventListener(
-        'submit',
-        manejarConsulta
-      );
-    }
 
     if (formTelegram) {
       formTelegram.addEventListener(
@@ -1313,25 +1304,27 @@
           )
           .then(function (resultadoFirebase) {
             var resultadoPendiente = {
-              ok: true,
-              estado: 'PENDIENTE_SYNC',
-              firebase: resultadoFirebase,
+              ok: false,
+              estado: 'PENDIENTE_LOCAL',
+              respaldoLocal: resultadoFirebase,
 
-              errorSheets:
+              errorServidor:
                 obtenerMensajeError(
                   errorSheets,
                   'No se pudo completar el envío principal.'
                 ),
 
               mensaje:
-                'No se pudo completar el envío principal, pero tu registro quedó guardado como pendiente.'
+                'No se envió al servidor. El registro quedó guardado únicamente en este navegador. Conserva esta página y vuelve a intentarlo cuando tengas conexión.'
             };
 
-            state.marcarEnviado(
-              resultadoPendiente
-            );
-
-            borrarMemoriaGuardada();
+            /*
+              No se marca como enviado ni se borra la memoria: el estudiante
+              conserva sus datos hasta confirmar un envío real al servidor.
+            */
+            guardarAvance({
+              pasoActual: 'enviar'
+            });
 
             ui.pintarResultadoEnvio(
               resultadoPendiente
