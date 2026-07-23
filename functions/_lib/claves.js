@@ -39,6 +39,33 @@ async function fetchTimed(url, options, timeoutMs) {
   }
 }
 
+function decodeJsonLayers(value, maxDepth = 4) {
+  let current = value;
+  for (let depth = 0; depth < maxDepth && typeof current === 'string'; depth += 1) {
+    const raw = current.trim();
+    if (!raw) return {};
+    try {
+      current = JSON.parse(raw);
+    } catch (error) {
+      break;
+    }
+  }
+  return current;
+}
+
+function normalizeJsonResponse(value) {
+  const decoded = decodeJsonLayers(value);
+  if (!decoded || typeof decoded !== 'object') return decoded;
+
+  const output = Array.isArray(decoded) ? decoded.slice() : { ...decoded };
+  for (const key of ['respuesta', 'data', 'resultado', 'result']) {
+    if (typeof output[key] === 'string') {
+      output[key] = decodeJsonLayers(output[key]);
+    }
+  }
+  return output;
+}
+
 export async function requestClaves(env, action, data = {}, timeoutMs) {
   const access = text(env.CLAVES_ACCESS_TOKEN);
   if (!access) throw new Error('No está configurado CLAVES_ACCESS_TOKEN.');
@@ -62,11 +89,14 @@ export async function requestClaves(env, action, data = {}, timeoutMs) {
   const raw = await response.text();
   let result;
   try {
-    result = raw ? JSON.parse(raw) : {};
+    result = normalizeJsonResponse(raw || '{}');
   } catch (error) {
     throw new Error('Claves respondió en un formato no válido.');
   }
 
+  if (!result || typeof result !== 'object') {
+    throw new Error('Claves respondió en un formato no válido.');
+  }
   if (!response.ok || result.ok === false) {
     throw new Error(text(result.mensaje || result.error) || 'Claves devolvió un error.');
   }
