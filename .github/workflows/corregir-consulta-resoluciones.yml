@@ -1,0 +1,366 @@
+name: Corregir consulta de resoluciones
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/corregir-consulta-resoluciones.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  corregir:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Aplicar correcciones
+        shell: python
+        run: |
+          from pathlib import Path
+          import json
+
+          access_path = Path('functions/api/acceso-estudiante.js')
+          access = access_path.read_text(encoding='utf-8')
+
+          old_unwrap = """function unwrap(result) {
+            return result && (result.respuesta || result.data) || result || {};
+          }"""
+          new_unwrap = """function decodeJsonLayers(value, maxDepth = 6) {
+            let current = value;
+            for (let depth = 0; depth < maxDepth && typeof current === 'string'; depth += 1) {
+              const raw = current.trim();
+              if (!raw) return {};
+              if (!raw.startsWith('{') && !raw.startsWith('[') && !raw.startsWith('\\\"')) break;
+              try {
+                current = JSON.parse(raw);
+              } catch (error) {
+                break;
+              }
+            }
+            return current;
+          }
+
+          function decodeNestedJson(value, depth = 0) {
+            const decoded = decodeJsonLayers(value);
+            if (depth > 8 || !decoded || typeof decoded !== 'object') return decoded;
+            if (Array.isArray(decoded)) {
+              return decoded.map((item) => decodeNestedJson(item, depth + 1));
+            }
+            return Object.keys(decoded).reduce((output, key) => {
+              output[key] = decodeNestedJson(decoded[key], depth + 1);
+              return output;
+            }, {});
+          }
+
+          function unwrap(result) {
+            let current = decodeNestedJson(result) || {};
+            for (let depth = 0; depth < 6 && current && typeof current === 'object'; depth += 1) {
+              const next = current.respuesta || current.data || current.resultado || current.result;
+              if (!next || typeof next !== 'object') break;
+              current = next;
+            }
+            return current || {};
+          }"""
+          if old_unwrap not in access:
+            raise SystemExit('No se encontró unwrap para actualizarlo.')
+          access = access.replace(old_unwrap, new_unwrap, 1)
+
+          old_candidates = """function candidates(result, predicate) {
+            return collectObjects(unwrap(result)).filter(predicate);
+          }"""
+          new_candidates = """function candidates(result, predicate) {
+            return collectObjects(decodeNestedJson(result)).filter(predicate);
+          }"""
+          if old_candidates not in access:
+            raise SystemExit('No se encontró candidates para actualizarlo.')
+          access = access.replace(old_candidates, new_candidates, 1)
+
+          access = access.replace(
+            """    'propuestas',
+              'propuestasEnviadas',
+              'idRegistro',""",
+            """    'propuestas',
+              'propuestasEnviadas',
+              'titulosEnviados',
+              'propuesta1',
+              'propuesta2',
+              'propuesta3',
+              'tituloPreferido',
+              'idRegistro',""",
+            1
+          )
+          access = access.replace(
+            """  const state = text(flexible(value, ['estadoFinal', 'estadoResolucion']));""",
+            """  const state = text(flexible(value, ['estadoFinal', 'estadoResolucion', 'Estado final']));""",
+            1
+          )
+          access = access.replace(
+            """    'observacion',
+              'comentarioCoordinador',""",
+            """    'observacion',
+              'observaciones',
+              'comentarioCoordinador',""",
+            1
+          )
+
+          old_query = """async function queryTitles(env, action, cedula) {
+            const result = await runService(
+              env,
+              'TITULOS',
+              action,
+              'GET',
+              { cedula, numeroIdentificacion: cedula, periodo: '', periodoId: '', periodoLabel: '' },
+              'student',
+              TITLES_TIMEOUT_MS
+            );
+            const unwrapped = unwrap(result);
+            if (unwrapped && unwrapped.ok === false) {
+              throw new Error(unwrapped.mensaje || unwrapped.error || 'La consulta de Títulos no fue completada.');
+            }
+            return unwrapped;
+          }"""
+          new_query = """async function queryTitles(env, action, cedula, period = '') {
+            const result = await runService(
+              env,
+              'TITULOS',
+              action,
+              'GET',
+              {
+                cedula,
+                numeroIdentificacion: cedula,
+                periodo: period,
+                periodoId: period,
+                periodoLabel: period,
+                scope: 'all',
+                incluirHistorico: true
+              },
+              'student',
+              TITLES_TIMEOUT_MS
+            );
+            const decoded = decodeNestedJson(result);
+            const unwrapped = unwrap(decoded);
+            if (unwrapped && unwrapped.ok === false) {
+              throw new Error(unwrapped.mensaje || unwrapped.error || 'La consulta de Títulos no fue completada.');
+            }
+            return decoded;
+          }"""
+          if old_query not in access:
+            raise SystemExit('No se encontró queryTitles para actualizarlo.')
+          access = access.replace(old_query, new_query, 1)
+
+          old_select = """    const envio = selectRecord(envioResult.value, looksLikeEnvio, cedula, academicPeriod, 'envio') ||
+              selectRecord(resolutionResult.value, looksLikeEnvio, cedula, academicPeriod, 'envio');
+            const resolucion = selectRecord(resolutionResult.value, looksLikeResolution, cedula, academicPeriod, 'resolution') ||
+              selectRecord(envioResult.value, looksLikeResolution, cedula, academicPeriod, 'resolution');
+
+            const decision = effectiveState(envio, resolucion);"""
+          new_select = """    const titleSources = [envioResult.value, resolutionResult.value];
+            let envio = selectRecord(titleSources, looksLikeEnvio, cedula, academicPeriod, 'envio');
+            let resolucion = selectRecord(titleSources, looksLikeResolution, cedula, academicPeriod, 'resolution');
+            let consultaPeriodoReforzada = false;
+
+            /*
+              Las tres fuentes se consultan inicialmente en paralelo por cédula.
+              Algunos despliegues antiguos de Apps Script solo devuelven Envios y
+              Resoluciones cuando también reciben el período. En ese caso se hace
+              un refuerzo selectivo, sin repetir Requisitos ni reemplazar la jerarquía.
+            */
+            if (academicPeriod && (!envio || !resolucion)) {
+              consultaPeriodoReforzada = true;
+              const [envioPorPeriodo, resolucionPorPeriodo] = await Promise.allSettled([
+                !envio
+                  ? queryTitles(env, 'VERIFICAR_ENVIO', cedula, academicPeriod)
+                  : Promise.resolve(null),
+                !resolucion
+                  ? queryTitles(env, 'CONSULTAR_ENVIO_CEDULA', cedula, academicPeriod)
+                  : Promise.resolve(null)
+              ]);
+
+              if (envioPorPeriodo.status === 'fulfilled' && envioPorPeriodo.value) {
+                titleSources.push(envioPorPeriodo.value);
+              }
+              if (resolucionPorPeriodo.status === 'fulfilled' && resolucionPorPeriodo.value) {
+                titleSources.push(resolucionPorPeriodo.value);
+              }
+
+              envio = selectRecord(titleSources, looksLikeEnvio, cedula, academicPeriod, 'envio');
+              resolucion = selectRecord(titleSources, looksLikeResolution, cedula, academicPeriod, 'resolution');
+            }
+
+            const decision = effectiveState(envio, resolucion);"""
+          if old_select not in access:
+            raise SystemExit('No se encontró el bloque de selección de Envíos y Resoluciones.')
+          access = access.replace(old_select, new_select, 1)
+
+          access = access.replace(
+            """      consultaCompleta: true,
+                consultas: { requisitos: 'ok', envios: 'ok', resoluciones: 'ok' },""",
+            """      consultaCompleta: true,
+                consultaPeriodoReforzada,
+                consultas: { requisitos: 'ok', envios: 'ok', resoluciones: 'ok' },""",
+            1
+          )
+
+          export_anchor = "export async function onRequest({ request, env }) {"
+          test_export = """export const __test = Object.freeze({
+            decodeNestedJson,
+            looksLikeEnvio,
+            looksLikeResolution,
+            selectRecord,
+            effectiveState
+          });
+
+          """
+          if test_export.strip() not in access:
+            if export_anchor not in access:
+              raise SystemExit('No se encontró onRequest para exponer pruebas.')
+            access = access.replace(export_anchor, test_export + export_anchor, 1)
+
+          access_path.write_text(access, encoding='utf-8')
+
+          local_path = Path('dev/preparar-pages-local.mjs')
+          local = local_path.read_text(encoding='utf-8')
+          local = local.replace("const VERSION_ESTUDIANTES = '2.3.2';", "const VERSION_ESTUDIANTES = '2.3.7';")
+          old_local_function = """function prepararEstudiantesLocal() {
+            const entry = path.join(output, 'estudiantes-mvp', 'estudiante.html');
+            if (!fs.existsSync(entry)) return;
+
+            let html = fs.readFileSync(entry, 'utf8');
+            html = html.replace(/\\?v=2\\.3\\.1/g, `?v=${VERSION_ESTUDIANTES}`);
+
+            const optimizedScript = `  <script src=\"js/estudiante.consulta.optimizada.js?v=${VERSION_ESTUDIANTES}\"></script>\\n`;
+            if (!html.includes('estudiante.consulta.optimizada.js')) {
+              const revisionScript = /\\s*<script src=\"js\\/estudiante\\.consulta\\.revision\\.js[^>]*><\\/script>/;
+              if (revisionScript.test(html)) {
+                html = html.replace(revisionScript, `\\n${optimizedScript}$&`);
+              } else {
+                html = html.replace('</body>', `${optimizedScript}</body>`);
+              }
+            }
+
+            fs.writeFileSync(entry, html, 'utf8');
+          }"""
+          new_local_function = """function prepararEstudiantesLocal() {
+            const entry = path.join(output, 'estudiantes-mvp', 'estudiante.html');
+            if (!fs.existsSync(entry)) return;
+
+            let html = fs.readFileSync(entry, 'utf8');
+            html = html.replace(/\\?v=2\\.3\\.\\d+/g, `?v=${VERSION_ESTUDIANTES}`);
+            html = html.replace(/\\?v=2\\.4\\.\\d+/g, `?v=${VERSION_ESTUDIANTES}`);
+            fs.writeFileSync(entry, html, 'utf8');
+          }"""
+          if old_local_function not in local:
+            raise SystemExit('No se encontró prepararEstudiantesLocal para simplificarlo.')
+          local = local.replace(old_local_function, new_local_function, 1)
+          local = local.replace("console.log(`[Pages local] Consulta optimizada de estudiantes activa (${VERSION_ESTUDIANTES}).`);", "console.log(`[Pages local] Consulta unificada de estudiantes activa (${VERSION_ESTUDIANTES}).`);")
+          local_path.write_text(local, encoding='utf-8')
+
+          build_path = Path('dev/preparar-pages-estudiantes.mjs')
+          build = build_path.read_text(encoding='utf-8')
+          build = build.replace("const VERSION = '2.3.6';", "const VERSION = '2.3.7';")
+          start = build.index("const runtimeFix = path.join(source, 'js', 'estudiante.devolucion.runtime.js');")
+          end = build.index("fs.rmSync(output", start)
+          build = build[:start] + build[end:]
+          comment_start = build.index('/*\n  La consulta optimizada se carga')
+          write_anchor = "fs.writeFileSync(copiedEntry, studentHtml, 'utf8');"
+          comment_end = build.index(write_anchor, comment_start)
+          replacement = """/*
+            Se conserva una sola ruta de consulta: estudiante.consulta.revision.js.
+            No se inyectan parches ni controladores adicionales durante el build.
+          */
+          const copiedEntry = path.join(publicStudent, 'estudiante.html');
+          let studentHtml = fs.readFileSync(copiedEntry, 'utf8');
+          studentHtml = studentHtml.replace(/\\?v=2\\.3\\.\\d+/g, `?v=${VERSION}`);
+          studentHtml = studentHtml.replace(/\\?v=2\\.4\\.\\d+/g, `?v=${VERSION}`);
+
+          if (!studentHtml.includes('/api/acceso-estudiante') && !studentHtml.includes('estudiante.consulta.revision.js')) {
+            throw new Error('El estudiante.html no contiene la consulta unificada.');
+          }
+          """
+          build = build[:comment_start] + replacement + build[comment_end:]
+          build = build.replace("console.log(`[Pages estudiantes] Consulta y devolución activas (${VERSION}).`);", "console.log(`[Pages estudiantes] Consulta unificada y devolución activas (${VERSION}).`);")
+          build_path.write_text(build, encoding='utf-8')
+
+          test_path = Path('dev/verificar-logica-acceso.mjs')
+          test_path.write_text("""import assert from 'node:assert/strict';
+          import { __test } from '../functions/api/acceso-estudiante.js';
+
+          const cedula = '1313244988';
+          const periodo = 'Noviembre 2025 a Mayo 2026';
+          const anidado = {
+            respuesta: JSON.stringify({
+              data: JSON.stringify({
+                envio: {
+                  cedula,
+                  periodo,
+                  estado: 'PENDIENTE_REVISION',
+                  titulo1: 'Propuesta anterior 1',
+                  titulo2: 'Propuesta anterior 2',
+                  titulo3: 'Propuesta anterior 3'
+                },
+                resolucion: {
+                  'Cédula': cedula,
+                  'Período': periodo,
+                  'Estado final': 'DEVUELTO',
+                  'Coordinador': 'Mayra Molina',
+                  'Observaciones': 'repetir esta mal',
+                  'Título elegido': 'pr 1',
+                  'Fecha resolución': '2026-07-22T20:38:50.254Z'
+                }
+              })
+            })
+          };
+
+          const envio = __test.selectRecord(anidado, __test.looksLikeEnvio, cedula, periodo, 'envio');
+          const resolucion = __test.selectRecord(anidado, __test.looksLikeResolution, cedula, periodo, 'resolution');
+          const decision = __test.effectiveState(envio, resolucion);
+
+          assert.ok(envio, 'No se recuperó el envío anidado.');
+          assert.ok(resolucion, 'No se recuperó la resolución anidada.');
+          assert.equal(decision.estado, 'DEVUELTO');
+          assert.equal(decision.origen, 'RESOLUCIONES');
+          console.log('[Acceso estudiante] JSON anidado, resolución y jerarquía correctos.');
+          """, encoding='utf-8')
+
+          package_path = Path('package.json')
+          package = json.loads(package_path.read_text(encoding='utf-8'))
+          scripts = package.setdefault('scripts', {})
+          scripts['check:access'] = 'node dev/verificar-logica-acceso.mjs'
+          scripts['check'] = 'npm run check:syntax && npm run check:apps && npm run check:architecture && npm run check:access'
+          package_path.write_text(json.dumps(package, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+
+          verifier_path = Path('dev/verificar-apps.mjs')
+          verifier = verifier_path.read_text(encoding='utf-8')
+          anchor = "const requirementsApi = read('functions/api/requisitos.js');"
+          addition = """const studentBuild = read('dev/preparar-pages-estudiantes.mjs');
+          const localBuild = read('dev/preparar-pages-local.mjs');"""
+          if addition not in verifier:
+            verifier = verifier.replace(anchor, anchor + '\n' + addition, 1)
+          assert_anchor = "assert(/function\\s+rawCedula\\s*\\(/.test(accessApi), 'La API unificada usa rawCedula sin declararla.');"
+          new_assertions = """assert(/function\\s+decodeNestedJson\\s*\\(/.test(accessApi), 'La API unificada no decodifica respuestas JSON anidadas.');
+          assert(!/estudiante\\.consulta\\.optimizada|estudiante\\.devolucion\\.runtime/.test(studentBuild), 'El build de Estudiantes todavía inyecta controladores adicionales.');
+          assert(!/estudiante\\.consulta\\.optimizada/.test(localBuild), 'El build local todavía inyecta la consulta optimizada antigua.');"""
+          if new_assertions not in verifier:
+            verifier = verifier.replace(assert_anchor, assert_anchor + '\n' + new_assertions, 1)
+          verifier_path.write_text(verifier, encoding='utf-8')
+      - name: Verificar proyecto
+        run: npm run check
+      - name: Verificar build de estudiantes
+        run: npm run build:estudiantes
+      - name: Eliminar workflow temporal
+        run: rm -f .github/workflows/corregir-consulta-resoluciones.yml
+      - name: Guardar corrección
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add functions/api/acceso-estudiante.js dev/preparar-pages-local.mjs dev/preparar-pages-estudiantes.mjs dev/verificar-apps.mjs dev/verificar-logica-acceso.mjs package.json .github/workflows/corregir-consulta-resoluciones.yml
+          git commit -m "Corregir recuperación de Envios y Resoluciones en estudiantes"
+          git push origin main
