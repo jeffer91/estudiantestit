@@ -43,7 +43,7 @@ function checkAssets(htmlPath) {
 
 function requireIds(html, ids, appName) {
   ids.forEach((id) => {
-    const expression = new RegExp('id=["\']' + id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '["\']');
+    const expression = new RegExp('id=["\\\']' + id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '["\\\']');
     assert(expression.test(html), appName + ' no contiene el elemento #' + id + '.');
   });
 }
@@ -53,19 +53,17 @@ const coordinatorHtml = checkAssets('coordinadores-mvp/coordinador.html');
 const adminHtml = checkAssets('administrador/ad-index.html');
 
 requireIds(studentHtml, [
-  'formConsulta','cedulaInput','estadoPrincipal','formTelegram','telegramInput',
-  'formPropuestas','formEnvio','confirmacionEnvio','estadoEnvioFinal'
+  'formConsulta', 'cedulaInput', 'estadoPrincipal', 'formTelegram', 'telegramInput',
+  'formPropuestas', 'formEnvio', 'confirmacionEnvio', 'estadoEnvioFinal'
 ], 'Estudiantes');
-
 requireIds(coordinatorHtml, [
-  'periodoSelect','coordinadorSelect','estadoPrincipal','tablaEstudiantesBody',
-  'detalleModal','tituloFinalInput','comentarioCoordinadorInput','btnAprobarEnvio','btnDevolverEnvio'
+  'periodoSelect', 'coordinadorSelect', 'estadoPrincipal', 'tablaEstudiantesBody',
+  'detalleModal', 'tituloFinalInput', 'comentarioCoordinadorInput', 'btnAprobarEnvio', 'btnDevolverEnvio'
 ], 'Coordinadores');
-
 requireIds(adminHtml, [
-  'ad-loading','ad-seccion-estado','ad-periodo-select','ad-tabla-periodos',
-  'ad-form-estudiante','ad-form-coordinador','ad-form-asignacion','ad-tabla-titulos',
-  'ad-form-devolver','ad-form-ia','ad-diagnostico-salida'
+  'ad-loading', 'ad-seccion-estado', 'ad-periodo-select', 'ad-tabla-periodos',
+  'ad-form-estudiante', 'ad-form-coordinador', 'ad-form-asignacion', 'ad-tabla-titulos',
+  'ad-form-devolver', 'ad-form-ia', 'ad-diagnostico-salida'
 ], 'Administrador');
 
 const adminApi = read('administrador/ad-js/ad-api.service.js');
@@ -86,10 +84,13 @@ assert(/127\.0\.0\.1:8788/.test(coordinatorBootstrap), 'Coordinadores no apunta 
 assert(/\/api\/requisitos/.test(studentRequirements), 'Estudiantes no consulta la API de Requisitos.');
 assert(/\/api\/titulos/.test(studentSheets), 'Estudiantes no utiliza la API de Títulos.');
 assert(/\/api\/acceso-estudiante/.test(studentReview), 'La consulta inicial de Estudiantes no utiliza la API unificada.');
-assert(/Promise\.allSettled/.test(accessApi), 'La API unificada no ejecuta las consultas en paralelo.');
-assert(/function\s+decodeNestedJson\s*\(/.test(accessApi), 'La API unificada no decodifica JSON anidado.');
+assert(/abrirModalConsulta\(\)/.test(studentReview), 'El modal de consulta no se abre inmediatamente.');
+assert(/parsearCapasJson/.test(studentReview), 'El frontend no procesa respuestas JSON anidadas.');
+assert(/Promise\.allSettled/.test(accessApi), 'La API unificada no ejecuta consultas paralelas.');
 assert(/CONSULTAR_ENVIO_BASE_CEDULA/.test(accessApi), 'La API unificada no consulta Envios de forma independiente.');
 assert(/CONSULTAR_RESOLUCION_CEDULA/.test(accessApi), 'La API unificada no consulta Resoluciones de forma independiente.');
+assert(/CONSULTAR_ENVIO_CEDULA/.test(accessApi), 'La API unificada no conserva la compatibilidad de Títulos.');
+assert(/legacyPromise/.test(accessApi), 'La compatibilidad antigua no se inicia en paralelo.');
 assert(/origen:\s*['"]RESOLUCIONES['"]/.test(accessApi), 'Resoluciones no tiene la mayor jerarquía.');
 assert(/origen:\s*['"]ENVIOS['"]/.test(accessApi), 'Envíos no tiene la segunda jerarquía.');
 assert(/origen:\s*['"]REQUISITOS['"]/.test(accessApi), 'Requisitos no tiene la tercera jerarquía.');
@@ -102,8 +103,8 @@ assert(!/optimizedScript|runtimeScript|insertar.*consulta|inyectar.*consulta/i.t
 assert(/LEGACY_SCRIPTS/.test(studentBuild), 'El build de Estudiantes no bloquea controladores antiguos.');
 assert(/LEGACY_SCRIPTS/.test(localBuild), 'El build local no bloquea controladores antiguos.');
 assert(!/createElement\(['"]script['"]\)[\s\S]*estudiante\.consulta\.revision/.test(studentRequirements), 'Requisitos vuelve a cargar dinámicamente el controlador de consulta.');
-assert(/CONSULTAR_ENVIO_BASE_CEDULA/.test(appsScript), 'El módulo de Apps Script no expone la consulta separada de Envios.');
-assert(/CONSULTAR_RESOLUCION_CEDULA/.test(appsScript), 'El módulo de Apps Script no expone la consulta separada de Resoluciones.');
+assert(/CONSULTAR_ENVIO_BASE_CEDULA/.test(appsScript), 'El módulo Apps Script no expone la consulta separada de Envios.');
+assert(/CONSULTAR_RESOLUCION_CEDULA/.test(appsScript), 'El módulo Apps Script no expone la consulta separada de Resoluciones.');
 
 const studentOrder = [
   'requisitos.estudiantes.service.js',
@@ -112,7 +113,6 @@ const studentOrder = [
   'estudiante.app.js',
   'estudiante.consulta.revision.js'
 ].map((name) => studentHtml.indexOf(name));
-
 assert(studentOrder.every((index) => index >= 0), 'Estudiantes no carga todos los servicios requeridos.');
 assert(studentOrder.every((index, position) => position === 0 || index > studentOrder[position - 1]), 'Los servicios de Estudiantes están cargados en un orden incorrecto.');
 
@@ -123,6 +123,6 @@ if (errors.length) {
   process.exit(1);
 }
 
-console.log('[Apps] Estudiantes: consulta única, tres fuentes, jerarquía y build limpio.');
+console.log('[Apps] Estudiantes: modal inmediato, consulta paralela, compatibilidad y jerarquía correctos.');
 console.log('[Apps] Coordinadores: archivos, API y elementos principales correctos.');
 console.log('[Apps] Administrador: archivos, API central y elementos principales correctos.');
