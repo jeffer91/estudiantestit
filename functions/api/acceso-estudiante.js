@@ -112,8 +112,7 @@ function recordPeriod(item) {
 function looksLikeEnvio(item) {
   if (!item || typeof item !== 'object') return false;
   const direct = flexible(item, ['titulo1', 'titulo2', 'titulo3', 'fechaEnvio', 'telegram', 'usuarioTelegram']);
-  const nested = item.envio && typeof item.envio === 'object';
-  return Boolean(direct || nested);
+  return Boolean(direct);
 }
 
 function looksLikeResolution(item) {
@@ -122,8 +121,7 @@ function looksLikeResolution(item) {
   const evidence = flexible(item, [
     'resolucionId', 'fechaResolucion', 'coordinador', 'comentarioCoordinador', 'tituloCorregido'
   ]);
-  const nested = item.resolucion && typeof item.resolucion === 'object';
-  return Boolean((state && evidence) || nested);
+  return Boolean(state && evidence);
 }
 
 function timestamp(item, kind) {
@@ -285,20 +283,35 @@ async function queryTitles(env, action, cedula, period = '') {
   return decoded;
 }
 
-function fulfilledValues(settledList) {
-  return settledList
-    .filter((item) => item.status === 'fulfilled' && item.value)
-    .map((item) => item.value);
-}
+function querySourceWithCompatibility(primaryPromise, legacyPromise, predicate, cedula, period, kind) {
+  const promises = [primaryPromise, legacyPromise];
+  return new Promise((resolve, reject) => {
+    const fulfilled = [];
+    const errors = [];
+    let pending = promises.length;
 
-function sourceErrors(settledList, label) {
-  if (settledList.some((item) => item.status === 'fulfilled')) return [];
-  return settledList
-    .filter((item) => item.status === 'rejected')
-    .map((item) => ({
-      fuente: label,
-      mensaje: text(item.reason && item.reason.message) || 'Consulta no disponible.'
-    }));
+    promises.forEach((promise) => {
+      Promise.resolve(promise).then((value) => {
+        fulfilled.push(value);
+        if (selectRecord(value, predicate, cedula, period, kind)) {
+          resolve(fulfilled.slice());
+          return;
+        }
+        pending -= 1;
+        if (pending === 0) {
+          if (fulfilled.length) resolve(fulfilled);
+          else reject(errors[0] || new Error('Consulta no disponible.'));
+        }
+      }).catch((error) => {
+        errors.push(error);
+        pending -= 1;
+        if (pending === 0) {
+          if (fulfilled.length) resolve(fulfilled);
+          else reject(errors[0] || new Error('Consulta no disponible.'));
+        }
+      });
+    });
+  });
 }
 
 function normalizeStudentResult(academic, cedula, requestedPeriod) {
@@ -368,14 +381,22 @@ export async function onRequest({ request, env }) {
       entre Envíos y Resoluciones para no agregar una segunda espera secuencial.
     */
     const legacyPromise = queryTitles(env, 'CONSULTAR_ENVIO_CEDULA', cedula, requestedPeriod);
-    const envioTask = Promise.allSettled([
+    const envioTask = querySourceWithCompatibility(
       queryTitles(env, 'CONSULTAR_ENVIO_BASE_CEDULA', cedula, requestedPeriod),
-      legacyPromise
-    ]);
-    const resolutionTask = Promise.allSettled([
+      legacyPromise,
+      looksLikeEnvio,
+      cedula,
+      requestedPeriod,
+      'envio'
+    );
+    const resolutionTask = querySourceWithCompatibility(
       queryTitles(env, 'CONSULTAR_RESOLUCION_CEDULA', cedula, requestedPeriod),
-      legacyPromise
-    ]);
+      legacyPromise,
+      looksLikeResolution,
+      cedula,
+      requestedPeriod,
+      'resolution'
+    );
 
     const [academicSettled, envioSettled, resolutionSettled] = await Promise.allSettled([
       lookupStudent(env, cedula, requestedPeriod),
@@ -397,21 +418,12 @@ export async function onRequest({ request, env }) {
       failures.push({ fuente: 'RESOLUCIONES', mensaje: 'No fue posible consultar las resoluciones.' });
     }
 
-    const envioSources = envioSettled.status === 'fulfilled'
-      ? fulfilledValues(envioSettled.value)
+    const envioSources = envioSettled.status === 'fulfilled' && Array.isArray(envioSettled.value)
+      ? envioSettled.value
       : [];
-    const resolutionSources = resolutionSettled.status === 'fulfilled'
-      ? fulfilledValues(resolutionSettled.value)
+    const resolutionSources = resolutionSettled.status === 'fulfilled' && Array.isArray(resolutionSettled.value)
+      ? resolutionSettled.value
       : [];
-
-    failures.push(...sourceErrors(
-      envioSettled.status === 'fulfilled' ? envioSettled.value : [],
-      'ENVIOS'
-    ));
-    failures.push(...sourceErrors(
-      resolutionSettled.status === 'fulfilled' ? resolutionSettled.value : [],
-      'RESOLUCIONES'
-    ));
 
     if (failures.length) {
       return jsonReply(request, {
