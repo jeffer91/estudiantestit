@@ -1,0 +1,39 @@
+name: Estabilizar flujo de estudiantes
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/aplicar-estabilizacion-flujo.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  corregir:
+    if: github.event.head_commit.message == 'Ejecutar estabilización del flujo de estudiantes'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Aplicar correcciones
+        run: node dev/aplicar-estabilizacion-flujo.mjs
+      - name: Verificar proyecto completo
+        run: npm run check
+      - name: Verificar build de Estudiantes
+        run: npm run build:estudiantes
+      - name: Limpiar archivos temporales
+        run: rm -f dev/aplicar-estabilizacion-flujo.mjs .github/workflows/aplicar-estabilizacion-flujo.yml
+      - name: Guardar corrección
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Estabilizar procesos y flujos de estudiantes"
+          git push origin main
