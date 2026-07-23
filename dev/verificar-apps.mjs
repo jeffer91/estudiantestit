@@ -97,8 +97,10 @@ assert(/scope:\s*periodId\s*\?\s*['"]period['"]\s*:\s*['"]all['"]/.test(requirem
 assert(!/firebase\.core\.service|firebase\.estudiantes\.service|firebase\.envios\.service|firebase\.ia\.service/i.test(studentHtml), 'Estudiantes todavía carga scripts Firebase eliminados.');
 assert(!/ad-firebase\.service/i.test(adminHtml), 'Administrador todavía carga el servicio Firebase eliminado.');
 assert(!/estudiante\.resolucion\.patch|estudiante\.consulta\.optimizada|estudiante\.devolucion\.runtime/i.test(studentHtml), 'Estudiantes todavía carga un controlador o parche antiguo.');
-assert(!/estudiante\.consulta\.optimizada|estudiante\.devolucion\.runtime/.test(studentBuild), 'El build de Estudiantes todavía inserta controladores adicionales.');
-assert(!/estudiante\.consulta\.optimizada|estudiante\.devolucion\.runtime/.test(localBuild), 'El build local todavía inserta controladores adicionales.');
+assert(!/optimizedScript|runtimeScript|insertar.*consulta|inyectar.*consulta/i.test(studentBuild), 'El build de Estudiantes todavía inserta controladores adicionales.');
+assert(!/optimizedScript|runtimeScript|insertar.*consulta|inyectar.*consulta/i.test(localBuild), 'El build local todavía inserta controladores adicionales.');
+assert(/LEGACY_SCRIPTS/.test(studentBuild), 'El build de Estudiantes no bloquea controladores antiguos.');
+assert(/LEGACY_SCRIPTS/.test(localBuild), 'El build local no bloquea controladores antiguos.');
 assert(!/createElement\(['"]script['"]\)[\s\S]*estudiante\.consulta\.revision/.test(studentRequirements), 'Requisitos vuelve a cargar dinámicamente el controlador de consulta.');
 assert(/CONSULTAR_ENVIO_BASE_CEDULA/.test(appsScript), 'El módulo de Apps Script no expone la consulta separada de Envios.');
 assert(/CONSULTAR_RESOLUCION_CEDULA/.test(appsScript), 'El módulo de Apps Script no expone la consulta separada de Resoluciones.');
