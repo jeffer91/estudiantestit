@@ -84,6 +84,7 @@ assert(/\/api\/requisitos/.test(studentRequirements), 'Estudiantes no consulta l
 assert(/\/api\/titulos/.test(studentSheets), 'Estudiantes no utiliza la API de Títulos.');
 assert(/\/api\/acceso-estudiante/.test(studentReview), 'La consulta inicial de Estudiantes no utiliza la API unificada.');
 assert(/Promise\.allSettled/.test(accessApi), 'La API unificada no ejecuta las consultas en paralelo.');
+assert(/function\s+rawCedula\s*\(/.test(accessApi), 'La API unificada usa rawCedula sin declararla.');
 assert(/VERIFICAR_ENVIO/.test(accessApi), 'La API unificada no consulta la hoja de Envíos.');
 assert(/CONSULTAR_ENVIO_CEDULA/.test(accessApi), 'La API unificada no consulta la respuesta que contiene Resoluciones.');
 assert(/origen:\s*['"]RESOLUCIONES['"]/.test(accessApi), 'Resoluciones no tiene la mayor jerarquía.');

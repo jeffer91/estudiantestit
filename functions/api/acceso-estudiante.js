@@ -25,6 +25,11 @@ function normalizeCedula(value) {
   return digits.length === 10 ? digits : '';
 }
 
+function rawCedula(value) {
+  const digits = text(value).replace(/\D/g, '');
+  return digits.length === 9 || digits.length === 10 ? digits : '';
+}
+
 function cedulaVariants(value) {
   const canonical = normalizeCedula(value);
   if (!canonical) return [];
