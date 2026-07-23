@@ -4,7 +4,12 @@ import process from 'node:process';
 
 const root = process.cwd();
 const output = path.join(root, '.pages-local');
-const VERSION_ESTUDIANTES = '2.3.2';
+const VERSION_ESTUDIANTES = '2.3.8';
+const LEGACY_SCRIPTS = [
+  'estudiante.consulta.optimizada.js',
+  'estudiante.devolucion.runtime.js',
+  'estudiante.resolucion.patch.js'
+];
 
 const staticDirectories = [
   'estudiantes-mvp',
@@ -29,25 +34,15 @@ const staticFiles = [
 function copyDirectory(name) {
   const source = path.join(root, name);
   const destination = path.join(output, name);
-
-  if (!fs.existsSync(source)) return false;
-  if (!fs.statSync(source).isDirectory()) return false;
-
-  fs.cpSync(source, destination, {
-    recursive: true,
-    force: true
-  });
-
+  if (!fs.existsSync(source) || !fs.statSync(source).isDirectory()) return false;
+  fs.cpSync(source, destination, { recursive: true, force: true });
   return true;
 }
 
 function copyFile(name) {
   const source = path.join(root, name);
   const destination = path.join(output, name);
-
-  if (!fs.existsSync(source)) return false;
-  if (!fs.statSync(source).isFile()) return false;
-
+  if (!fs.existsSync(source) || !fs.statSync(source).isFile()) return false;
   fs.copyFileSync(source, destination);
   return true;
 }
@@ -57,18 +52,16 @@ function prepararEstudiantesLocal() {
   if (!fs.existsSync(entry)) return;
 
   let html = fs.readFileSync(entry, 'utf8');
-  html = html.replace(/\?v=2\.3\.1/g, `?v=${VERSION_ESTUDIANTES}`);
-
-  const optimizedScript = `  <script src="js/estudiante.consulta.optimizada.js?v=${VERSION_ESTUDIANTES}"></script>\n`;
-  if (!html.includes('estudiante.consulta.optimizada.js')) {
-    const revisionScript = /\s*<script src="js\/estudiante\.consulta\.revision\.js[^>]*><\/script>/;
-    if (revisionScript.test(html)) {
-      html = html.replace(revisionScript, `\n${optimizedScript}$&`);
-    } else {
-      html = html.replace('</body>', `${optimizedScript}</body>`);
+  for (const legacy of LEGACY_SCRIPTS) {
+    if (html.includes(legacy)) {
+      throw new Error('El HTML local de Estudiantes todavía carga un controlador antiguo: ' + legacy);
     }
   }
+  if (!html.includes('estudiante.consulta.revision.js')) {
+    throw new Error('El HTML local de Estudiantes no carga la consulta unificada.');
+  }
 
+  html = html.replace(/\?v=\d+\.\d+\.\d+/g, `?v=${VERSION_ESTUDIANTES}`);
   fs.writeFileSync(entry, html, 'utf8');
 }
 
@@ -78,14 +71,10 @@ fs.mkdirSync(output, { recursive: true });
 const copiedDirectories = staticDirectories.filter(copyDirectory);
 const copiedFiles = staticFiles.filter(copyFile);
 
-if (!copiedDirectories.includes('estudiantes-mvp')) {
-  throw new Error('No se encontró estudiantes-mvp para preparar Pages local.');
-}
-if (!copiedDirectories.includes('coordinadores-mvp')) {
-  throw new Error('No se encontró coordinadores-mvp para preparar Pages local.');
-}
-if (!copiedDirectories.includes('administrador')) {
-  throw new Error('No se encontró administrador para preparar Pages local.');
+for (const required of ['estudiantes-mvp', 'coordinadores-mvp', 'administrador']) {
+  if (!copiedDirectories.includes(required)) {
+    throw new Error('No se encontró ' + required + ' para preparar Pages local.');
+  }
 }
 
 prepararEstudiantesLocal();
@@ -109,5 +98,6 @@ if (!copiedFiles.includes('index.html')) {
 }
 
 console.log('[Pages local] Carpeta estática preparada en .pages-local.');
-console.log(`[Pages local] Consulta optimizada de estudiantes activa (${VERSION_ESTUDIANTES}).`);
+console.log(`[Pages local] Consulta unificada de estudiantes activa (${VERSION_ESTUDIANTES}).`);
+console.log('[Pages local] Sin controladores duplicados ni parches de runtime.');
 console.log('[Pages local] La carpeta functions permanece fuera de los archivos estáticos para habilitar /api/*.');
