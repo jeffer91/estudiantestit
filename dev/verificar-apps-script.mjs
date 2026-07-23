@@ -1,14 +1,15 @@
 import fs from 'node:fs';
 
-const path = 'apps-script/RESPALDO-TITULOS-APP/Codigo.gs';
+const path = 'apps-script/RESPALDO-TITULOS-APP/consulta-estudiantes.gs';
 if (!fs.existsSync(path)) {
-  throw new Error('No existe el Código.gs corregido de RESPALDO TITULOS APP.');
+  throw new Error('No existe el módulo de consultas de RESPALDO TITULOS APP.');
 }
 
 const source = fs.readFileSync(path, 'utf8');
 new Function(source);
 
 for (const required of [
+  'procesarConsultaSeparadaPorAccion',
   'CONSULTAR_ENVIO_BASE_CEDULA',
   'CONSULTAR_RESOLUCION_CEDULA',
   'consultarEnvioBasePorCedula',
@@ -16,7 +17,7 @@ for (const required of [
   'buscarUltimaResolucionPorCedula'
 ]) {
   if (!source.includes(required)) {
-    throw new Error('Código.gs no contiene: ' + required);
+    throw new Error('El módulo de Apps Script no contiene: ' + required);
   }
 }
 
