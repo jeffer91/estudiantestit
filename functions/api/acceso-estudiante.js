@@ -270,7 +270,7 @@ function selectRecord(result, predicate, cedula, academicPeriod, kind) {
     if (exactPeriod.length) return latest(exactPeriod, kind);
 
     const conPeriodo = list.filter((item) => normalizePeriod(recordPeriod(item)));
-    if (conPeriodo.length > 1) return null;
+    if (conPeriodo.length) return null;
   }
 
   if (list.length === 1) return list[0];
