@@ -2,6 +2,7 @@ from pathlib import Path
 import re
 import textwrap
 
+# Esta actualización activa el workflow que aplica y verifica la corrección.
 workflow = Path('.github/workflows/corregir-consulta-resoluciones.yml')
 source = workflow.read_text(encoding='utf-8')
 match = re.search(
