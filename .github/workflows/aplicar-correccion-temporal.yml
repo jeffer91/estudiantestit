@@ -1,0 +1,34 @@
+name: Aplicar corrección temporal de acceso
+
+on:
+  push:
+    branches: [verificar-y-ajustar-consulta-estudiantes]
+
+permissions:
+  contents: write
+
+jobs:
+  aplicar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+        with:
+          ref: verificar-y-ajustar-consulta-estudiantes
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Aplicar selección segura
+        run: node dev/corregir-seleccion-acceso.mjs
+      - name: Guardar corrección
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add functions/api/acceso-estudiante.js
+          if git diff --cached --quiet; then
+            echo "No hay cambios pendientes."
+          else
+            git commit -m "Evitar cruces de cédula y período en acceso"
+            git push
+          fi
