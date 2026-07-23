@@ -6,7 +6,7 @@ const root = process.cwd();
 const source = path.join(root, 'estudiantes-mvp');
 const output = path.join(root, '.pages-estudiantes');
 const publicStudent = path.join(output, 'estudiantes');
-const VERSION = '2.3.2';
+const VERSION = '2.3.6';
 
 if (!fs.existsSync(source) || !fs.statSync(source).isDirectory()) {
   throw new Error('No se encontró la carpeta estudiantes-mvp.');
@@ -15,6 +15,11 @@ if (!fs.existsSync(source) || !fs.statSync(source).isDirectory()) {
 const studentEntry = path.join(source, 'estudiante.html');
 if (!fs.existsSync(studentEntry)) {
   throw new Error('No se encontró estudiantes-mvp/estudiante.html.');
+}
+
+const runtimeFix = path.join(source, 'js', 'estudiante.devolucion.runtime.js');
+if (!fs.existsSync(runtimeFix)) {
+  throw new Error('No se encontró estudiante.devolucion.runtime.js. Ejecuta git pull origin main.');
 }
 
 fs.rmSync(output, { recursive: true, force: true });
@@ -31,12 +36,13 @@ fs.cpSync(source, publicStudent, {
 
 /*
   La consulta optimizada se carga después de sheets.service.js y antes del
-  controlador de revisión. Así el modal aparece desde el primer clic y el
-  controlador utiliza el endpoint rápido /api/acceso-estudiante.
+  controlador de revisión. El runtime de devolución se carga al final para
+  combinar datos académicos, Envios y Resoluciones incluso si una respuesta
+  de Apps Script llega como JSON anidado.
 */
 const copiedEntry = path.join(publicStudent, 'estudiante.html');
 let studentHtml = fs.readFileSync(copiedEntry, 'utf8');
-studentHtml = studentHtml.replace(/\?v=2\.3\.1/g, `?v=${VERSION}`);
+studentHtml = studentHtml.replace(/\?v=2\.3\.\d+/g, `?v=${VERSION}`);
 
 const optimizedScript = `  <script src="js/estudiante.consulta.optimizada.js?v=${VERSION}"></script>\n`;
 if (!studentHtml.includes('estudiante.consulta.optimizada.js')) {
@@ -47,6 +53,19 @@ if (!studentHtml.includes('estudiante.consulta.optimizada.js')) {
     studentHtml = studentHtml.replace('</body>', `${optimizedScript}</body>`);
   }
 }
+
+const runtimeScript = `  <script src="js/estudiante.devolucion.runtime.js?v=${VERSION}"></script>\n`;
+if (!studentHtml.includes('estudiante.devolucion.runtime.js')) {
+  studentHtml = studentHtml.replace('</body>', `${runtimeScript}</body>`);
+}
+
+if (!studentHtml.includes('estado de tus propuestas')) {
+  throw new Error('El estudiante.html local está desactualizado. Ejecuta git pull origin main antes de desplegar.');
+}
+if (!studentHtml.includes('estudiante.devolucion.runtime.js')) {
+  throw new Error('No se pudo insertar el runtime de devoluciones.');
+}
+
 fs.writeFileSync(copiedEntry, studentHtml, 'utf8');
 
 const indexHtml = `<!doctype html>
@@ -81,9 +100,10 @@ const headers = `/*
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=()
+  Cache-Control: no-cache, no-store, must-revalidate
 
 /estudiantes/*
-  Cache-Control: no-cache
+  Cache-Control: no-cache, no-store, must-revalidate
 `;
 
 fs.writeFileSync(path.join(output, 'index.html'), indexHtml, 'utf8');
@@ -103,6 +123,6 @@ for (const directory of forbidden) {
 
 console.log('[Pages estudiantes] Carpeta preparada en .pages-estudiantes.');
 console.log('[Pages estudiantes] Ruta pública: /estudiantes/estudiante');
-console.log(`[Pages estudiantes] Consulta optimizada activa (${VERSION}).`);
+console.log(`[Pages estudiantes] Consulta y devolución activas (${VERSION}).`);
 console.log('[Pages estudiantes] Coordinadores y administrador no fueron copiados.');
 console.log('[Pages estudiantes] La carpeta functions permanece en la raíz para habilitar /api/*.');
