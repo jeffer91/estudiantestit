@@ -186,13 +186,29 @@ function candidates(result, predicate) {
 
 function selectRecord(result, predicate, cedula, academicPeriod, kind) {
   let list = candidates(result, predicate);
-  const byCedula = list.filter((item) => sameCedula(item, cedula));
-  if (byCedula.length) list = byCedula;
+  if (!list.length) return null;
+
+  const identificables = list.filter((item) => rawCedula(flexible(item || {}, [
+    'cedula',
+    'numeroIdentificacion',
+    'NumeroIdentificacion',
+    'identificacion',
+    'Cédula'
+  ])));
+
+  if (identificables.length) {
+    const exactCedula = identificables.filter((item) => sameCedula(item, cedula));
+    if (!exactCedula.length) return null;
+    list = exactCedula;
+  }
 
   const target = normalizePeriod(academicPeriod);
   if (target) {
-    const exact = list.filter((item) => normalizePeriod(recordPeriod(item)) === target);
-    if (exact.length) return latest(exact, kind);
+    const exactPeriod = list.filter((item) => normalizePeriod(recordPeriod(item)) === target);
+    if (exactPeriod.length) return latest(exactPeriod, kind);
+
+    const conPeriodo = list.filter((item) => normalizePeriod(recordPeriod(item)));
+    if (conPeriodo.length > 1) return null;
   }
 
   if (list.length === 1) return list[0];
