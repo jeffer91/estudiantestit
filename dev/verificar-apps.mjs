@@ -75,6 +75,9 @@ const studentSheets = read('estudiantes-mvp/js/sheets.service.js');
 const studentReview = read('estudiantes-mvp/js/estudiante.consulta.revision.js');
 const accessApi = read('functions/api/acceso-estudiante.js');
 const requirementsApi = read('functions/api/requisitos.js');
+const studentBuild = read('dev/preparar-pages-estudiantes.mjs');
+const localBuild = read('dev/preparar-pages-local.mjs');
+const appsScript = read('apps-script/RESPALDO-TITULOS-APP/Codigo.gs');
 
 assert(/API_PUBLICA\s*=\s*['"]https:\/\/titulos\.pages\.dev['"]/.test(adminApi), 'Administrador no apunta a la API central en producción.');
 assert(/https:\/\/titulos-coordinadores\.pages\.dev/.test(coordinatorBootstrap), 'Coordinadores no apunta a su API oficial en producción.');
@@ -84,17 +87,21 @@ assert(/\/api\/requisitos/.test(studentRequirements), 'Estudiantes no consulta l
 assert(/\/api\/titulos/.test(studentSheets), 'Estudiantes no utiliza la API de Títulos.');
 assert(/\/api\/acceso-estudiante/.test(studentReview), 'La consulta inicial de Estudiantes no utiliza la API unificada.');
 assert(/Promise\.allSettled/.test(accessApi), 'La API unificada no ejecuta las consultas en paralelo.');
-assert(/function\s+rawCedula\s*\(/.test(accessApi), 'La API unificada usa rawCedula sin declararla.');
-assert(/VERIFICAR_ENVIO/.test(accessApi), 'La API unificada no consulta la hoja de Envíos.');
-assert(/CONSULTAR_ENVIO_CEDULA/.test(accessApi), 'La API unificada no consulta la respuesta que contiene Resoluciones.');
+assert(/function\s+decodeNestedJson\s*\(/.test(accessApi), 'La API unificada no decodifica JSON anidado.');
+assert(/CONSULTAR_ENVIO_BASE_CEDULA/.test(accessApi), 'La API unificada no consulta Envios de forma independiente.');
+assert(/CONSULTAR_RESOLUCION_CEDULA/.test(accessApi), 'La API unificada no consulta Resoluciones de forma independiente.');
 assert(/origen:\s*['"]RESOLUCIONES['"]/.test(accessApi), 'Resoluciones no tiene la mayor jerarquía.');
 assert(/origen:\s*['"]ENVIOS['"]/.test(accessApi), 'Envíos no tiene la segunda jerarquía.');
 assert(/origen:\s*['"]REQUISITOS['"]/.test(accessApi), 'Requisitos no tiene la tercera jerarquía.');
 assert(/scope:\s*periodId\s*\?\s*['"]period['"]\s*:\s*['"]all['"]/.test(requirementsApi), 'La consulta sin período no busca en todos los períodos activos.');
 assert(!/firebase\.core\.service|firebase\.estudiantes\.service|firebase\.envios\.service|firebase\.ia\.service/i.test(studentHtml), 'Estudiantes todavía carga scripts Firebase eliminados.');
 assert(!/ad-firebase\.service/i.test(adminHtml), 'Administrador todavía carga el servicio Firebase eliminado.');
-assert(!/estudiante\.resolucion\.patch/i.test(studentHtml), 'Estudiantes todavía carga el parche antiguo de resoluciones.');
-assert(!fs.existsSync(path.join(root, 'estudiantes-mvp/js/estudiante.resolucion.patch.js')), 'El parche antiguo de resoluciones todavía existe.');
+assert(!/estudiante\.resolucion\.patch|estudiante\.consulta\.optimizada|estudiante\.devolucion\.runtime/i.test(studentHtml), 'Estudiantes todavía carga un controlador o parche antiguo.');
+assert(!/estudiante\.consulta\.optimizada|estudiante\.devolucion\.runtime/.test(studentBuild), 'El build de Estudiantes todavía inserta controladores adicionales.');
+assert(!/estudiante\.consulta\.optimizada|estudiante\.devolucion\.runtime/.test(localBuild), 'El build local todavía inserta controladores adicionales.');
+assert(!/createElement\(['"]script['"]\)[\s\S]*estudiante\.consulta\.revision/.test(studentRequirements), 'Requisitos vuelve a cargar dinámicamente el controlador de consulta.');
+assert(/CONSULTAR_ENVIO_BASE_CEDULA/.test(appsScript), 'Código.gs no expone la consulta separada de Envios.');
+assert(/CONSULTAR_RESOLUCION_CEDULA/.test(appsScript), 'Código.gs no expone la consulta separada de Resoluciones.');
 
 const studentOrder = [
   'requisitos.estudiantes.service.js',
@@ -114,6 +121,6 @@ if (errors.length) {
   process.exit(1);
 }
 
-console.log('[Apps] Estudiantes: consulta paralela, jerarquía, archivos y elementos principales correctos.');
+console.log('[Apps] Estudiantes: consulta única, tres fuentes, jerarquía y build limpio.');
 console.log('[Apps] Coordinadores: archivos, API y elementos principales correctos.');
 console.log('[Apps] Administrador: archivos, API central y elementos principales correctos.');
