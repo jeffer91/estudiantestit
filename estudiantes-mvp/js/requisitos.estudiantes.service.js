@@ -4,7 +4,9 @@
 
   function config() { return window.EstudianteMVPConfig || null; }
   function utils() { return window.EstudianteMVPUtils || null; }
-  function texto(valor) { return String(valor === null || valor === undefined ? '' : valor).trim(); }
+  function texto(valor) {
+    return String(valor === null || valor === undefined ? '' : valor).trim();
+  }
 
   function esLocal() {
     var host = texto(window.location && window.location.hostname).toLowerCase();
@@ -54,7 +56,7 @@
           var json = {};
           try {
             json = body ? JSON.parse(body) : {};
-          } catch (error) {
+          } catch (_error) {
             throw new Error('REQUISITOS_BDLOCAL_SYNC respondió en un formato no válido.');
           }
           if (!respuesta.ok || json.ok === false) {
@@ -183,29 +185,6 @@
     });
   }
 
-  function cargarComplementosConsulta() {
-    var document = window.document;
-    var estilo;
-    var script;
-    if (!document || !document.head) return;
-
-    if (!document.querySelector('link[data-estudiante-revision="true"]')) {
-      estilo = document.createElement('link');
-      estilo.rel = 'stylesheet';
-      estilo.href = 'css/estudiante.consulta.revision.css?v=2.1.1';
-      estilo.setAttribute('data-estudiante-revision', 'true');
-      document.head.appendChild(estilo);
-    }
-
-    if (!document.querySelector('script[data-estudiante-revision="true"]')) {
-      script = document.createElement('script');
-      script.src = 'js/estudiante.consulta.revision.js?v=2.1.1';
-      script.async = false;
-      script.setAttribute('data-estudiante-revision', 'true');
-      document.head.appendChild(script);
-    }
-  }
-
   var servicio = Object.freeze({
     buscarPorCedula: buscarPorCedula,
     normalizarEstudiante: normalizarEstudiante,
@@ -214,6 +193,6 @@
   });
 
   window.EstudianteMVPRequisitosEstudiantes = servicio;
+  /* Alias conservado para no romper el controlador histórico de la app. */
   window.EstudianteMVPFirebaseEstudiantes = servicio;
-  cargarComplementosConsulta();
 })(window);
