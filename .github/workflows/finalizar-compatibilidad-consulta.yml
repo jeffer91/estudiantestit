@@ -1,0 +1,36 @@
+name: Finalizar compatibilidad de consulta
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/finalizar-compatibilidad-consulta.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  corregir:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Aplicar compatibilidad
+        run: node dev/finalizar-compatibilidad-consulta.mjs
+      - name: Verificar proyecto
+        run: npm run check
+      - name: Limpiar archivos temporales
+        run: rm -f dev/finalizar-compatibilidad-consulta.mjs .github/workflows/finalizar-compatibilidad-consulta.yml
+      - name: Guardar corrección
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add functions/api/acceso-estudiante.js dev/finalizar-compatibilidad-consulta.mjs .github/workflows/finalizar-compatibilidad-consulta.yml
+          git commit -m "Finalizar compatibilidad rápida de envíos y resoluciones"
+          git push origin main
