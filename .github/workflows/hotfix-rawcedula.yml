@@ -1,0 +1,65 @@
+name: Hotfix rawCedula
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/hotfix-rawcedula.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  corregir:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Corregir rawCedula
+        shell: python
+        run: |
+          from pathlib import Path
+
+          access_path = Path('functions/api/acceso-estudiante.js')
+          access = access_path.read_text(encoding='utf-8')
+          marker = """function normalizeCedula(value) {
+            const digits = text(value).replace(/\\D/g, '');
+            if (digits.length === 9) return '0' + digits;
+            return digits.length === 10 ? digits : '';
+          }"""
+          helper = """function rawCedula(value) {
+            const digits = text(value).replace(/\\D/g, '');
+            return digits.length === 9 || digits.length === 10 ? digits : '';
+          }"""
+          if 'function rawCedula(value)' not in access:
+            if marker not in access:
+              raise SystemExit('No se encontró normalizeCedula para aplicar el hotfix.')
+            access = access.replace(marker, marker + '\n\n' + helper, 1)
+            access_path.write_text(access, encoding='utf-8')
+
+          verify_path = Path('dev/verificar-apps.mjs')
+          verify = verify_path.read_text(encoding='utf-8')
+          assertion = "assert(/function\\s+rawCedula\\s*\\(/.test(accessApi), 'La API unificada usa rawCedula sin declararla.');"
+          anchor = "assert(/Promise\\.allSettled/.test(accessApi), 'La API unificada no ejecuta las consultas en paralelo.');"
+          if assertion not in verify:
+            if anchor not in verify:
+              raise SystemExit('No se encontró el punto de validación esperado.')
+            verify = verify.replace(anchor, anchor + '\n' + assertion, 1)
+            verify_path.write_text(verify, encoding='utf-8')
+      - name: Verificar proyecto
+        run: npm run check
+      - name: Eliminar workflow temporal
+        run: rm -f .github/workflows/hotfix-rawcedula.yml
+      - name: Guardar hotfix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add functions/api/acceso-estudiante.js dev/verificar-apps.mjs .github/workflows/hotfix-rawcedula.yml
+          git commit -m "Corregir rawCedula no definida en acceso de estudiantes"
+          git push origin main
