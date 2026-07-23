@@ -1,337 +1,222 @@
-/* Pantalla compacta para títulos enviados, en revisión o aprobados. */
+/* Estado del proceso dentro del Paso 2, sin superposiciones. */
 
-/* El CSS general de .stepper utiliza display:grid y puede anular hidden. */
-.stepper[hidden],
-#estadoPrincipal[hidden],
-[data-step-panel][hidden] {
+.student-process-panel {
+  position: static;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 22px 0 0;
+  padding: 22px;
+  border: 1px solid #d7e0ec;
+  border-left: 5px solid #c9ad63;
+  border-radius: 16px;
+  background: #f8fafc;
+  color: #172033;
+}
+
+.student-process-panel[hidden] {
   display: none !important;
 }
 
-/* Al mostrar el resultado final, se elimina el solapamiento reservado al stepper. */
-body:has(#revisionTitulosPanel:not([hidden])) .app-header {
-  padding-bottom: 30px;
+.student-process-panel--returned {
+  border-left-color: #b7791f;
+  background: #fffaf0;
 }
 
-body:has(#revisionTitulosPanel:not([hidden])) .app-container {
-  margin-top: 22px;
+.student-process-panel--approved {
+  border-left-color: #218653;
+  background: #f2fbf6;
 }
 
-.review-status-card {
-  width: min(100%, 1080px);
-  margin: 0 auto 34px;
-  padding: 28px;
-  border: 1px solid #d8e0ec;
-  border-top: 5px solid #c9ad63;
-  border-radius: 20px;
-  background: #ffffff;
-  box-shadow: 0 16px 38px rgba(15, 23, 42, 0.09);
-  color: #101827;
+.student-process-panel--pending {
+  border-left-color: #315f91;
+  background: #f4f8fc;
 }
 
-.review-status-card[hidden] {
-  display: none !important;
-}
-
-.review-status-card--approved {
-  border-color: #d8e0ec;
-  border-top-color: #23945c;
-  background: linear-gradient(180deg, #ffffff 0%, #fbfdfc 100%);
-  box-shadow: 0 16px 38px rgba(15, 23, 42, 0.09);
-}
-
-.review-status-card__hero {
+.student-process-panel__header {
   display: flex;
-  align-items: center;
-  gap: 16px;
-  padding-bottom: 18px;
-  border-bottom: 1px solid #e5ebf2;
+  align-items: flex-start;
+  gap: 15px;
 }
 
-.review-status-card__icon {
+.student-process-panel__icon {
   display: grid;
-  flex: 0 0 54px;
-  width: 54px;
-  height: 54px;
+  flex: 0 0 46px;
+  width: 46px;
+  height: 46px;
   place-items: center;
-  border: 2px solid #c9ad63;
+  border: 2px solid currentColor;
   border-radius: 50%;
-  background: #fff7df;
-  color: #8a6b24;
-  font-size: 30px;
+  color: #8a6721;
+  font-size: 1.45rem;
   font-weight: 900;
   line-height: 1;
 }
 
-.review-status-card--approved .review-status-card__icon {
-  border-color: #23945c;
-  background: #e9f8ef;
+.student-process-panel--approved .student-process-panel__icon {
   color: #167044;
 }
 
-.review-status-card__eyebrow {
-  margin: 0 0 4px;
-  color: #8a6b24;
-  font-size: 0.76rem;
-  font-weight: 900;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
+.student-process-panel--pending .student-process-panel__icon {
+  color: #315f91;
 }
 
-.review-status-card--approved .review-status-card__eyebrow {
-  color: #167044;
-}
-
-.review-status-card h2 {
-  margin: 0 0 9px;
-  color: #0b2345;
-  font-size: clamp(1.65rem, 3vw, 2.15rem);
-  line-height: 1.12;
-  letter-spacing: -0.025em;
-}
-
-.review-status-card__badge {
+.student-process-panel__badge {
   display: inline-flex;
-  align-items: center;
-  min-height: 30px;
-  padding: 5px 11px;
-  border: 1px solid #d9c486;
-  border-radius: 999px;
-  background: #fff7df;
-  color: #765817;
-  font-size: 0.8rem;
-  font-weight: 800;
-}
-
-.review-status-card--approved .review-status-card__badge {
-  border-color: #a9ddbd;
-  background: #e9f8ef;
-  color: #146c3f;
-}
-
-.review-status-card__message {
-  max-width: 900px;
-  margin: 18px 0 16px;
-  color: #526174;
-  font-size: 1rem;
-  line-height: 1.55;
-}
-
-.approved-title-card {
-  margin: 16px 0;
-  padding: 20px 22px;
-  border: 1px solid #d8e0ec;
-  border-left: 5px solid #c9ad63;
-  border-radius: 14px;
-  background: #f8fafc;
-  box-shadow: none;
-  color: #0b2345;
-}
-
-.approved-title-card span,
-.approved-comment span {
-  display: block;
   margin-bottom: 7px;
-  color: #64748b;
-  font-size: 0.74rem;
+  padding: 4px 10px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  color: #765817;
+  font-size: 0.75rem;
   font-weight: 900;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
-.approved-title-card strong {
-  display: block;
-  overflow-wrap: anywhere;
+.student-process-panel--approved .student-process-panel__badge {
+  color: #167044;
+}
+
+.student-process-panel--pending .student-process-panel__badge {
+  color: #315f91;
+}
+
+.student-process-panel h3 {
+  margin: 0 0 7px;
   color: #0b2345;
   font-size: clamp(1.25rem, 2.4vw, 1.65rem);
-  line-height: 1.35;
+  line-height: 1.2;
 }
 
-.approved-comment {
-  margin-top: 14px;
-  padding: 14px 16px;
-  border: 1px solid #d8e0ec;
-  border-left: 4px solid #23945c;
-  border-radius: 12px;
-  background: #f8fafc;
-}
-
-.approved-comment span {
-  color: #167044;
-}
-
-.approved-comment p {
+.student-process-panel__header p {
   margin: 0;
-  color: #334155;
+  color: #526174;
   line-height: 1.5;
 }
 
-.review-data {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
+.student-process-panel__comment,
+.student-process-panel__approved,
+.student-process-panel__notice,
+.student-process-panel__titles {
+  position: static;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 16px;
 }
 
-.review-data__item {
-  min-width: 0;
-  padding: 13px 14px;
-  border: 1px solid #e0e7f0;
+.student-process-panel__comment,
+.student-process-panel__approved {
+  padding: 16px 18px;
+  border: 1px solid #d9e1eb;
   border-radius: 12px;
-  background: #f8fafc;
+  background: #ffffff;
 }
 
-.review-data__item span {
+.student-process-panel__comment span,
+.student-process-panel__approved span {
   display: block;
-  margin-bottom: 5px;
+  margin-bottom: 6px;
   color: #64748b;
-  font-size: 0.7rem;
+  font-size: 0.74rem;
   font-weight: 900;
   letter-spacing: 0.07em;
   text-transform: uppercase;
 }
 
-.review-status-card--approved .review-data__item span {
-  color: #64748b;
+.student-process-panel__comment p {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: #27364a;
+  line-height: 1.5;
+  white-space: normal;
 }
 
-.review-data__item strong {
+.student-process-panel__approved strong {
   display: block;
   overflow-wrap: anywhere;
-  color: #172033;
-  font-size: 0.93rem;
-  line-height: 1.35;
+  color: #0b2345;
+  font-size: 1.15rem;
+  line-height: 1.4;
+  white-space: normal;
 }
 
-.review-titles {
-  margin-top: 16px;
-  padding: 18px 20px;
-  border: 1px solid #d8e0ec;
-  border-left: 5px solid #c9ad63;
-  border-radius: 14px;
-  background: #f8fafc;
-  color: #102f52;
-}
-
-.review-titles h3 {
+.student-process-panel__titles h4 {
   margin: 0 0 10px;
-  color: #0b2f57;
-  font-size: 1.05rem;
+  color: #0b2345;
+  font-size: 1rem;
 }
 
-.review-titles ol {
+.student-process-panel__titles ol {
+  display: grid;
+  gap: 10px;
   margin: 0;
-  padding-left: 22px;
+  padding: 0;
+  list-style: none;
 }
 
-.review-titles li {
-  padding: 5px 0;
-  color: #334155;
-  line-height: 1.45;
+.student-process-panel__titles li {
+  min-width: 0;
+  padding: 13px 15px;
+  border: 1px solid #d9e1eb;
+  border-radius: 12px;
+  background: #ffffff;
 }
 
-.review-status-card__footer {
+.student-process-panel__titles li.is-favorite {
+  border-color: #c9ad63;
+  box-shadow: inset 4px 0 0 #c9ad63;
+}
+
+.student-process-panel__titles li > div {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
-  margin-top: 18px;
+  gap: 10px;
 }
 
-.review-status-card__notice {
-  flex: 1;
+.student-process-panel__titles li span {
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #fff4d6;
+  color: #765817;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.student-process-panel__titles li p {
+  margin: 7px 0 0;
+  overflow-wrap: anywhere;
+  color: #334155;
+  line-height: 1.45;
+  white-space: normal;
+}
+
+.student-process-panel__notice {
   padding: 12px 14px;
-  border-left: 4px solid #c9ad63;
   border-radius: 10px;
-  background: #fff8e7;
-  color: #49566a;
-  font-size: 0.92rem;
+  background: #fff1c7;
+  color: #5f4b1c;
   line-height: 1.45;
 }
 
-.review-status-card--approved .review-status-card__notice {
-  border-left-color: #23945c;
-  background: #edf8f1;
-  color: #315444;
-}
-
-.review-status-card .btn--secondary,
-.review-status-card--approved .btn--secondary {
-  flex: 0 0 auto;
-  min-height: 44px;
-  padding: 10px 18px;
-  border: 1px solid #0b2345;
-  border-radius: 999px;
-  background: #0b2345;
-  color: #ffffff;
-  box-shadow: 0 8px 18px rgba(11, 35, 69, 0.14);
-}
-
-.review-status-card .btn--secondary:hover,
-.review-status-card .btn--secondary:focus-visible,
-.review-status-card--approved .btn--secondary:hover,
-.review-status-card--approved .btn--secondary:focus-visible {
-  background: #123a6b;
-  color: #ffffff;
-}
-
-@media (max-width: 920px) {
-  .review-data {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 760px) {
-  body:has(#revisionTitulosPanel:not([hidden])) .app-header {
-    padding-bottom: 24px;
-  }
-
-  body:has(#revisionTitulosPanel:not([hidden])) .app-container {
-    margin-top: 16px;
-  }
-
-  .review-status-card {
-    padding: 22px;
-    border-radius: 18px;
-  }
-
-  .review-status-card__hero {
-    align-items: flex-start;
-  }
-
-  .review-status-card__icon {
-    flex-basis: 48px;
-    width: 48px;
-    height: 48px;
-    font-size: 27px;
-  }
-
-  .review-status-card__footer {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .review-status-card .btn--secondary {
-    width: 100%;
-  }
-}
-
-@media (max-width: 560px) {
-  .review-status-card {
+@media (max-width: 720px) {
+  .student-process-panel {
     padding: 18px;
   }
 
-  .review-status-card__hero {
+  .student-process-panel__header {
     gap: 12px;
   }
 
-  .review-status-card h2 {
-    font-size: 1.45rem;
+  .student-process-panel__icon {
+    flex-basis: 40px;
+    width: 40px;
+    height: 40px;
+    font-size: 1.2rem;
   }
 
-  .review-data {
-    grid-template-columns: 1fr;
-  }
-
-  .approved-title-card {
-    padding: 17px;
+  .student-process-panel__titles li > div {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }

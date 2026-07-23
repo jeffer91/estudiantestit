@@ -7,9 +7,11 @@ import {
   text
 } from '../_lib/http.js';
 
+const DIRECT_STUDENT_TIMEOUT_MS = 15000;
+const TITLES_TIMEOUT_MS = 25000;
+const SNAPSHOT_TTL_MS = 10 * 60 * 1000;
 const STUDENT_TTL_MS = 10 * 60 * 1000;
 const NOT_FOUND_TTL_MS = 30 * 1000;
-const SNAPSHOT_TTL_MS = 10 * 60 * 1000;
 const CACHE_LIMIT = 400;
 
 const studentCache = new Map();
@@ -35,6 +37,16 @@ function normalizedKey(value) {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]/g, '');
+}
+
+function normalizePeriod(value) {
+  return text(value)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function flexible(object, names) {
@@ -65,9 +77,8 @@ function table(result, names) {
   const resultNode = root.result && typeof root.result === 'object' ? root.result : {};
   const dataNode = root.data && typeof root.data === 'object' ? root.data : {};
   const tables = root.tables || resultNode.tables || dataNode.tables || {};
-
   for (const name of names) {
-    const candidates = [
+    const variants = [
       tables[name],
       tables[name.toLowerCase()],
       root[name],
@@ -77,10 +88,19 @@ function table(result, names) {
       dataNode[name],
       dataNode[name.toLowerCase()]
     ];
-    const found = candidates.find(Array.isArray);
+    const found = variants.find(Array.isArray);
     if (found) return found;
   }
   return [];
+}
+
+function collectObjects(value, output = [], seen = new Set(), depth = 0) {
+  if (!value || typeof value !== 'object' || depth > 6 || seen.has(value)) return output;
+  seen.add(value);
+  if (!Array.isArray(value)) output.push(value);
+  const entries = Array.isArray(value) ? value : Object.values(value);
+  for (const entry of entries) collectObjects(entry, output, seen, depth + 1);
+  return output;
 }
 
 function sameCedula(item, cedula) {
@@ -93,6 +113,90 @@ function sameCedula(item, cedula) {
     'Cédula'
   ])).replace(/\D/g, '');
   return Boolean(found && variants.has(found));
+}
+
+function recordPeriod(item) {
+  return text(flexible(item || {}, [
+    'periodoId',
+    'periodId',
+    'periodoCanonicoId',
+    'periodoLabel',
+    'periodoCanonicoLabel',
+    'PeriodoLabel',
+    'periodo',
+    'Período'
+  ]));
+}
+
+function recordTimestamp(item, kind) {
+  const dateValue = kind === 'resolution'
+    ? flexible(item || {}, ['fechaResolucion', 'fechaServidor', 'fechaRevision', 'fecha'])
+    : flexible(item || {}, ['fechaEnvio', 'fechaServidor', 'fechaCliente', 'fecha']);
+  const parsed = Date.parse(text(dateValue));
+  if (Number.isFinite(parsed)) return parsed;
+  const row = Number(flexible(item || {}, ['__fila', 'fila', 'rowNumber']));
+  if (Number.isFinite(row)) return row;
+  const id = text(flexible(item || {}, ['idResolucion', 'resolucionId', 'idRegistro', 'envioId', 'id']));
+  const numbers = id.match(/(\d{10,})/g);
+  return numbers && numbers.length ? Number(numbers[numbers.length - 1]) : 0;
+}
+
+function latest(items, kind) {
+  return (Array.isArray(items) ? items : [])
+    .slice()
+    .sort((a, b) => recordTimestamp(b, kind) - recordTimestamp(a, kind))[0] || null;
+}
+
+function looksLikeEnvio(value) {
+  return Boolean(value && typeof value === 'object' && flexible(value, [
+    'titulo1',
+    'titulo2',
+    'titulo3',
+    'propuestas',
+    'propuestasEnviadas',
+    'idRegistro',
+    'envioId',
+    'tituloId',
+    'telegram',
+    'preferido',
+    'tituloPreferidoNumero'
+  ]) !== undefined);
+}
+
+function looksLikeResolution(value) {
+  if (!value || typeof value !== 'object') return false;
+  const state = text(flexible(value, ['estadoFinal', 'estadoResolucion']));
+  const evidence = flexible(value, [
+    'fechaResolucion',
+    'coordinador',
+    'observacion',
+    'comentarioCoordinador',
+    'tituloElegido',
+    'tituloCorregido',
+    'idResolucion',
+    'resolucionId',
+    'permitirReenvio'
+  ]);
+  return Boolean(state && evidence !== undefined);
+}
+
+function candidates(result, predicate) {
+  return collectObjects(unwrap(result)).filter(predicate);
+}
+
+function selectRecord(result, predicate, cedula, academicPeriod, kind) {
+  let list = candidates(result, predicate);
+  const byCedula = list.filter((item) => sameCedula(item, cedula));
+  if (byCedula.length) list = byCedula;
+
+  const target = normalizePeriod(academicPeriod);
+  if (target) {
+    const exact = list.filter((item) => normalizePeriod(recordPeriod(item)) === target);
+    if (exact.length) return latest(exact, kind);
+  }
+
+  if (list.length === 1) return list[0];
+  return latest(list, kind);
 }
 
 function mergeNonEmpty(...sources) {
@@ -112,9 +216,7 @@ function chooseEnrollment(items) {
     const activeA = text(flexible(a, ['estadoMatricula', 'EstadoMatricula']) || 'ACTIVO').toUpperCase() === 'ACTIVO' ? 1 : 0;
     const activeB = text(flexible(b, ['estadoMatricula', 'EstadoMatricula']) || 'ACTIVO').toUpperCase() === 'ACTIVO' ? 1 : 0;
     if (activeA !== activeB) return activeB - activeA;
-    const periodA = text(flexible(a, ['periodoId', 'periodId', 'ultimoPeriodoId', 'periodoLabel']));
-    const periodB = text(flexible(b, ['periodoId', 'periodId', 'ultimoPeriodoId', 'periodoLabel']));
-    return periodB.localeCompare(periodA, 'es', { sensitivity: 'base' });
+    return recordPeriod(b).localeCompare(recordPeriod(a), 'es', { sensitivity: 'base' });
   });
   return list[0] || null;
 }
@@ -123,40 +225,23 @@ function normalizeStudent(base, enrollment, cedula, requestedPeriod) {
   const merged = mergeNonEmpty(base, enrollment);
   const canonical = normalizeCedula(cedula);
   const periodId = text(flexible(merged, [
-    'periodoId',
-    'periodId',
-    'periodoCanonicoId',
-    'ultimoPeriodoId'
+    'periodoId', 'periodId', 'periodoCanonicoId', 'ultimoPeriodoId'
   ]) || requestedPeriod);
   const periodLabel = text(flexible(merged, [
-    'periodoLabel',
-    'periodoCanonicoLabel',
-    'PeriodoLabel',
-    'periodo'
+    'periodoLabel', 'periodoCanonicoLabel', 'PeriodoLabel', 'periodo'
   ]) || periodId);
   const names = text(flexible(merged, [
-    'Nombres',
-    'nombres',
-    'nombreCompleto',
-    'NombreCompleto',
-    'nombre',
-    'Nombre'
+    'Nombres', 'nombres', 'nombreCompleto', 'NombreCompleto', 'nombre', 'Nombre'
   ]));
   const career = text(flexible(merged, [
-    'NombreCarrera',
-    'nombreCarrera',
-    'carrera',
-    'Carrera'
+    'NombreCarrera', 'nombreCarrera', 'carrera', 'Carrera'
   ]));
 
   return {
     ...merged,
     id: text(flexible(merged, ['id', '_id', 'studentId']) || (periodId ? periodId + '__' + canonical : canonical)),
-    _id: text(flexible(merged, ['_id', 'id', 'studentId']) || (periodId ? periodId + '__' + canonical : canonical)),
-    studentId: text(flexible(merged, ['studentId', 'id', '_id']) || (periodId ? periodId + '__' + canonical : canonical)),
     cedula: canonical,
     numeroIdentificacion: canonical,
-    NumeroIdentificacion: canonical,
     Nombres: names,
     nombres: names,
     NombreCarrera: career,
@@ -166,13 +251,11 @@ function normalizeStudent(base, enrollment, cedula, requestedPeriod) {
     codigoCarrera: text(flexible(merged, ['codigoCarrera', 'CodigoCarrera'])),
     periodoId: periodId,
     periodId,
-    periodoCanonicoId: periodId,
     periodoLabel: periodLabel,
-    periodoCanonicoLabel: periodLabel,
     Sede: text(flexible(merged, ['Sede', 'sede'])),
     sede: text(flexible(merged, ['sede', 'Sede'])),
     estadoMatricula: text(flexible(merged, ['estadoMatricula', 'EstadoMatricula']) || 'ACTIVO'),
-    source: 'consulta_acceso_optimizada'
+    source: 'consulta_acceso_paralela'
   };
 }
 
@@ -212,19 +295,9 @@ function setCached(key, value) {
   return value;
 }
 
-async function directStudent(env, cedula, requestedPeriod) {
-  return requestClaves(env, 'CONSULTAR_ESTUDIANTE_REQUISITOS', {
-    cedula,
-    numeroIdentificacion: cedula,
-    periodoId: requestedPeriod,
-    modo: 'IDENTIDAD_RAPIDA'
-  }, 15000);
-}
-
 async function snapshot(env) {
   if (snapshotCache && snapshotCache.expiresAt > Date.now()) return snapshotCache.value;
   if (snapshotInflight) return snapshotInflight;
-
   snapshotInflight = runService(
     env,
     'REQUISITOS',
@@ -234,40 +307,23 @@ async function snapshot(env) {
     'consulta',
     45000
   ).then((value) => {
-    snapshotCache = {
-      value,
-      expiresAt: Date.now() + SNAPSHOT_TTL_MS
-    };
+    snapshotCache = { value, expiresAt: Date.now() + SNAPSHOT_TTL_MS };
     return value;
   }).finally(() => {
     snapshotInflight = null;
   });
-
   return snapshotInflight;
 }
 
 async function fallbackStudent(env, cedula, requestedPeriod) {
   const pulled = await snapshot(env);
   const students = table(pulled, ['Estudiantes', 'BaseEstudiantes']);
-  const enrollments = table(pulled, [
-    'MatriculasPeriodo',
-    'Matriculas',
-    'EstudiantesPeriodo'
-  ]);
+  const enrollments = table(pulled, ['MatriculasPeriodo', 'Matriculas', 'EstudiantesPeriodo']);
   const baseRows = students.filter((item) => sameCedula(item, cedula));
   let enrollmentRows = enrollments.filter((item) => sameCedula(item, cedula));
 
   if (requestedPeriod) {
-    const exact = enrollmentRows.filter((item) => {
-      const period = text(flexible(item, [
-        'periodoId',
-        'periodId',
-        'periodoCanonicoId',
-        'periodoLabel',
-        'periodo'
-      ]));
-      return period === requestedPeriod;
-    });
+    const exact = enrollmentRows.filter((item) => normalizePeriod(recordPeriod(item)) === normalizePeriod(requestedPeriod));
     if (exact.length) enrollmentRows = exact;
   }
 
@@ -308,11 +364,14 @@ async function lookupStudent(env, cedula, requestedPeriod) {
   if (cached) return cached;
   if (studentInflight.has(key)) return studentInflight.get(key);
 
-  const task = directStudent(env, cedula, requestedPeriod)
-    .then(async (direct) => {
-      if (studentFound(direct)) return direct;
-      return fallbackStudent(env, cedula, requestedPeriod);
-    })
+  const task = requestClaves(env, 'CONSULTAR_ESTUDIANTE_REQUISITOS', {
+    cedula,
+    numeroIdentificacion: cedula,
+    periodoId: requestedPeriod,
+    modo: 'IDENTIDAD_RAPIDA'
+  }, DIRECT_STUDENT_TIMEOUT_MS)
+    .then(async (direct) => studentFound(direct) ? direct : fallbackStudent(env, cedula, requestedPeriod))
+    .catch(() => fallbackStudent(env, cedula, requestedPeriod))
     .then((result) => setCached(key, result))
     .finally(() => studentInflight.delete(key));
 
@@ -320,74 +379,43 @@ async function lookupStudent(env, cedula, requestedPeriod) {
   return task;
 }
 
-function looksLikeEnvio(value) {
-  return Boolean(value && typeof value === 'object' && flexible(value, [
-    'titulo1',
-    'titulo2',
-    'titulo3',
-    'tituloAprobado',
-    'tituloCorregido',
-    'tituloElegido',
-    'tituloFinalAprobado'
-  ]) !== undefined);
-}
-
-function extractEnvio(result) {
-  if (!result || typeof result !== 'object') return null;
-  const candidates = [
-    result.envio,
-    result.registroEnvio,
-    result.envioActual,
-    result.data && result.data.envio,
-    result.resultado && result.resultado.envio,
-    result.respuesta && result.respuesta.envio,
-    result.registro
-  ];
-  for (const candidate of candidates) {
-    if (looksLikeEnvio(candidate)) return candidate;
-  }
-  return looksLikeEnvio(result) ? result : null;
-}
-
-function envioEstado(result) {
-  const envio = extractEnvio(result) || {};
-  return text(
-    flexible(envio, ['estado', 'estadoFinal', 'estadoProceso', 'estadoGoogleSheets']) ||
-    flexible(result, ['estado', 'estadoFinal'])
-  ).toUpperCase();
-}
-
-function permiteReenvio(result) {
-  const envio = extractEnvio(result) || {};
-  const estado = envioEstado(result);
-  const own = flexible(envio, ['permitirReenvio', 'permiteReenvio']);
-  const value = own !== undefined
-    ? own
-    : flexible(result, ['permitirReenvio', 'permiteReenvio']);
-  return estado === 'DEVUELTO' && (
-    value === undefined || value === null || value === '' || yes(value)
-  );
-}
-
-async function lookupEnvio(env, cedula, student) {
-  const periodId = text(flexible(student || {}, ['periodoId', 'periodId']));
-  const periodLabel = text(flexible(student || {}, ['periodoLabel', 'periodo']));
+async function queryTitles(env, action, cedula) {
   const result = await runService(
     env,
     'TITULOS',
-    'CONSULTAR_ENVIO_CEDULA',
+    action,
     'GET',
-    {
-      cedula,
-      numeroIdentificacion: cedula,
-      periodo: periodLabel || periodId,
-      periodoLabel,
-      periodoId
-    },
+    { cedula, numeroIdentificacion: cedula, periodo: '', periodoId: '', periodoLabel: '' },
     'student',
-    30000
+    TITLES_TIMEOUT_MS
   );
-  return unwrap(result);
+  const unwrapped = unwrap(result);
+  if (unwrapped && unwrapped.ok === false) {
+    throw new Error(unwrapped.mensaje || unwrapped.error || 'La consulta de Títulos no fue completada.');
+  }
+  return unwrapped;
+}
+
+function normalizeState(value) {
+  const state = text(value).toUpperCase();
+  if (state === 'ENVIADO' || state === 'PENDIENTE_SYNC') return 'PENDIENTE_REVISION';
+  return state;
+}
+
+function effectiveState(envio, resolucion) {
+  const resolutionState = normalizeState(flexible(resolucion || {}, ['estadoFinal', 'estadoResolucion', 'estado']));
+  if (resolutionState) return { estado: resolutionState, origen: 'RESOLUCIONES' };
+  const envioState = normalizeState(flexible(envio || {}, ['estado', 'estadoProceso', 'estadoGoogleSheets'])) || 'PENDIENTE_REVISION';
+  if (envio) return { estado: envioState, origen: 'ENVIOS' };
+  return { estado: 'SIN_ENVIO', origen: 'REQUISITOS' };
+}
+
+function sourceError(settled, label) {
+  if (settled.status === 'fulfilled') return null;
+  return {
+    fuente: label,
+    mensaje: text(settled.reason && settled.reason.message) || 'Consulta no disponible.'
+  };
 }
 
 export async function onRequest({ request, env }) {
@@ -408,39 +436,62 @@ export async function onRequest({ request, env }) {
     const data = input.datos && typeof input.datos === 'object'
       ? { ...input, ...input.datos }
       : { ...input };
-    const cedula = normalizeCedula(
-      data.cedula || data.numeroIdentificacion || data.identificacion
-    );
-    const requestedPeriod = text(
-      data.periodoId || data.periodo || data.periodoLabel
-    );
+    const cedula = normalizeCedula(data.cedula || data.numeroIdentificacion || data.identificacion);
+    const requestedPeriod = text(data.periodoId || data.periodo || data.periodoLabel);
 
     if (!cedula) throw new Error('No se recibió una cédula válida.');
 
-    const academic = await lookupStudent(env, cedula, requestedPeriod);
+    const [academicResult, envioResult, resolutionResult] = await Promise.allSettled([
+      lookupStudent(env, cedula, requestedPeriod),
+      queryTitles(env, 'VERIFICAR_ENVIO', cedula),
+      queryTitles(env, 'CONSULTAR_ENVIO_CEDULA', cedula)
+    ]);
+
+    const sourceErrors = [
+      sourceError(academicResult, 'REQUISITOS'),
+      sourceError(envioResult, 'ENVIOS'),
+      sourceError(resolutionResult, 'RESOLUCIONES')
+    ].filter(Boolean);
+
+    if (sourceErrors.length) {
+      return jsonReply(request, {
+        ok: false,
+        consultaCompleta: false,
+        fuentesFallidas: sourceErrors,
+        mensaje: 'No pudimos comprobar completamente tus datos, envíos y resoluciones. Intenta nuevamente.',
+        duracionMs: Date.now() - startedAt
+      }, 502);
+    }
+
+    const academic = academicResult.value;
     if (!studentFound(academic)) {
       return jsonReply(request, {
         ...academic,
+        ok: true,
+        consultaCompleta: true,
+        consultas: { requisitos: 'ok', envios: 'ok', resoluciones: 'ok' },
         duracionMs: Date.now() - startedAt
       });
     }
 
     const student = academic.estudiante || academic.registro;
-    let envioResult = {};
-    try {
-      envioResult = await lookupEnvio(env, cedula, student);
-    } catch (error) {
-      envioResult = {
-        ok: false,
-        mensaje: text(error && error.message)
-      };
-    }
+    const academicPeriod = text(
+      flexible(student, ['periodoLabel', 'periodoId', 'periodo']) ||
+      academic.periodoLabel ||
+      academic.periodoId ||
+      requestedPeriod
+    );
 
-    const envio = extractEnvio(envioResult);
-    const permitir = permiteReenvio(envioResult);
-    const estado = envioEstado(envioResult);
-    const encontradoEnvio = Boolean(envio);
-    const aprobado = estado.includes('APROBADO') || estado === 'REEMPLAZADO';
+    const envio = selectRecord(envioResult.value, looksLikeEnvio, cedula, academicPeriod, 'envio') ||
+      selectRecord(resolutionResult.value, looksLikeEnvio, cedula, academicPeriod, 'envio');
+    const resolucion = selectRecord(resolutionResult.value, looksLikeResolution, cedula, academicPeriod, 'resolution') ||
+      selectRecord(envioResult.value, looksLikeResolution, cedula, academicPeriod, 'resolution');
+
+    const decision = effectiveState(envio, resolucion);
+    const permiteReenvio = decision.estado === 'DEVUELTO';
+    const tieneEnvio = Boolean(envio);
+    const tieneResolucion = Boolean(resolucion);
+    const envioCombinado = envio ? mergeNonEmpty(envio, resolucion || {}) : null;
 
     return jsonReply(request, {
       ...academic,
@@ -449,27 +500,34 @@ export async function onRequest({ request, env }) {
       existe: true,
       estudiante: student,
       registro: student,
-      tieneEnvio: encontradoEnvio && !permitir,
-      encontradoEnvio,
-      permiteReenvio: permitir,
-      envio,
-      estadoEnvio: estado,
-      consultaEnvioCompleta: true,
-      fuente: academic.fuente || 'CONSULTA_ACCESO_OPTIMIZADA',
-      fuenteEnvio: 'RESPALDO_TITULOS_APP',
-      duracionMs: Date.now() - startedAt,
-      mensaje: permitir
-        ? 'El registro fue devuelto y puede corregirse.'
-        : aprobado
+      envio: envioCombinado,
+      envioOriginal: envio,
+      resolucion,
+      tieneEnvio,
+      encontradoEnvio: tieneEnvio,
+      tieneResolucion,
+      estadoEfectivo: decision.estado,
+      estadoEnvio: decision.estado,
+      origenDecision: decision.origen,
+      permiteReenvio,
+      consultaCompleta: true,
+      consultas: { requisitos: 'ok', envios: 'ok', resoluciones: 'ok' },
+      fuente: academic.fuente || 'CONSULTA_ACCESO_PARALELA',
+      fuenteEnvio: 'RESPALDO_TITULOS_APP_ENVÍOS',
+      fuenteResolucion: 'RESPALDO_TITULOS_APP_RESOLUCIONES',
+      mensaje: permiteReenvio
+        ? 'Tus propuestas fueron devueltas y pueden corregirse.'
+        : decision.estado === 'APROBADO' || decision.estado === 'REEMPLAZADO'
           ? 'Tu tema de titulación fue aprobado por coordinación.'
-          : encontradoEnvio
-            ? 'Tus propuestas ya fueron enviadas y están siendo revisadas por coordinación.'
-            : 'Estudiante encontrado correctamente.'
+          : tieneEnvio
+            ? 'Tus propuestas ya fueron enviadas y están siendo revisadas.'
+            : 'Estudiante encontrado. No registra envíos anteriores.',
+      duracionMs: Date.now() - startedAt
     });
   } catch (error) {
     return jsonReply(request, {
       ok: false,
-      servicio: 'ACCESO_ESTUDIANTE',
+      consultaCompleta: false,
       mensaje: error.message || String(error),
       duracionMs: Date.now() - startedAt
     }, 502);
