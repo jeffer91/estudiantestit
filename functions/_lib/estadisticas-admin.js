@@ -84,6 +84,18 @@ function phoneFrom(row) {
   return text(flexible(row, ['Celular', 'celular', 'telefono', 'Teléfono']));
 }
 
+function institutionalEmailFrom(row) {
+  return text(flexible(row, [
+    'CorreoInstitucional', 'correoInstitucional', 'emailInstitucional', 'correo_institucional'
+  ])).toLowerCase();
+}
+
+function personalEmailFrom(row) {
+  return text(flexible(row, [
+    'CorreoPersonal', 'correoPersonal', 'emailPersonal', 'correo_personal'
+  ])).toLowerCase();
+}
+
 function statusFrom(row) {
   const value = text(flexible(row, ['estado', 'estadoFinal']) || 'PENDIENTE_REVISION')
     .toUpperCase()
@@ -98,11 +110,15 @@ function mergeStudent(base, enrollment, cedula) {
   const names = nameFrom(enrollment) || nameFrom(base);
   const career = careerFrom(enrollment) || careerFrom(base);
   const phone = phoneFrom(enrollment) || phoneFrom(base);
+  const institutionalEmail = institutionalEmailFrom(enrollment) || institutionalEmailFrom(base);
+  const personalEmail = personalEmailFrom(enrollment) || personalEmailFrom(base);
   return {
     cedula,
     nombres: names,
     carrera: career,
     celular: phone,
+    correoInstitucional: institutionalEmail,
+    correoPersonal: personalEmail,
     periodo: periodFrom(enrollment) || periodFrom(base)
   };
 }
