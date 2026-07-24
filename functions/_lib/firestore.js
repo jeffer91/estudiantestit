@@ -1,8 +1,16 @@
-/* Cliente Firestore REST autenticado para Cloudflare Pages Functions. */
+/* Cliente Firestore REST para Cloudflare Pages Functions.
+   Usa cuentas de servicio cuando existen y, para pruebas locales, usa
+   las configuraciones web provistas por Firebase y respeta sus reglas. */
 
 export const FIREBASE_PROJECTS = Object.freeze({
-  TITULOS: Object.freeze({ projectId: 'titulos-ec2fa' }),
-  UTET: Object.freeze({ projectId: 'utet-4387a' })
+  TITULOS: Object.freeze({
+    projectId: 'titulos-ec2fa',
+    apiKey: 'AIzaSyDkSOhJ552LwxQtt8GhP5iDJk49y0t4mOg'
+  }),
+  UTET: Object.freeze({
+    projectId: 'utet-4387a',
+    apiKey: 'AIzaSyCaHf1C0BB0X_H3BDZ1o-UDAsPmLTjsZLA'
+  })
 });
 
 const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
@@ -95,13 +103,7 @@ function serviceAccount(env, project) {
     if (parsed) return parsed;
   }
 
-  const generic = parseServiceAccount(readEnv(env, 'FIREBASE_SERVICE_ACCOUNT'), 'FIREBASE_SERVICE_ACCOUNT');
-  if (generic) return generic;
-
-  throw new Error(
-    `Falta el secreto ${names[0]} en Cloudflare Pages. ` +
-    `Debe contener el JSON de una cuenta de servicio con acceso IAM a ${config.projectId}.`
-  );
+  return parseServiceAccount(readEnv(env, 'FIREBASE_SERVICE_ACCOUNT'), 'FIREBASE_SERVICE_ACCOUNT');
 }
 
 function bytesToBase64Url(bytes) {
@@ -162,6 +164,8 @@ async function createSignedJwt(account) {
 async function accessToken(env, project) {
   const config = projectConfig(project);
   const account = serviceAccount(env, project);
+  if (!account) return '';
+
   const cacheKey = `${config.key}|${account.clientEmail}`;
   const cached = tokenCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now() + 60 * 1000) return cached.token;
@@ -198,12 +202,20 @@ async function accessToken(env, project) {
   return result.token;
 }
 
+function publicApiUrl(project, url) {
+  const config = projectConfig(project);
+  const parsed = new URL(url);
+  if (!parsed.searchParams.has('key')) parsed.searchParams.set('key', config.apiKey);
+  return parsed.toString();
+}
+
 async function firestoreFetch(project, url, options = {}, env) {
   const token = await accessToken(env, project);
   const headers = new Headers(options.headers || {});
-  headers.set('Authorization', `Bearer ${token}`);
+  if (token) headers.set('Authorization', `Bearer ${token}`);
   if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
-  return fetch(url, { ...options, headers });
+  const target = token ? url : publicApiUrl(project, url);
+  return fetch(target, { ...options, headers });
 }
 
 export function encodeValue(value) {
@@ -412,8 +424,13 @@ export async function commitDocuments(project, writes, env) {
 
 export async function pingProject(project, env) {
   const config = projectConfig(project);
+  const account = serviceAccount(env, project);
   await listCollection(project, '__ping_inexistente__', { pageSize: 1, maxDocuments: 1 }, env);
-  return { ok: true, projectId: config.projectId, autenticacion: 'service-account-oauth' };
+  return {
+    ok: true,
+    projectId: config.projectId,
+    autenticacion: account ? 'service-account-oauth' : 'firebase-web-config-reglas'
+  };
 }
 
 export function periodSignature(value) {
