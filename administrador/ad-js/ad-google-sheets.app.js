@@ -2,7 +2,7 @@
 (function(window,document){
   'use strict';
 
-  var VERSION='3.0.0';
+  var VERSION='3.1.2';
   var state={periodos:[],principal:null,carreras:[],coordinadores:[],titulos:[],proveedores:[],periodoId:'',coordinadorEdicion:null,proveedorEdicion:null};
 
   function api(){if(!window.ADAPIService)throw new Error('ADAPIService no está disponible.');return window.ADAPIService;}
@@ -29,7 +29,7 @@
     var filas=state.periodos.map(function(p){return '<tr><td>'+esc(p.id||p.periodoId)+'</td><td>'+esc(p.label||p.periodoLabel||p.id)+'</td><td><span class="ad-badge ad-badge-success">Firebase</span></td><td>'+(p.principal?'<span class="ad-badge ad-badge-info">Principal</span>':'-')+'</td></tr>';});
     setHtml('ad-tabla-periodos',filas.length?filas.join(''):'<tr><td colspan="4" class="ad-empty">No se encontraron períodos.</td></tr>');
     var select=$('ad-periodo-select');
-    if(select){select.innerHTML=state.periodos.map(function(p){return option(p.id||p.periodoId,p.label||p.periodoLabel||p.id,(p.id||p.periodoId)===state.periodoId);}).join('');}
+    if(select)select.innerHTML=state.periodos.map(function(p){return option(p.id||p.periodoId,p.label||p.periodoLabel||p.id,(p.id||p.periodoId)===state.periodoId);}).join('');
     document.querySelectorAll('[data-periodo-select]').forEach(function(el){el.innerHTML='<option value="">Todos / principal</option>'+state.periodos.map(function(p){return option(p.id||p.periodoId,p.label||p.periodoLabel||p.id,false);}).join('');});
     setTexto('ad-kpi-periodo',state.principal&&state.principal.label||'Sin período');
     setTexto('ad-kpi-periodo-id',state.principal&&state.principal.id||'-');
@@ -50,15 +50,39 @@
     var sel=$('ad-asignar-coordinador');if(sel)sel.innerHTML='<option value="">Selecciona</option>'+state.coordinadores.map(function(c){return option(c.id,c.nombre,false);}).join('');
   }
 
-  function normalizarTitulo(t){t=t||{};return{cedula:cedula(t.cedula||t.numeroIdentificacion),nombres:texto(t.estudiante||t.nombres||t.Nombres),carrera:texto(t.carrera||t.NombreCarrera||t.nombreCarrera),periodo:texto(t.periodo||t.periodoLabel||t.periodoId),estado:texto(t.estado||t.estadoFinal||'PENDIENTE_REVISION').toUpperCase(),fecha:texto(t.fechaEnvio||t['Fecha envío']||t.fechaServidor),titulo1:texto(t.titulo1||t['Título 1']),titulo2:texto(t.titulo2||t['Título 2']),titulo3:texto(t.titulo3||t['Título 3']),preferido:texto(t.preferido||t.tituloPreferidoNumero||t.tituloPreferido),raw:t};}
+  function normalizarTitulo(t){
+    t=t||{};
+    var periodId=texto(t.periodoId||t.periodId);
+    var periodLabel=texto(t.periodo||t.periodoLabel||periodId);
+    return{
+      id:texto(t.envioId||t.id||t._id||t.idRegistro),
+      cedula:cedula(t.cedula||t.numeroIdentificacion),
+      nombres:texto(t.estudiante||t.nombres||t.Nombres),
+      carrera:texto(t.carrera||t.NombreCarrera||t.nombreCarrera),
+      periodo:periodLabel,
+      periodoId:periodId,
+      estado:texto(t.estado||t.estadoFinal||'PENDIENTE_REVISION').toUpperCase(),
+      fecha:texto(t.fechaEnvio||t['Fecha envío']||t.fechaServidor),
+      titulo1:texto(t.titulo1||t['Título 1']),
+      titulo2:texto(t.titulo2||t['Título 2']),
+      titulo3:texto(t.titulo3||t['Título 3']),
+      preferido:texto(t.preferido||t.tituloPreferidoNumero||t.tituloPreferido),
+      raw:t
+    };
+  }
+
   function renderTitulos(){
-    state.titulos=state.titulos.map(normalizarTitulo).filter(function(t){return t.cedula;});
     var filtro=texto($('ad-buscar-titulo')&&$('ad-buscar-titulo').value).toLowerCase();
     var lista=state.titulos.filter(function(t){return !filtro||[t.cedula,t.nombres,t.carrera,t.periodo,t.estado].join(' ').toLowerCase().indexOf(filtro)>=0;});
-    var filas=lista.map(function(t){return '<tr><td>'+esc(t.cedula)+'</td><td>'+esc(t.nombres)+'</td><td>'+esc(t.carrera)+'</td><td>'+esc(t.periodo)+'</td><td><span class="ad-badge '+(t.estado==='DEVUELTO'?'ad-badge-warning':t.estado==='APROBADO'||t.estado==='REEMPLAZADO'?'ad-badge-success':'ad-badge-info')+'">'+esc(t.estado)+'</span></td><td><button class="ad-btn ad-btn-secondary" type="button" data-action="usar-titulo" data-cedula="'+esc(t.cedula)+'" data-periodo="'+esc(t.periodo)+'">Usar</button></td></tr>';});
+    var filas=lista.map(function(t){
+      var key=t.id||[t.cedula,t.periodoId||t.periodo].join('|');
+      return '<tr><td>'+esc(t.cedula)+'</td><td>'+esc(t.nombres)+'</td><td>'+esc(t.carrera)+'</td><td>'+esc(t.periodo)+'</td><td><span class="ad-badge '+(t.estado==='DEVUELTO'?'ad-badge-warning':t.estado==='APROBADO'||t.estado==='REEMPLAZADO'?'ad-badge-success':'ad-badge-info')+'">'+esc(t.estado)+'</span></td><td><button class="ad-btn ad-btn-secondary" type="button" data-action="usar-titulo" data-id="'+esc(key)+'">Usar</button> <button class="ad-btn ad-btn-danger" type="button" data-action="eliminar-titulo" data-id="'+esc(key)+'">Eliminar</button></td></tr>';
+    });
     setHtml('ad-tabla-titulos',filas.length?filas.join(''):'<tr><td colspan="6" class="ad-empty">No hay títulos para mostrar.</td></tr>');
     setTexto('ad-kpi-titulos',String(state.titulos.length));
   }
+
+  function buscarTitulo(id){return state.titulos.find(function(t){return (t.id||[t.cedula,t.periodoId||t.periodo].join('|'))===id;})||null;}
 
   function renderIA(){
     var filas=state.proveedores.map(function(p){return '<tr><td><strong>'+esc(p.nombre||p.id)+'</strong><br><small>'+esc(p.id)+'</small></td><td>'+esc(p.tipo)+'</td><td>'+esc(p.modelo||p.model)+'</td><td><span class="ad-badge '+(p.activo?'ad-badge-success':'ad-badge-warning')+'">'+(p.activo?'Activo':'Inactivo')+'</span></td><td>'+(p.apiKeyConfigurada?'Sí':'No')+'</td><td><button class="ad-btn ad-btn-secondary" type="button" data-action="editar-ia" data-id="'+esc(p.id)+'">Editar</button> <button class="ad-btn '+(p.activo?'ad-btn-danger':'ad-btn-primary')+'" type="button" data-action="toggle-ia" data-id="'+esc(p.id)+'" data-activo="'+(!p.activo)+'">'+(p.activo?'Desactivar':'Activar')+'</button> <button class="ad-btn ad-btn-secondary" type="button" data-action="probar-ia" data-id="'+esc(p.id)+'">Probar</button></td></tr>';});
@@ -69,7 +93,7 @@
   function cargarPeriodos(){return api().listarPeriodos().then(function(r){state.periodos=api().extraerPeriodos(r);state.principal=r.principal||state.periodos.find(function(p){return p.principal;})||state.periodos[0]||null;state.periodoId=state.principal&&String(state.principal.id||state.principal.periodoId)||'';renderPeriodos();return cargarCarreras();});}
   function cargarCarreras(){return api().listarCarreras(state.periodoId).then(function(r){state.carreras=api().extraerCarreras(r);renderCarreras();});}
   function cargarCoordinadores(){return api().listarCoordinadores().then(function(r){state.coordinadores=api().extraerCoordinadores(r);renderCoordinadores();});}
-  function cargarTitulos(){return api().listarTitulos({carreras:'',carrera:'',estado:'',periodo:''}).then(function(r){state.titulos=api().extraerTitulos(r);renderTitulos();});}
+  function cargarTitulos(){return api().listarTitulos({carreras:'',carrera:'',estado:'',periodo:''}).then(function(r){state.titulos=api().extraerTitulos(r).map(normalizarTitulo).filter(function(t){return t.cedula;});renderTitulos();});}
   function cargarIA(){return api().listarIA().then(function(r){state.proveedores=Array.isArray(r.proveedores)?r.proveedores:[];renderIA();});}
 
   function diagnosticar(){
@@ -103,8 +127,21 @@
 
   function consultarEstudiante(event){event.preventDefault();var c=cedula($('ad-estudiante-cedula').value),p=texto($('ad-estudiante-periodo').value);if(!c){estadoBox('ad-estudiante-salida','Ingresa una cédula.','danger');return;}busy(true,'Consultando estudiante en Firebase UTET...');api().consultarEstudiante(c,p).then(function(r){var e=r.estudiante||r.registro;if(!r.encontrado||!e){estadoBox('ad-estudiante-salida',r.mensaje||'Estudiante no encontrado.','warning');return;}setTexto('ad-estudiante-salida',JSON.stringify({cedula:e.cedula||e.numeroIdentificacion,nombres:e.Nombres||e.nombres,carrera:e.NombreCarrera||e.carrera,periodo:e.periodoLabel||e.periodoId,celular:e.Celular||e.celular||''},null,2));}).catch(function(error){estadoBox('ad-estudiante-salida',mensaje(error),'danger');}).finally(function(){busy(false);});}
 
-  function usarTitulo(c,p){$('ad-devolver-cedula').value=c;$('ad-devolver-periodo').value=p;mostrarVista('ad-seccion-devolver');}
+  function usarTitulo(titulo){if(!titulo)return;$('ad-devolver-cedula').value=titulo.cedula;$('ad-devolver-periodo').value=titulo.periodo;mostrarVista('ad-seccion-devolver');}
   function devolverTitulo(event){event.preventDefault();var c=cedula($('ad-devolver-cedula').value),p=texto($('ad-devolver-periodo').value),motivo=texto($('ad-devolver-motivo').value);if(!c||motivo.length<4){estadoBox('ad-estado-devolver','Ingresa la cédula y un motivo de al menos 4 caracteres.','danger');return;}busy(true,'Devolviendo propuestas...');api().consultarTitulo(c,p).then(function(r){var e=r.envio||r.registro;if(!e)throw new Error('No se encontró el envío original.');var favorito=texto(e.tituloPreferidoTexto||e.tituloPreferido||e.preferido||e.titulo1||e['Título 1']);return api().devolverTitulo({cedula:c,numeroIdentificacion:c,periodo:e.periodo||e.periodoLabel||p,estudiante:e.estudiante||e.nombres,carrera:e.carrera||e.NombreCarrera,coordinador:'Administrador',estadoFinal:'DEVUELTO',estado:'DEVUELTO',tituloElegido:favorito,tituloCorregido:'',observacion:motivo,comentario:motivo,comentarioCoordinador:motivo,fechaResolucion:new Date().toISOString(),permitirReenvio:true});}).then(function(){estadoBox('ad-estado-devolver','Propuestas devueltas correctamente en Firebase Títulos.','success');return cargarTitulos();}).catch(function(error){estadoBox('ad-estado-devolver',mensaje(error),'danger');}).finally(function(){busy(false);});}
+
+  function eliminarTitulo(titulo){
+    if(!titulo)return;
+    var detalle='Estudiante: '+(titulo.nombres||'Sin nombre')+'\nCédula: '+titulo.cedula+'\nCarrera: '+(titulo.carrera||'Sin carrera')+'\nPeríodo: '+(titulo.periodo||titulo.periodoId||'Sin período');
+    var confirmado=window.confirm('¿Eliminar definitivamente este registro de titulación?\n\n'+detalle+'\n\nSe eliminarán el envío, sus versiones y sus resoluciones. Esta acción no se puede deshacer.');
+    if(!confirmado)return;
+    busy(true,'Eliminando registro de titulación...');
+    estadoBox('ad-estado-titulos','Eliminando '+titulo.cedula+'...','warning');
+    api().eliminarTitulo({envioId:titulo.id,idRegistro:titulo.id,cedula:titulo.cedula,numeroIdentificacion:titulo.cedula,periodo:titulo.periodo,periodoLabel:titulo.periodo,periodoId:titulo.periodoId}).then(function(r){
+      estadoBox('ad-estado-titulos',r.mensaje||'Registro eliminado correctamente. El estudiante ya puede volver a enviar sus propuestas.','success');
+      return cargarTitulos();
+    }).catch(function(error){estadoBox('ad-estado-titulos',mensaje(error),'danger');}).finally(function(){busy(false);});
+  }
 
   function editarIA(id){var p=state.proveedores.find(function(x){return x.id===id;});if(!p)return;state.proveedorEdicion=p;$('ad-ia-id').value=p.id;$('ad-ia-nombre').value=p.nombre||'';$('ad-ia-tipo').value=p.tipo||'openai-compatible';$('ad-ia-endpoint').value='';$('ad-ia-modelo').value=p.modelo||p.model||'';$('ad-ia-credencial').value='';$('ad-ia-prioridad').value=p.prioridad||999;$('ad-ia-activo').checked=p.activo===true;mostrarVista('ad-seccion-ia');}
   function guardarIA(event){event.preventDefault();var proveedor={id:texto($('ad-ia-id').value),nombre:texto($('ad-ia-nombre').value),tipo:texto($('ad-ia-tipo').value),endpoint:texto($('ad-ia-endpoint').value),modelo:texto($('ad-ia-modelo').value),credencial:texto($('ad-ia-credencial').value),prioridad:Number($('ad-ia-prioridad').value||999),activo:$('ad-ia-activo').checked,estado:$('ad-ia-activo').checked?'ACTIVO':'INACTIVO'};if(!proveedor.id){estadoBox('ad-estado-ia','Ingresa el ID del proveedor.','danger');return;}busy(true,'Guardando proveedor IA...');api().guardarIA(proveedor).then(function(){estadoBox('ad-estado-ia','Proveedor guardado en Firebase Títulos.','success');state.proveedorEdicion=null;$('ad-form-ia').reset();return cargarIA();}).catch(function(error){estadoBox('ad-estado-ia',mensaje(error),'danger');}).finally(function(){busy(false);});}
@@ -112,7 +149,23 @@
   function probarIA(id){busy(true,'Probando IA...');api().probarIA(id,'Responde únicamente: conexión correcta.').then(function(r){estadoBox('ad-estado-ia','Proveedor '+id+': '+texto(r.text||'conexión correcta')+' | '+Number(r.latencyMs||0)+' ms','success');return cargarIA();}).catch(function(error){estadoBox('ad-estado-ia',mensaje(error),'danger');}).finally(function(){busy(false);});}
 
   function enlazar(){
-    document.addEventListener('click',function(event){var link=event.target.closest('[data-ad-view-target]');if(link){event.preventDefault();mostrarVista(link.getAttribute('data-ad-view-target'));return;}var b=event.target.closest('[data-action]');if(!b)return;var a=b.getAttribute('data-action');if(a==='refrescar')refrescarTodo();else if(a==='diagnosticar')diagnosticar();else if(a==='editar-coordinador')editarCoordinador(b.getAttribute('data-id'));else if(a==='toggle-coordinador')toggleCoordinador(b.getAttribute('data-id'),b.getAttribute('data-activo')==='true');else if(a==='usar-titulo')usarTitulo(b.getAttribute('data-cedula'),b.getAttribute('data-periodo'));else if(a==='editar-ia')editarIA(b.getAttribute('data-id'));else if(a==='toggle-ia')toggleIA(b.getAttribute('data-id'),b.getAttribute('data-activo')==='true');else if(a==='probar-ia')probarIA(b.getAttribute('data-id'));});
+    document.addEventListener('click',function(event){
+      var link=event.target.closest('[data-ad-view-target]');
+      if(link){event.preventDefault();mostrarVista(link.getAttribute('data-ad-view-target'));return;}
+      var b=event.target.closest('[data-action]');
+      if(!b)return;
+      var a=b.getAttribute('data-action');
+      var titulo;
+      if(a==='refrescar')refrescarTodo();
+      else if(a==='diagnosticar')diagnosticar();
+      else if(a==='editar-coordinador')editarCoordinador(b.getAttribute('data-id'));
+      else if(a==='toggle-coordinador')toggleCoordinador(b.getAttribute('data-id'),b.getAttribute('data-activo')==='true');
+      else if(a==='usar-titulo'){titulo=buscarTitulo(b.getAttribute('data-id'));usarTitulo(titulo);}
+      else if(a==='eliminar-titulo'){titulo=buscarTitulo(b.getAttribute('data-id'));eliminarTitulo(titulo);}
+      else if(a==='editar-ia')editarIA(b.getAttribute('data-id'));
+      else if(a==='toggle-ia')toggleIA(b.getAttribute('data-id'),b.getAttribute('data-activo')==='true');
+      else if(a==='probar-ia')probarIA(b.getAttribute('data-id'));
+    });
     $('ad-form-coordinador').addEventListener('submit',guardarCoordinador);
     $('ad-form-asignacion').addEventListener('submit',asignarCarreras);
     $('ad-form-estudiante').addEventListener('submit',consultarEstudiante);
