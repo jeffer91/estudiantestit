@@ -6,6 +6,7 @@ import {
   listAdminPeriodsCatalog,
   saveAdminPeriod
 } from '../_lib/estadisticas-admin.js';
+import { buildFirebaseTitlesReport } from '../_lib/firebase-titulos-report.js';
 import { jsonReply, readJson, rejectUnknownOrigin, role, text } from '../_lib/http.js';
 
 export async function onRequestOptions(context) {
@@ -27,6 +28,7 @@ async function execute(action, data, env) {
   if (normalized === 'ADMIN_GUARDAR_PERIODO') return saveAdminPeriod(data, env);
   if (normalized === 'ADMIN_LISTAR_CARRERAS') return listAdminCareers(env);
   if (normalized === 'ADMIN_ASIGNAR_CARRERA_COORDINADOR') return assignCareerCoordinator(data, env);
+  if (normalized === 'ADMIN_REPORTE_FIREBASE_TITULOS') return buildFirebaseTitlesReport(env);
   throw new Error('Acción administrativa no implementada: ' + action);
 }
 
