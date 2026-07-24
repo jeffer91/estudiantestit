@@ -9,6 +9,11 @@
   function esc(v){return texto(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');}
   function errorTexto(error){return error&&error.message?error.message:texto(error)||'Error desconocido.';}
   function estado(mensaje,tipo){var el=$('ad-estado-servicio');if(!el)return;el.textContent=mensaje||'';el.className='ad-result-box ad-status-'+(tipo||'info');}
+  function autenticacion(servicio){
+    var tipo=texto(servicio.tipo).toLowerCase();
+    if(tipo.indexOf('service')>=0||tipo.indexOf('iam')>=0)return'Cuenta de servicio / IAM';
+    return'Configuración web / REST';
+  }
 
   function asegurarInterfaz(){
     if($('ad-seccion-servicios'))return;
@@ -30,7 +35,7 @@
       section.setAttribute('data-ad-view','');
       section.hidden=true;
       section.innerHTML=''+
-        '<div class="ad-section-head"><div><p class="ad-eyebrow">Infraestructura</p><h3>Conexiones Firebase</h3><p class="ad-muted">Las credenciales privadas se administran como secretos cifrados de Cloudflare Pages y nunca se escriben desde el navegador.</p></div><button class="ad-btn ad-btn-secondary" type="button" data-action="refrescar-servicios">Actualizar</button></div>'+
+        '<div class="ad-section-head"><div><p class="ad-eyebrow">Infraestructura</p><h3>Conexiones Firebase</h3><p class="ad-muted">La aplicación utiliza Firebase REST con configuración web y admite cuentas de servicio en producción.</p></div><button class="ad-btn ad-btn-secondary" type="button" data-action="refrescar-servicios">Actualizar</button></div>'+
         '<div class="ad-card">'+
           '<pre id="ad-estado-servicio" class="ad-result-box">Consultando el estado de las conexiones…</pre>'+
           '<div class="ad-table-wrap"><table class="ad-table"><thead><tr><th>Servicio</th><th>Proyecto</th><th>Autenticación</th><th>Acceso</th><th>Estado</th></tr></thead><tbody id="ad-tabla-servicios"><tr><td colspan="5" class="ad-empty">Cargando...</td></tr></tbody></table></div>'+
@@ -46,7 +51,7 @@
       var activo=s.activo!==false&&texto(s.estado||'ACTIVO').toUpperCase()!=='INACTIVO';
       return '<tr><td><strong>'+esc(s.nombre||s.clave)+'</strong><br><small>'+esc(s.clave||s.id)+'</small></td>'+ 
         '<td>'+esc(s.projectId||texto(s.endpoint).replace('firebase://','')||'-')+'</td>'+ 
-        '<td>Cuenta de servicio / IAM</td>'+ 
+        '<td>'+esc(autenticacion(s))+'</td>'+ 
         '<td>'+(s.soloLectura?'Solo lectura':'Lectura y escritura')+'</td>'+ 
         '<td><span class="ad-badge '+(activo?'ad-badge-success':'ad-badge-warning')+'">'+esc(s.estado||(activo?'ACTIVO':'INACTIVO'))+'</span></td></tr>';
     });
@@ -55,11 +60,11 @@
 
   function cargar(){
     if(!api())return Promise.reject(new Error('ADAPIService no está disponible.'));
-    estado('Comprobando la configuración protegida de Cloudflare…','info');
+    estado('Comprobando la configuración de Firebase…','info');
     return api().listarServicios().then(function(r){
       servicios=api().extraerServicios(r);
       render();
-      estado('Las conexiones se administran fuera del navegador mediante secretos cifrados.','success');
+      estado('Conexiones Firebase configuradas correctamente.','success');
       return servicios;
     }).catch(function(error){
       estado(errorTexto(error),'danger');
