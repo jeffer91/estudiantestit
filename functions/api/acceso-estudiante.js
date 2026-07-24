@@ -212,7 +212,7 @@ async function lookupStudent(env, cedula, requestedPeriod) {
     modo: 'IDENTIDAD_RAPIDA'
   }, STUDENT_TIMEOUT_MS)
     .then(decodeNestedJson)
-    .then((result) => setCached(key, result, cedula))
+    .then((result) => setCache(key, result, cedula))
     .finally(() => studentInflight.delete(key));
   studentInflight.set(key, task);
   return task;
@@ -290,11 +290,11 @@ export async function onRequest({ request, env }) {
 
     const failures = [];
     if (academicSettled.status === 'rejected') failures.push({
-      fuente: 'REQUISITOS',
+      fuente: 'FIREBASE_UTET',
       mensaje: text(academicSettled.reason && academicSettled.reason.message) || 'Consulta no disponible.'
     });
     if (titlesSettled.status === 'rejected') failures.push({
-      fuente: 'TITULOS',
+      fuente: 'FIREBASE_TITULOS',
       mensaje: text(titlesSettled.reason && titlesSettled.reason.message) || 'Consulta no disponible.'
     });
     if (failures.length) return jsonReply(request, {
@@ -349,9 +349,9 @@ export async function onRequest({ request, env }) {
         envios: tieneEnvio ? 'encontrado' : 'sin_registro',
         resoluciones: tieneResolucion ? 'encontrada' : 'sin_registro'
       },
-      fuente: academic.fuente || 'CONSULTA_ACCESO_PROGRAMA',
-      fuenteEnvio: 'RESPALDO_TITULOS_APP',
-      fuenteResolucion: 'RESPALDO_TITULOS_APP',
+      fuente: academic.fuente || 'FIREBASE_UTET',
+      fuenteEnvio: 'FIREBASE_TITULOS',
+      fuenteResolucion: 'FIREBASE_TITULOS',
       flujoTitulos: 'CONSULTAR_ENVIO_CEDULA',
       mensaje: permiteReenvio
         ? 'Tus propuestas fueron devueltas y pueden corregirse.'
