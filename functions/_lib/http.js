@@ -36,14 +36,21 @@ export function appId(request) {
   return text(request.headers.get('X-Titulos-App')).toLowerCase();
 }
 
+function isPagesHost(host, projectHost) {
+  return host === projectHost || host.endsWith('.' + projectHost);
+}
+
 export function role(request) {
   const host = requestHost(request);
 
-  if (host === 'titulos-administrador.pages.dev') return 'admin';
-  if (host === 'titulos-coordinadores.pages.dev' || host === 'coordinadores.pages.dev') {
+  if (isPagesHost(host, 'titulos-administrador.pages.dev')) return 'admin';
+  if (
+    isPagesHost(host, 'titulos-coordinadores.pages.dev') ||
+    isPagesHost(host, 'coordinadores.pages.dev')
+  ) {
     return 'coordinator';
   }
-  if (host === 'titulos.pages.dev') return 'student';
+  if (isPagesHost(host, 'titulos.pages.dev')) return 'student';
 
   if (['localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]'].includes(host)) {
     const app = appId(request);
