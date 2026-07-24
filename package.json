@@ -6,7 +6,7 @@
   "scripts": {
     "dev:ia": "node dev/ia-proxy-server.mjs",
     "predev:cloudflare": "node dev/verificar-dev-vars.mjs && node dev/preparar-pages-local.mjs",
-    "dev:cloudflare": "npx wrangler pages dev --port 8788 --env-file .dev.vars",
+    "dev:cloudflare": "npx wrangler pages dev --port 8788",
     "build:estudiantes": "node dev/preparar-pages-estudiantes.mjs",
     "deploy:estudiantes": "npm run build:estudiantes && npx wrangler pages deploy .pages-estudiantes --project-name titulos",
     "deploy:estudiantes:preview": "npm run build:estudiantes && npx wrangler pages deploy .pages-estudiantes --project-name titulos --branch preview-estudiantes",
