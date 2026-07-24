@@ -16,6 +16,7 @@
   function iaPost(action,data){return fetch(base()+'/api/ia',{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json','X-Titulos-App':'administrador'},body:JSON.stringify(Object.assign({action:action},data||{}))}).then(function(resp){return leerRespuesta(resp,'IA');});}
   function lista(r,claves){if(Array.isArray(r))return r;r=r||{};for(var i=0;i<claves.length;i++)if(Array.isArray(r[claves[i]]))return r[claves[i]];if(r.data&&typeof r.data==='object')return lista(r.data,claves);if(r.resultado&&typeof r.resultado==='object')return lista(r.resultado,claves);return[];}
   var api={
+    version:'3.3.3',
     base:base,
     configTitulos:function(){return titulos('CONFIGURACION_PUBLICA',{},'GET');},
     configRequisitos:function(){return requisitos('CONFIGURACION_PUBLICA',{});},
@@ -53,8 +54,8 @@
   };
   window.ADAPIService=Object.freeze(api);
   function cargarComplemento(ruta,atributo){if(!window.document||window.document.querySelector('script['+atributo+'="true"]'))return;var script=window.document.createElement('script');script.src=ruta;script.async=false;script.setAttribute(atributo,'true');window.document.head.appendChild(script);}
-  cargarComplemento('./ad-js/ad-servicios.app.js?v=3.3.2','data-ad-servicios');
-  cargarComplemento('./ad-js/ad-correo-outlook.js?v=3.3.2','data-ad-correo-outlook');
-  cargarComplemento('./ad-js/ad-administracion-global.js?v=3.3.2','data-ad-administracion-global');
-  cargarComplemento('./ad-js/ad-pdf-firebase.js?v=3.3.2','data-ad-pdf-firebase');
+  cargarComplemento('./ad-js/ad-servicios.app.js?v=3.3.3','data-ad-servicios');
+  cargarComplemento('./ad-js/ad-correo-outlook.js?v=3.3.3','data-ad-correo-outlook');
+  cargarComplemento('./ad-js/ad-administracion-global.js?v=3.3.3','data-ad-administracion-global');
+  cargarComplemento('./ad-js/ad-pdf-firebase.js?v=3.3.3','data-ad-pdf-firebase');
 })(window);
