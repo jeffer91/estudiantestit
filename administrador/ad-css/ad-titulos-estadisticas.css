@@ -1,0 +1,343 @@
+/* Títulos, estadísticas y modales del Administrador 3.2.0. */
+
+.ad-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(170px, 1fr));
+  gap: 12px;
+  align-items: end;
+  margin-bottom: 14px;
+}
+
+.ad-filter-grid--stats {
+  grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr) auto;
+}
+
+.ad-icon-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  align-items: center;
+}
+
+.ad-icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border: 1px solid var(--ad-border);
+  border-radius: 12px;
+  background: var(--ad-primary-soft);
+  color: var(--ad-primary);
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+  transition: transform .16s ease, box-shadow .16s ease, background .16s ease;
+}
+
+.ad-icon-btn:hover,
+.ad-icon-btn:focus-visible {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(16, 32, 51, .14);
+  outline: none;
+}
+
+.ad-icon-btn--danger {
+  background: var(--ad-danger-soft);
+  color: var(--ad-danger);
+  border-color: rgba(180, 35, 24, .25);
+}
+
+.ad-icon-btn--whatsapp {
+  background: #e8f8ef;
+  color: #087a3d;
+  border-color: rgba(8, 122, 61, .22);
+}
+
+.ad-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin: 14px 0 18px;
+}
+
+.ad-stat-card {
+  min-height: 104px;
+  padding: 15px;
+  border: 1px solid var(--ad-border);
+  border-radius: 15px;
+  background: var(--ad-surface-soft);
+}
+
+.ad-stat-card span {
+  display: block;
+  color: var(--ad-muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+
+.ad-stat-card strong {
+  display: block;
+  margin-top: 9px;
+  font-size: 30px;
+  letter-spacing: -.03em;
+}
+
+.ad-count-btn {
+  border: 0;
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: #fff5e6;
+  color: var(--ad-warning);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.ad-count-btn:disabled {
+  opacity: .45;
+  cursor: default;
+}
+
+.ad-progress {
+  min-width: 110px;
+}
+
+.ad-progress__track {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e6edf5;
+}
+
+.ad-progress__bar {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--ad-success);
+}
+
+.ad-progress small {
+  display: block;
+  margin-top: 5px;
+  color: var(--ad-muted);
+}
+
+.ad-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+}
+
+.ad-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(7, 24, 43, .68);
+  backdrop-filter: blur(4px);
+}
+
+.ad-modal__card {
+  position: relative;
+  width: min(920px, 100%);
+  max-height: calc(100vh - 36px);
+  overflow: auto;
+  border: 1px solid var(--ad-border);
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: 0 28px 80px rgba(7, 24, 43, .28);
+}
+
+.ad-modal__card--wide {
+  width: min(1120px, 100%);
+}
+
+.ad-modal__header,
+.ad-modal__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 18px 20px;
+}
+
+.ad-modal__header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  border-bottom: 1px solid var(--ad-border);
+  background: rgba(255, 255, 255, .97);
+}
+
+.ad-modal__footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  justify-content: flex-end;
+  border-top: 1px solid var(--ad-border);
+  background: rgba(255, 255, 255, .97);
+}
+
+.ad-modal__body {
+  padding: 20px;
+}
+
+.ad-modal__close {
+  width: 42px;
+  height: 42px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--ad-primary-soft);
+  color: var(--ad-primary);
+  cursor: pointer;
+  font-size: 24px;
+}
+
+.ad-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.ad-detail-grid > div {
+  padding: 12px;
+  border: 1px solid var(--ad-border);
+  border-radius: 13px;
+  background: var(--ad-surface-soft);
+}
+
+.ad-detail-grid span {
+  display: block;
+  color: var(--ad-muted);
+  font-size: 12px;
+  margin-bottom: 5px;
+}
+
+.ad-proposal-list {
+  display: grid;
+  gap: 12px;
+}
+
+.ad-proposal {
+  position: relative;
+  padding: 16px;
+  border: 1px solid var(--ad-border);
+  border-radius: 15px;
+  background: #fff;
+}
+
+.ad-proposal.is-favorite {
+  border-color: #d9b24c;
+  background: #fffaf0;
+  box-shadow: inset 4px 0 0 #d9b24c;
+}
+
+.ad-proposal__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.ad-proposal h4,
+.ad-proposal p {
+  margin: 0;
+}
+
+.ad-favorite-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: #fff0c7;
+  color: #7d5900;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.ad-review-card {
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid var(--ad-border);
+  border-radius: 15px;
+  background: var(--ad-surface-soft);
+}
+
+.ad-review-card h4 {
+  margin: 0 0 12px;
+}
+
+.ad-review-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ad-return-box {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--ad-border);
+}
+
+.ad-return-box textarea {
+  min-height: 96px;
+}
+
+.ad-modal-table {
+  min-width: 820px;
+}
+
+body.ad-modal-open {
+  overflow: hidden;
+}
+
+@media (max-width: 1180px) {
+  .ad-filter-grid,
+  .ad-filter-grid--stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ad-stat-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .ad-detail-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .ad-filter-grid,
+  .ad-filter-grid--stats,
+  .ad-stat-grid,
+  .ad-detail-grid,
+  .ad-review-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ad-modal {
+    padding: 0;
+  }
+
+  .ad-modal__card,
+  .ad-modal__card--wide {
+    width: 100%;
+    max-height: 100vh;
+    min-height: 100vh;
+    border-radius: 0;
+  }
+
+  .ad-modal__footer {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .ad-modal__footer .ad-btn {
+    width: 100%;
+  }
+}
