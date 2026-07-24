@@ -1,24 +1,23 @@
 import fs from 'node:fs';
 
-const path = 'apps-script/RESPALDO-TITULOS-APP/consulta-estudiantes.gs';
-if (!fs.existsSync(path)) {
-  throw new Error('No existe el módulo de consultas de RESPALDO TITULOS APP.');
+const legacyPath = 'apps-script/RESPALDO-TITULOS-APP/consulta-estudiantes.gs';
+
+if (fs.existsSync(legacyPath)) {
+  const source = fs.readFileSync(legacyPath, 'utf8');
+  new Function(source);
+  console.log('[Legado] Apps Script se conserva con sintaxis válida, pero ya no es la base activa.');
+} else {
+  console.log('[Legado] No hay Apps Script activo; la arquitectura usa Firebase.');
 }
 
-const source = fs.readFileSync(path, 'utf8');
-new Function(source);
+const firebaseFiles = [
+  'functions/_lib/firestore.js',
+  'functions/_lib/requisitos-firebase.js',
+  'functions/_lib/titulos-firebase.js'
+];
 
-for (const required of [
-  'procesarConsultaSeparadaPorAccion',
-  'CONSULTAR_ENVIO_BASE_CEDULA',
-  'CONSULTAR_RESOLUCION_CEDULA',
-  'consultarEnvioBasePorCedula',
-  'consultarResolucionPorCedula',
-  'buscarUltimaResolucionPorCedula'
-]) {
-  if (!source.includes(required)) {
-    throw new Error('El módulo de Apps Script no contiene: ' + required);
-  }
+for (const file of firebaseFiles) {
+  if (!fs.existsSync(file)) throw new Error('Falta el módulo Firebase: ' + file);
 }
 
-console.log('[Apps Script] Consultas separadas de Envios y Resoluciones correctas.');
+console.log('[Firebase] La operación activa usa UTET y Títulos mediante Cloudflare Functions.');
