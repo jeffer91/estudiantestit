@@ -39,39 +39,38 @@ function cleanTitle(value) {
   return output;
 }
 
-function valueFrom(item) {
-  if (typeof item === 'string') return cleanTitle(item);
-  item = item || {};
+function titleFrom(value) {
+  if (typeof value === 'string') return cleanTitle(value);
+  const item = value || {};
   return cleanTitle(item.tituloFinal || item.titulo || item.tituloMejorado || item.texto || item.title);
 }
 
-function titleValues(payload) {
+function titlesFromPayload(payload) {
   const proposals = Array.isArray(payload.propuestas)
     ? payload.propuestas
     : Array.isArray(payload.titulosEnviados)
       ? payload.titulosEnviados
       : [];
   return [1, 2, 3].map((number, index) => cleanTitle(
-    payload[`titulo${number}`] || valueFrom(proposals[index])
+    payload[`titulo${number}`] || titleFrom(proposals[index])
   ));
 }
 
-function preferredNumber(payload, titles) {
+function preferredFromPayload(payload, titles) {
   const raw = Number(payload.tituloPreferidoNumero || payload.preferido || payload.favorito || 0);
   if ([1, 2, 3].includes(raw) && titles[raw - 1]) return raw;
   const preferredText = cleanTitle(payload.tituloPreferido || payload.tituloPreferidoTexto);
-  const matched = titles.findIndex((title) => title && title === preferredText);
-  return matched >= 0 ? matched + 1 : 1;
+  const index = titles.findIndex((title) => title && title === preferredText);
+  return index >= 0 ? index + 1 : 1;
 }
 
 function normalizePeriodId(value) {
   const raw = text(value);
   if (!raw) return '';
-  const signature = periodSignature(raw);
-  return text(signature || raw).replace(/\//g, '-');
+  return text(periodSignature(raw) || raw).replace(/\//g, '-');
 }
 
-function envioId(periodId, cedula) {
+function buildEnvioId(periodId, cedula) {
   return `${normalizePeriodId(periodId) || 'sin_periodo'}__${normalizeCedula(cedula)}`;
 }
 
@@ -82,29 +81,32 @@ function splitList(value) {
 
 function publicEnvio(row) {
   row = row || {};
-  const preferred = Number(row.tituloPreferidoNumero || row.preferido || 0);
-  const titles = [cleanTitle(row.titulo1), cleanTitle(row.titulo2), cleanTitle(row.titulo3)];
+  const id = text(row.id || row._docId || row._id);
+  const cedula = normalizeCedula(row.cedula || row.numeroIdentificacion);
+  const names = text(row.nombres || row.estudiante || row.Nombres);
   const career = text(row.carreraNombre || row.nombreCarrera || row.carrera);
   const periodId = text(row.periodoId || row.periodId);
   const periodLabel = text(row.periodoNombre || row.periodoLabel || row.periodo || periodId);
-  const names = text(row.nombres || row.estudiante || row.Nombres);
+  const titles = [cleanTitle(row.titulo1), cleanTitle(row.titulo2), cleanTitle(row.titulo3)];
+  const preferred = Number(row.tituloPreferidoNumero || row.preferido || 0);
   const status = normalizeStatus(row.estado || row.estadoFinal);
   const finalTitle = cleanTitle(row.tituloFinal || row.tituloCorregido || row.tituloElegido);
   const observation = text(row.observacion || row.comentarioCoordinador || row.comentario);
 
   return {
     ...row,
-    id: text(row.id || row._docId),
-    _id: text(row.id || row._docId),
-    idRegistro: text(row.id || row._docId),
-    envioId: text(row.id || row._docId),
-    cedula: normalizeCedula(row.cedula || row.numeroIdentificacion),
-    numeroIdentificacion: normalizeCedula(row.cedula || row.numeroIdentificacion),
+    id,
+    _id: id,
+    _clave: id,
+    idRegistro: id,
+    envioId: id,
+    cedula,
+    numeroIdentificacion: cedula,
     nombres: names,
     estudiante: names,
     carrera: career,
     nombreCarrera: career,
-    periodoId,
+    periodoId: periodId,
     periodo: periodLabel,
     periodoLabel: periodLabel,
     titulo1: titles[0],
@@ -112,6 +114,7 @@ function publicEnvio(row) {
     titulo3: titles[2],
     preferido: preferred,
     tituloPreferidoNumero: preferred,
+    tituloPreferido: preferred,
     tituloPreferidoTexto: preferred ? titles[preferred - 1] : '',
     estado: status,
     estadoFinal: status,
@@ -125,23 +128,29 @@ function publicEnvio(row) {
   };
 }
 
-async function findEnviosByCedula(cedula) {
-  const canonical = normalizeCedula(cedula);
-  if (!canonical) return [];
-  const variants = canonical.startsWith('0') ? [canonical, canonical.slice(1)] : [canonical];
+async function queryUnique(collectionName, field, values, limit = 500) {
   const rows = [];
   const seen = new Set();
-  for (const value of variants) {
-    for (const field of ['cedula', 'numeroIdentificacion']) {
-      const found = await queryEqual('TITULOS', 'envios', field, value, 100);
-      for (const row of found) {
-        if (seen.has(row.id)) continue;
-        seen.add(row.id);
-        rows.push(row);
-      }
+  for (const value of values) {
+    if (value === '' || value === null || value === undefined) continue;
+    const found = await queryEqual('TITULOS', collectionName, field, value, limit);
+    for (const row of found) {
+      if (seen.has(row.id)) continue;
+      seen.add(row.id);
+      rows.push(row);
     }
   }
   return rows;
+}
+
+async function findEnviosByCedula(value) {
+  const cedula = normalizeCedula(value);
+  if (!cedula) return [];
+  const variants = cedula.startsWith('0') ? [cedula, cedula.slice(1)] : [cedula];
+  const byCedula = await queryUnique('envios', 'cedula', variants, 100);
+  const byIdentification = await queryUnique('envios', 'numeroIdentificacion', variants, 100);
+  const map = new Map([...byCedula, ...byIdentification].map((row) => [row.id, row]));
+  return [...map.values()];
 }
 
 export async function findEnvio(cedula, periodValue = '') {
@@ -159,40 +168,42 @@ export async function findEnvio(cedula, periodValue = '') {
   ]);
 }
 
-async function related(collectionName, field, value) {
-  if (!value) return [];
-  return queryEqual('TITULOS', collectionName, field, value, 500);
+async function related(collectionName, envioId) {
+  return envioId ? queryEqual('TITULOS', collectionName, 'envioId', envioId, 1000) : [];
 }
 
 async function listCoordinators() {
-  const [coordinators, careers] = await Promise.all([
+  const [rows, careers] = await Promise.all([
     listCollection('TITULOS', 'coordinadores', { maxDocuments: 1000 }),
     listTitleCareers('')
   ]);
-  const careerMap = new Map(careers.map((career) => [career.id, career.nombre]));
+  const careerMap = new Map(careers.map((career) => [text(career.id).toLowerCase(), career.nombre]));
 
-  return coordinators.map((item) => {
-    const ids = Array.isArray(item.carrerasIds)
-      ? item.carrerasIds.map(text).filter(Boolean)
-      : splitList(item.carrerasIds || item.carreras);
-    const names = Array.isArray(item.carrerasNombres)
-      ? item.carrerasNombres.map(text).filter(Boolean)
-      : ids.map((id) => careerMap.get(id) || id);
-    const status = normalizeStatus(item.estado || (item.activo === false ? 'INACTIVO' : 'ACTIVO'), 'ACTIVO');
+  return rows.map((row) => {
+    const id = text(row.id || row._docId);
+    const careerIds = Array.isArray(row.carrerasIds)
+      ? row.carrerasIds.map(text).filter(Boolean)
+      : splitList(row.carrerasIds || row.carreras);
+    const careerNames = Array.isArray(row.carrerasNombres)
+      ? row.carrerasNombres.map(text).filter(Boolean)
+      : careerIds.map((careerId) => careerMap.get(careerId.toLowerCase()) || careerId);
+    const status = normalizeStatus(row.estado || (row.activo === false ? 'INACTIVO' : 'ACTIVO'), 'ACTIVO');
+    const name = text(row.nombre || row.coordinador);
+
     return {
-      ...item,
-      id: text(item.id || item._docId),
-      idRegistro: text(item.id || item._docId),
-      coordinadorId: text(item.id || item._docId),
-      nombre: text(item.nombre || item.coordinador),
-      coordinador: text(item.nombre || item.coordinador),
-      telegram: text(item.telegram),
+      ...row,
+      id,
+      idRegistro: id,
+      coordinadorId: id,
+      nombre: name,
+      coordinador: name,
+      telegram: text(row.telegram),
       estado: status,
       activo: status !== 'INACTIVO',
-      carrerasIds: ids,
-      carrerasNombres: names,
-      carreras: names,
-      carrerasAsignadas: names
+      carrerasIds: careerIds,
+      carrerasNombres: careerNames,
+      carreras: careerNames,
+      carrerasAsignadas: careerNames
     };
   });
 }
@@ -202,7 +213,7 @@ async function listEnvios(payload = {}) {
   const careerFilters = splitList(payload.carreras || payload.carrera || payload.nombreCarrera)
     .map((item) => item.toLowerCase());
   const period = text(payload.periodoId || payload.periodoLabel || payload.periodo);
-  const status = normalizeStatus(payload.estado, '');
+  const status = text(payload.estado) ? normalizeStatus(payload.estado, '') : '';
 
   if (careerFilters.length) {
     rows = rows.filter((row) => {
@@ -219,7 +230,11 @@ async function listEnvios(payload = {}) {
   }
   if (status) rows = rows.filter((row) => normalizeStatus(row.estado) === status);
 
-  rows.sort((a, b) => Date.parse(b.fechaEnvio || b.actualizadoEn || b._updateTime || '') - Date.parse(a.fechaEnvio || a.actualizadoEn || a._updateTime || ''));
+  rows.sort((a, b) => {
+    const dateA = Date.parse(a.fechaEnvio || a.actualizadoEn || a._updateTime || '') || 0;
+    const dateB = Date.parse(b.fechaEnvio || b.actualizadoEn || b._updateTime || '') || 0;
+    return dateB - dateA;
+  });
   return rows.map(publicEnvio);
 }
 
@@ -228,13 +243,7 @@ async function consultEnvio(payload = {}) {
   const period = text(payload.periodoId || payload.periodoLabel || payload.periodo);
   const row = await findEnvio(cedula, period);
   if (!row) {
-    return {
-      ok: true,
-      existe: false,
-      encontrado: false,
-      tieneEnvio: false,
-      cedula
-    };
+    return { ok: true, existe: false, encontrado: false, tieneEnvio: false, cedula };
   }
   const envio = publicEnvio(row);
   return {
@@ -258,7 +267,7 @@ async function saveStudentSubmission(payload = {}) {
   const cedula = normalizeCedula(payload.cedula || payload.numeroIdentificacion);
   if (!cedula) throw new Error('No se recibió una cédula válida.');
 
-  const titles = titleValues(payload);
+  const titles = titlesFromPayload(payload);
   if (titles.some((title) => !title)) throw new Error('Debes enviar los tres títulos completos.');
   if (new Set(titles.map((title) => title.toLowerCase())).size !== 3) {
     throw new Error('Los tres títulos deben ser diferentes.');
@@ -283,11 +292,11 @@ async function saveStudentSubmission(payload = {}) {
     throw error;
   }
 
-  const id = previous && previous.id || envioId(periodId, cedula);
-  const versions = await related('versiones_envio', 'envioId', id);
+  const id = previous && previous.id || buildEnvioId(periodId, cedula);
+  const versions = await related('versiones_envio', id);
   const versionNumber = versions.reduce((max, item) => Math.max(max, Number(item.numeroVersion || 0)), 0) + 1;
   const versionId = `${id}__v${String(versionNumber).padStart(3, '0')}`;
-  const preferred = preferredNumber(payload, titles);
+  const preferred = preferredFromPayload(payload, titles);
   const date = nowIso();
   const names = text(payload.nombres || payload.estudiante || student.nombres || previous && previous.nombres);
   const career = text(payload.carrera || payload.nombreCarrera || student.carrera || previous && previous.carreraNombre);
@@ -310,7 +319,7 @@ async function saveStudentSubmission(payload = {}) {
     carreraNombre: career,
     carreraId: text(payload.carreraId || previous && previous.carreraId),
     carreraCodigo: text(payload.codigoCarrera || student.codigoCarrera || previous && previous.carreraCodigo),
-    periodoId,
+    periodoId: periodId,
     periodoNombre: periodLabel || periodId,
     telegram: text(payload.telegram || payload.telegramUser),
     titulo1: titles[0],
@@ -348,7 +357,7 @@ async function saveResolution(payload = {}) {
   const envio = await findEnvio(cedula, period);
   if (!envio) throw new Error('No se encontró el envío del estudiante en Firebase Títulos.');
 
-  const resolutions = await related('resoluciones', 'envioId', envio.id);
+  const resolutions = await related('resoluciones', envio.id);
   const number = resolutions.reduce((max, item) => Math.max(max, Number(item.numeroResolucion || 0)), 0) + 1;
   const resolutionId = `${envio.id}__r${String(number).padStart(3, '0')}`;
   const status = normalizeStatus(payload.estadoFinal || payload.estado, 'APROBADO');
@@ -441,9 +450,10 @@ async function deleteEnvio(payload = {}) {
     payload.periodoId || payload.periodoLabel || payload.periodo
   );
   if (!envio) return { ok: true, eliminado: false, mensaje: 'El envío ya no existe.' };
+
   const [versions, resolutions] = await Promise.all([
-    related('versiones_envio', 'envioId', envio.id),
-    related('resoluciones', 'envioId', envio.id)
+    related('versiones_envio', envio.id),
+    related('resoluciones', envio.id)
   ]);
   await Promise.all([
     ...versions.map((item) => deleteDocument('TITULOS', 'versiones_envio', item.id)),
@@ -511,7 +521,7 @@ export async function executeTitulosAction(action, payload = {}, userRole = 'stu
       payload.periodoId || payload.periodoLabel || payload.periodo
     );
     if (!envio) return { ok: true, encontrado: false, existe: false };
-    const resolutions = await related('resoluciones', 'envioId', envio.id);
+    const resolutions = await related('resoluciones', envio.id);
     const resolution = latestBy(resolutions, ['numeroResolucion'], ['fechaResolucion', '_updateTime']);
     return {
       ok: true,
@@ -567,10 +577,7 @@ export async function executeTitulosAction(action, payload = {}, userRole = 'stu
     };
   }
   if (normalized === 'ANALIZAR_GOOGLE_SHEETS' || normalized === 'CORREGIR_GOOGLE_SHEETS') {
-    return {
-      ok: false,
-      mensaje: 'Google Sheets ya no es la base activa. El sistema trabaja con Firebase.'
-    };
+    return { ok: false, mensaje: 'Google Sheets ya no es la base activa. El sistema trabaja con Firebase.' };
   }
 
   throw new Error('Acción de Títulos no implementada en Firebase: ' + action);
