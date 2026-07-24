@@ -2,7 +2,7 @@
 (function(window,document){
   'use strict';
 
-  var VERSION='2.8.5';
+  var VERSION='2.8.6';
 
   function texto(valor){
     return String(valor===null||valor===undefined?'':valor).trim();
@@ -19,13 +19,6 @@
     if(esLocal())return 'http://127.0.0.1:8788';
 
     var host=texto(window.location&&window.location.hostname).toLowerCase();
-
-    /*
-      El enlace oficial usa sus propias Pages Functions.
-      El dominio histórico se conserva como acceso compatible, pero sus
-      solicitudes se dirigen al proyecto oficial para evitar configuraciones
-      y secretos duplicados.
-    */
     if(host==='coordinadores.pages.dev'){
       return 'https://titulos-coordinadores.pages.dev';
     }
