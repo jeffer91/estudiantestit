@@ -1,146 +1,99 @@
 import assert from 'node:assert/strict';
-import { __test } from '../functions/api/acceso-estudiante.js';
+import { __test as accessTest } from '../functions/api/acceso-estudiante.js';
+import { __test as firebaseTest } from '../functions/_lib/requisitos-firebase-fast.js';
+import { __test as sheetsTest } from '../functions/_lib/requisitos-sheets-fallback.js';
 
 const cedula = '1313244988';
-const periodo = 'Noviembre 2025 a Mayo 2026';
-const periodoId = '2025-11__2026-05';
 
-assert.equal(
-  __test.periodEquivalent(periodo, periodoId),
-  true,
-  'La etiqueta y el identificador del mismo período deben ser equivalentes.'
-);
+assert.equal(accessTest.normalizeCedula(cedula), cedula);
+assert.equal(accessTest.normalizeCedula('131-324-4988'), cedula);
+assert.equal(accessTest.normalizeCedula('123'), '');
 
-const respuestaAnidada = {
-  respuesta: JSON.stringify({
-    data: JSON.stringify({
-      envio: {
-        cedula,
-        periodo,
-        estado: 'PENDIENTE_REVISION',
-        titulo1: 'pr 1',
-        titulo2: 'pr 2',
-        titulo3: 'pr 3',
-        preferido: '1'
-      },
-      resolucion: {
-        'Cédula': cedula,
-        'Período': periodo,
-        'Estado final': 'DEVUELTO',
-        Coordinador: 'Mayra Molina',
-        Observación: 'repetir esta mal',
-        'Título elegido': 'pr 1',
-        'Fecha resolución': '2026-07-22T20:38:50.254Z'
-      }
-    })
+const firebaseDocument = {
+  numeroIdentificacion: cedula,
+  Nombres: 'MACIAS REZABALA ERICK ALEXANDER',
+  payloadJson: JSON.stringify({
+    NombreCarrera: 'PROCESAMIENTO EN ALIMENTOS',
+    periodoId: '2025-11__2026-05',
+    periodoLabel: 'Noviembre 2025 a Mayo 2026'
   })
 };
 
-const envio = __test.selectRecord(
-  respuestaAnidada,
-  __test.looksLikeEnvio,
-  cedula,
-  periodo,
-  'envio'
-);
-const resolucion = __test.selectRecord(
-  respuestaAnidada,
-  __test.looksLikeResolution,
-  cedula,
-  periodo,
-  'resolution'
-);
-const decision = __test.effectiveState(envio, resolucion);
+const normalizedFirebase = firebaseTest.minimumStudent(firebaseDocument, cedula, false);
+assert.equal(normalizedFirebase.complete, true);
+assert.equal(normalizedFirebase.student.Nombres, 'MACIAS REZABALA ERICK ALEXANDER');
+assert.equal(normalizedFirebase.student.NombreCarrera, 'PROCESAMIENTO EN ALIMENTOS');
+assert.equal(normalizedFirebase.student.periodoId, '2025-11__2026-05');
+assert.equal(accessTest.completeAcademic({
+  encontrado: true,
+  estudiante: normalizedFirebase.student
+}), true);
 
-assert.ok(envio, 'No se recuperó el envío anidado.');
-assert.ok(resolucion, 'No se recuperó la resolución anidada.');
-assert.equal(envio.titulo1, 'pr 1');
-assert.equal(envio.titulo2, 'pr 2');
-assert.equal(envio.titulo3, 'pr 3');
-assert.equal(decision.estado, 'DEVUELTO');
-assert.equal(decision.origen, 'RESOLUCIONES');
-
-const resolucionReal = {
-  cedula,
-  periodo,
-  periodoLabel: periodo,
-  periodoId,
-  estado: 'DEVUELTO',
-  estadoFinal: 'DEVUELTO',
-  coordinador: 'Mayra Molina',
-  comentarioCoordinador: 'repetir esta mal',
-  fechaResolucion: '2026-07-22T20:38:50.254Z',
-  resolucionId: 'resolucion__noviembre_2025_a_mayo_2026__1313244988__1784752732918'
-};
-
-const envioReal = {
-  cedula,
-  periodo,
-  periodoLabel: periodo,
-  periodoId,
-  titulo1: 'pr 1',
-  titulo2: 'pr 2',
-  titulo3: 'pr 3',
-  preferido: '1',
-  estado: 'DEVUELTO',
-  estadoFinal: 'DEVUELTO',
-  coordinador: 'Mayra Molina',
-  comentarioCoordinador: 'repetir esta mal',
-  fechaResolucion: '2026-07-22T20:38:50.254Z',
-  resolucionId: resolucionReal.resolucionId,
-  resolucion: resolucionReal
-};
-
-const respuestaRealCombinada = {
+const normalizedSheets = sheetsTest.normalizeFastStudent({
   ok: true,
-  accion: 'CONSULTAR_ENVIO_CEDULA',
-  cedula,
-  periodo,
-  periodoId,
-  periodoLabel: periodo,
-  estadoFinal: 'DEVUELTO',
-  envio: envioReal,
-  registro: envioReal,
-  resolucion: resolucionReal
-};
-
-const envioCompatibilidad = __test.selectRecord(
-  respuestaRealCombinada,
-  __test.looksLikeEnvio,
-  cedula,
-  periodo,
-  'envio'
-);
-const resolucionCompatibilidad = __test.selectRecord(
-  respuestaRealCombinada,
-  __test.looksLikeResolution,
-  cedula,
-  periodo,
-  'resolution'
-);
-const decisionCompatibilidad = __test.effectiveState(envioCompatibilidad, resolucionCompatibilidad);
-
-assert.ok(envioCompatibilidad, 'No se recuperó el envío de compatibilidad.');
-assert.ok(resolucionCompatibilidad, 'No se recuperó la resolución de compatibilidad.');
-assert.equal(envioCompatibilidad.titulo1, 'pr 1');
-assert.equal(resolucionCompatibilidad.coordinador, 'Mayra Molina');
-assert.equal(resolucionCompatibilidad.comentarioCoordinador, 'repetir esta mal');
-assert.equal(decisionCompatibilidad.estado, 'DEVUELTO');
-assert.equal(decisionCompatibilidad.origen, 'RESOLUCIONES');
-
-const otroPeriodo = {
-  envio: {
+  encontrado: true,
+  estudiante: {
     cedula,
-    periodo: 'Febrero 2026 a Agosto 2026',
-    titulo1: 'No corresponde',
-    titulo2: 'No corresponde',
-    titulo3: 'No corresponde'
+    Nombres: 'MACIAS REZABALA ERICK ALEXANDER',
+    NombreCarrera: 'PROCESAMIENTO EN ALIMENTOS',
+    periodoId: '2025-11__2026-05',
+    periodoLabel: 'Noviembre 2025 a Mayo 2026'
   }
-};
-assert.equal(
-  __test.selectRecord(otroPeriodo, __test.looksLikeEnvio, cedula, periodo, 'envio'),
-  null,
-  'No debe seleccionarse un envío de otro período.'
-);
+}, cedula);
 
-console.log('[Acceso estudiante] Respuesta real, envío, resolución, JSON anidado y jerarquía correctos.');
+assert.equal(normalizedSheets.encontrado, true);
+assert.equal(normalizedSheets.datosCompletos, true);
+assert.equal(normalizedSheets.fuente, 'GOOGLE_SHEETS_ESTUDIANTES');
+
+const pending = accessTest.normalizeTitles({
+  ok: true,
+  existe: true,
+  tieneEnvio: true,
+  estado: 'PENDIENTE_REVISION',
+  envio: {
+    id: '2025-11__2026-05__1313244988',
+    cedula,
+    estado: 'PENDIENTE_REVISION',
+    titulo1: 'pr 1',
+    titulo2: 'pr 2',
+    titulo3: 'pr 3'
+  }
+});
+assert.equal(pending.tieneEnvio, true);
+assert.equal(pending.estado, 'PENDIENTE_REVISION');
+assert.equal(pending.permiteReenvio, false);
+
+const returned = accessTest.normalizeTitles({
+  ok: true,
+  existe: true,
+  tieneEnvio: true,
+  estado: 'DEVUELTO',
+  envio: {
+    id: '2025-11__2026-05__1313244988',
+    cedula,
+    estado: 'DEVUELTO',
+    titulo1: 'pr 1',
+    titulo2: 'pr 2',
+    titulo3: 'pr 3',
+    coordinador: 'Mayra Molina',
+    observacion: 'Debe corregir las propuestas.',
+    fechaResolucion: '2026-07-24T17:00:00.000Z',
+    resolucionActualId: 'resolucion_1'
+  }
+});
+assert.equal(returned.tieneEnvio, true);
+assert.equal(returned.tieneResolucion, true);
+assert.equal(returned.estado, 'DEVUELTO');
+assert.equal(returned.permiteReenvio, true);
+assert.equal(returned.resolucion.coordinador, 'Mayra Molina');
+
+const empty = accessTest.normalizeTitles({
+  ok: true,
+  existe: false,
+  tieneEnvio: false
+});
+assert.equal(empty.tieneEnvio, false);
+assert.equal(empty.estado, 'SIN_ENVIO');
+assert.equal(empty.permiteReenvio, false);
+
+console.log('[Acceso estudiante] UTET mínimo, respaldo Sheets y resolución de Títulos validados.');
