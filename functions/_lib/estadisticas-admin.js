@@ -1,10 +1,4 @@
-/*
-Archivo: functions/_lib/estadisticas-admin.js
-Función:
-- Mantener compatibilidad con la API de estadísticas.
-- Usar la misma lista global que alimenta Títulos y Estadísticas.
-*/
-
+/* Compatibilidad para la API administrativa. */
 export {
   buildAdminGlobalList,
   buildAdminStatistics,
@@ -12,4 +6,4 @@ export {
   saveAdminPeriod,
   listAdminCareers,
   assignCareerCoordinator
-} from './admin-global.js';
+} from './admin-global-fixed.js';
