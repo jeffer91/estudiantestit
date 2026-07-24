@@ -65,7 +65,10 @@
     var tbody=document.getElementById('ad-tabla-faltantes');
     var row=tbody&&tbody.closest('table')&&tbody.closest('table').querySelector('thead tr');
     if(!row)return;
+    var expected='Cédula|Estudiante|Carrera|Celular|Correos|Avisos';
+    if(row.getAttribute('data-ad-header')===expected)return;
     row.innerHTML='<th>Cédula</th><th>Estudiante</th><th>Carrera</th><th>Celular</th><th>Correos</th><th>Avisos</th>';
+    row.setAttribute('data-ad-header',expected);
   }
 
   function contenidoCorreos(student){
@@ -84,7 +87,7 @@
     if(!tbody)return;
     Array.prototype.forEach.call(tbody.querySelectorAll('tr'),function(row){
       var cells=row.querySelectorAll('td');
-      if(cells.length===1){cells[0].setAttribute('colspan','6');return;}
+      if(cells.length===1){if(cells[0].getAttribute('colspan')!=='6')cells[0].setAttribute('colspan','6');return;}
       if(cells.length<5)return;
       var id=cedula(cells[0].textContent);
       var student=estudiantePorCedula(id);
@@ -96,7 +99,11 @@
         mailCell.setAttribute('data-ad-correos','true');
         row.insertBefore(mailCell,cells[cells.length-1]);
       }
-      mailCell.innerHTML=contenidoCorreos(student);
+      var emailSignature=[texto(student.correoInstitucional),texto(student.correoPersonal)].join('|');
+      if(mailCell.getAttribute('data-email-signature')!==emailSignature){
+        mailCell.innerHTML=contenidoCorreos(student);
+        mailCell.setAttribute('data-email-signature',emailSignature);
+      }
 
       var actions=row.lastElementChild;
       actions.classList.add('ad-icon-actions');
