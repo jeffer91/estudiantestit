@@ -1,8 +1,8 @@
-/* Requisitos con períodos canónicos para Estudiantes y Coordinadores. */
+/* Requisitos con períodos canónicos y consulta mínima de identidad. */
 import {
-  getStudentBasic,
   listTitleCareers
 } from './requisitos-firebase.js';
+import { getStudentBasicFast } from './requisitos-firebase-fast.js';
 import {
   listCollection,
   periodSignature,
@@ -23,7 +23,8 @@ function principal(row) {
   ));
 }
 
-export { getStudentBasic, listTitleCareers };
+export const getStudentBasic = getStudentBasicFast;
+export { listTitleCareers };
 
 export async function listTitlePeriods(env) {
   const rows = await listCollection('TITULOS', 'periodos', { maxDocuments: 1000 }, env);
@@ -97,10 +98,9 @@ export async function pullRequisitos(action, payload = {}, env) {
   }
 
   if (['consultar_estudiante', 'consultar_estudiante_titulacion'].includes(normalizedAction)) {
-    return getStudentBasic(
+    return getStudentBasicFast(
       payload.cedula || payload.numeroIdentificacion || payload.identificacion,
       {
-        periodoId: payload.periodoId || payload.periodo || payload.periodoLabel,
         includePhone: payload.includePhone === true || payload.rol === 'admin'
       },
       env
