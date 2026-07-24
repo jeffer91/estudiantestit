@@ -10,8 +10,8 @@ function providerId(value) {
   return slug(value).replace(/[^a-z0-9_-]/g, '');
 }
 
-export async function listProviders(includeInactive = false) {
-  const rows = await listCollection('TITULOS', 'ia', { maxDocuments: 500 });
+export async function listProviders(includeInactive = false, env) {
+  const rows = await listCollection('TITULOS', 'ia', { maxDocuments: 500 }, env);
   const providers = rows
     .map((row) => ({
       ...row,
@@ -43,10 +43,10 @@ export async function listProviders(includeInactive = false) {
   return providers;
 }
 
-export async function saveProvider(provider = {}) {
+export async function saveProvider(provider = {}, env) {
   const id = providerId(provider.id || provider.proveedor || provider.nombre);
   if (!id) throw new Error('El proveedor de IA necesita un identificador.');
-  const current = (await listProviders(true)).find((item) => item.id === id) || {};
+  const current = (await listProviders(true, env)).find((item) => item.id === id) || {};
   const credential = text(provider.credencial || provider.apiKey || provider.token) || current.credencial || '';
   const activeValue = provider.activo === false || text(provider.estado).toUpperCase() === 'INACTIVO' ? false : true;
 
@@ -64,18 +64,18 @@ export async function saveProvider(provider = {}) {
     temperatura: Number(provider.temperatura ?? current.temperatura ?? 0.3),
     descripcion: text(provider.descripcion || current.descripcion),
     actualizadoEn: nowIso()
-  });
+  }, { merge: true }, env);
   return { ...saved, id };
 }
 
-export async function toggleProvider(idValue, activeValue) {
+export async function toggleProvider(idValue, activeValue, env) {
   const id = providerId(idValue);
   if (!id) throw new Error('Proveedor de IA inválido.');
   return setDocument('TITULOS', 'ia', id, {
     estado: activeValue === true ? 'ACTIVO' : 'INACTIVO',
     activo: activeValue === true,
     actualizadoEn: nowIso()
-  });
+  }, { merge: true }, env);
 }
 
 async function fetchTimed(url, options, timeoutMs) {
@@ -169,9 +169,9 @@ async function callOpenAiCompatible(provider, prompt, options) {
   return output;
 }
 
-export async function generateWithProvider(providerIdValue, promptValue, options = {}) {
+export async function generateWithProvider(providerIdValue, promptValue, options = {}, env) {
   const id = providerId(providerIdValue);
-  const providers = await listProviders(true);
+  const providers = await listProviders(true, env);
   const provider = providers.find((item) => item.id === id);
   if (!provider) throw new Error('No se encontró el proveedor de IA.');
   if (!provider.activo && options.allowInactive !== true) throw new Error('El proveedor de IA está inactivo.');
@@ -190,7 +190,7 @@ export async function generateWithProvider(providerIdValue, promptValue, options
       ultimaPruebaEn: nowIso(),
       ultimaLatenciaMs: latencyMs,
       ultimoError: ''
-    });
+    }, { merge: true }, env);
     return { ok: true, text: output, respuesta: output, latencyMs, providerId: provider.id };
   } catch (error) {
     await setDocument('TITULOS', 'ia', provider.id, {
@@ -198,7 +198,7 @@ export async function generateWithProvider(providerIdValue, promptValue, options
       ultimaPruebaEn: nowIso(),
       ultimaLatenciaMs: Date.now() - started,
       ultimoError: text(error && error.message || error)
-    });
+    }, { merge: true }, env);
     throw error;
   }
 }
