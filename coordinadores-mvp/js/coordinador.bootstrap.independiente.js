@@ -2,7 +2,7 @@
 (function(window,document){
   'use strict';
 
-  var VERSION='2.8.4';
+  var VERSION='2.8.5';
 
   function texto(valor){
     return String(valor===null||valor===undefined?'':valor).trim();
