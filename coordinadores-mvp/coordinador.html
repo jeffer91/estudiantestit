@@ -6,7 +6,7 @@
   <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate" />
   <title>Coordinadores de Titulación</title>
   <link rel="icon" href="data:," />
-  <link rel="stylesheet" href="css/coordinador.css?v=2.8.7" />
+  <link rel="stylesheet" href="css/coordinador.css?v=2.9.0" />
 </head>
 <body>
   <header class="app-header">
@@ -15,9 +15,9 @@
       <div>
         <p class="app-badge">Coordinadores</p>
         <h1>Coordinadores de titulación</h1>
-        <p>Revisión y aprobación de propuestas académicas.</p>
+        <p>Seguimiento de estudiantes y revisión de propuestas académicas.</p>
       </div>
-      <span class="version-badge">v2.8.7</span>
+      <span class="version-badge">v2.9.0</span>
     </div>
   </header>
 
@@ -29,25 +29,26 @@
         <button type="button" class="btn btn--secondary refresh-btn" data-accion="actualizar-datos">Actualizar</button>
       </div>
       <div class="coordinator-summary" id="coordinadorResumen" hidden><strong id="coordinadorNombre">-</strong><span id="coordinadorCarreras">Sin carreras asignadas</span></div>
-      <div id="estadoPrincipal" class="status-message is-info">Inicializando conexión...</div>
+      <div id="estadoPrincipal" class="status-message is-info">Cargando población y envíos...</div>
     </section>
 
     <section class="card content-card">
       <div class="content-toolbar">
-        <nav class="tabs" aria-label="Estados de revisión">
-          <button type="button" class="tab-btn is-active" data-accion="cambiar-vista" data-vista="pendientes">Pendientes</button>
+        <nav class="tabs" aria-label="Estados de seguimiento">
+          <button type="button" class="tab-btn is-active" data-accion="cambiar-vista" data-vista="faltantes">No enviados</button>
+          <button type="button" class="tab-btn" data-accion="cambiar-vista" data-vista="pendientes">Por revisar</button>
           <button type="button" class="tab-btn" data-accion="cambiar-vista" data-vista="aprobados">Aprobados</button>
           <button type="button" class="tab-btn" data-accion="cambiar-vista" data-vista="devueltos">Devueltos</button>
         </nav>
         <div class="counter-box"><span>Total</span><strong id="contadorRegistros">0</strong></div>
       </div>
       <div class="table-tools">
-        <div><p class="section-kicker" id="vistaActualKicker">Pendientes</p><h2 id="tituloTablaEstudiantes">Estudiantes pendientes</h2></div>
+        <div><p class="section-kicker" id="vistaActualKicker">No enviados</p><h2 id="tituloTablaEstudiantes">Estudiantes que todavía no han enviado</h2></div>
         <label class="field field--search"><span>Buscar</span><input type="search" id="buscadorInput" placeholder="Cédula o nombre" autocomplete="off" /></label>
       </div>
       <div class="table-wrap">
         <table class="data-table">
-          <thead><tr><th>Cédula</th><th>Nombre</th><th>Carrera</th><th>Estado</th><th>Ver más</th></tr></thead>
+          <thead><tr><th>Cédula</th><th>Nombre</th><th>Carrera</th><th>Estado</th><th>Acción</th></tr></thead>
           <tbody id="tablaEstudiantesBody"><tr><td colspan="5" class="empty-cell">Selecciona un período y un coordinador.</td></tr></tbody>
         </table>
       </div>
@@ -119,9 +120,9 @@
     </div>
   </section>
 
-  <script src="js/coordinador.config.js?v=2.8.7"></script>
-  <script src="js/coordinador.utils.js?v=2.8.7"></script>
-  <script src="js/coordinador.state.js?v=2.8.7"></script>
-  <script src="js/coordinador.bootstrap.independiente.js?v=2.8.7"></script>
+  <script src="js/coordinador.config.js?v=2.9.0"></script>
+  <script src="js/coordinador.utils.js?v=2.9.0"></script>
+  <script src="js/coordinador.state.js?v=2.9.0"></script>
+  <script src="js/coordinador.bootstrap.independiente.js?v=2.9.0"></script>
 </body>
 </html>
