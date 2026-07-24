@@ -7,6 +7,7 @@ import {
   normalizeCedula,
   periodSignature,
   queryEqual,
+  samePeriod,
   text
 } from './firestore.js';
 
@@ -43,6 +44,12 @@ function principal(row) {
     text(row.tipo).toUpperCase() === 'PRINCIPAL' ||
     text(row.estado).toUpperCase() === 'PRINCIPAL'
   );
+}
+
+function recordPeriod(row) {
+  return text(flexible(row, [
+    'periodoId', 'periodId', 'periodoCanonicoId', 'ultimoPeriodoId', 'periodoLabel', 'periodo'
+  ]));
 }
 
 async function getStudentDocument(cedula, env) {
@@ -83,14 +90,15 @@ async function getStudentPeriodRecord(cedula, requestedPeriod, env) {
   }
 
   const requestedSignature = periodSignature(requestedPeriod);
-  const exact = requestedSignature
-    ? rows.filter((row) => periodSignature(flexible(row, [
-        'periodoId', 'periodId', 'periodoCanonicoId', 'ultimoPeriodoId', 'periodoLabel', 'periodo'
-      ])) === requestedSignature)
-    : [];
+  if (requestedSignature) {
+    const exact = rows.filter((row) => samePeriod(recordPeriod(row), requestedPeriod));
+    return latestBy(exact, [], [
+      'ultimaSincronizacion', 'actualizadoEn', 'fechaActualizacion', '_updateTime'
+    ]);
+  }
+
   const activeRows = rows.filter((row) => active(flexible(row, ['estadoMatricula', 'EstadoMatricula', 'estado'])));
-  const candidates = exact.length ? exact : activeRows.length ? activeRows : rows;
-  return latestBy(candidates, [], [
+  return latestBy(activeRows.length ? activeRows : rows, [], [
     'ultimaSincronizacion', 'actualizadoEn', 'fechaActualizacion', '_updateTime'
   ]);
 }
@@ -170,15 +178,34 @@ export async function getStudentBasic(cedula, options = {}, env) {
     'periodoLabel', 'periodoCanonicoLabel', 'PeriodoLabel', 'periodo'
   ]));
 
-  if (!periodId || requestedPeriod) {
+  if (requestedPeriod && !samePeriod(periodId || periodLabel, requestedPeriod)) {
     const enrollment = await getStudentPeriodRecord(canonical, requestedPeriod, env);
+    if (!enrollment) {
+      return {
+        ok: true,
+        encontrado: false,
+        existe: true,
+        habilitado: false,
+        cedula: canonical,
+        numeroIdentificacion: canonical,
+        periodoId: requestedPeriod,
+        mensaje: 'El estudiante existe, pero no registra matrícula en el período solicitado.',
+        fuente: 'FIREBASE_UTET'
+      };
+    }
+    periodId = text(flexible(enrollment, [
+      'periodoId', 'periodId', 'periodoCanonicoId', 'ultimoPeriodoId', 'periodoLabel', 'periodo'
+    ]));
+    periodLabel = text(flexible(enrollment, [
+      'periodoLabel', 'periodoCanonicoLabel', 'PeriodoLabel', 'periodo', 'periodoId'
+    ])) || periodId;
+  } else if (!periodId) {
+    const enrollment = await getStudentPeriodRecord(canonical, '', env);
     if (enrollment) {
-      periodId = text(flexible(enrollment, [
-        'periodoId', 'periodId', 'periodoCanonicoId', 'ultimoPeriodoId', 'periodoLabel', 'periodo'
-      ])) || periodId;
+      periodId = recordPeriod(enrollment);
       periodLabel = text(flexible(enrollment, [
         'periodoLabel', 'periodoCanonicoLabel', 'PeriodoLabel', 'periodo', 'periodoId'
-      ])) || periodLabel || periodId;
+      ])) || periodId;
     }
   }
 
@@ -220,6 +247,7 @@ export async function getStudentBasic(cedula, options = {}, env) {
     ok: true,
     encontrado: true,
     existe: true,
+    habilitado: true,
     estudiante: student,
     registro: student,
     cedula: canonical,
