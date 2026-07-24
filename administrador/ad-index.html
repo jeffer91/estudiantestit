@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Administrador Titulación</title>
   <link rel="icon" href="data:," />
-  <link rel="stylesheet" href="./ad-css/ad-admin.css?v=3.0.0" />
-  <link rel="stylesheet" href="./ad-css/ad-google-sheets.css?v=3.0.0" />
+  <link rel="stylesheet" href="./ad-css/ad-admin.css?v=3.1.2" />
+  <link rel="stylesheet" href="./ad-css/ad-google-sheets.css?v=3.1.2" />
 </head>
 <body>
   <div id="ad-loading" class="ad-loading" hidden>Procesando...</div>
@@ -39,7 +39,7 @@
           <span class="ad-badge ad-badge-warning" id="ad-badge-requisitos">UTET: pendiente</span>
           <span class="ad-badge ad-badge-warning" id="ad-badge-titulos">Títulos: pendiente</span>
           <span class="ad-badge ad-badge-warning" id="ad-badge-claves">IA: pendiente</span>
-          <span class="ad-badge ad-badge-info" id="ad-badge-version">v3.0.0</span>
+          <span class="ad-badge ad-badge-info" id="ad-badge-version">v3.1.2</span>
         </div>
       </header>
 
@@ -106,8 +106,9 @@
       </section>
 
       <section id="ad-seccion-titulos" class="ad-view" data-ad-view hidden>
-        <div class="ad-section-head"><div><p class="ad-eyebrow">Firebase Títulos</p><h3>Títulos enviados</h3></div><label><span>Buscar</span><input id="ad-buscar-titulo" placeholder="Cédula, nombre, carrera o estado" /></label></div>
-        <div class="ad-card"><div class="ad-table-wrap"><table class="ad-table"><thead><tr><th>Cédula</th><th>Estudiante</th><th>Carrera</th><th>Período</th><th>Estado</th><th>Acción</th></tr></thead><tbody id="ad-tabla-titulos"><tr><td colspan="6" class="ad-empty">Cargando...</td></tr></tbody></table></div></div>
+        <div class="ad-section-head"><div><p class="ad-eyebrow">Firebase Títulos</p><h3>Títulos enviados</h3><p class="ad-muted">Usar permite devolver las propuestas. Eliminar borra el envío, todas sus versiones y resoluciones del período.</p></div><label><span>Buscar</span><input id="ad-buscar-titulo" placeholder="Cédula, nombre, carrera o estado" /></label></div>
+        <pre id="ad-estado-titulos" class="ad-result-box">Selecciona Eliminar únicamente cuando quieras borrar definitivamente el registro del período.</pre>
+        <div class="ad-card"><div class="ad-table-wrap"><table class="ad-table"><thead><tr><th>Cédula</th><th>Estudiante</th><th>Carrera</th><th>Período</th><th>Estado</th><th>Acciones</th></tr></thead><tbody id="ad-tabla-titulos"><tr><td colspan="6" class="ad-empty">Cargando...</td></tr></tbody></table></div></div>
       </section>
 
       <section id="ad-seccion-devolver" class="ad-view ad-danger-zone" data-ad-view hidden>
@@ -147,11 +148,11 @@
         <div class="ad-card"><pre id="ad-diagnostico-salida" class="ad-diagnostic-box">Diagnóstico pendiente.</pre></div>
       </section>
 
-      <footer class="ad-footer"><span>Administrador Titulación</span><span id="ad-footer-version">Versión 3.0.0</span></footer>
+      <footer class="ad-footer"><span>Administrador Titulación</span><span id="ad-footer-version">Versión 3.1.2</span></footer>
     </main>
   </div>
 
-  <script src="./ad-js/ad-api.service.js?v=3.0.0"></script>
-  <script src="./ad-js/ad-google-sheets.app.js?v=3.0.0"></script>
+  <script src="./ad-js/ad-api.service.js?v=3.1.2"></script>
+  <script src="./ad-js/ad-google-sheets.app.js?v=3.1.2"></script>
 </body>
 </html>
