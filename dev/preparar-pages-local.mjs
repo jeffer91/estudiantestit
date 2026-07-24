@@ -5,6 +5,7 @@ import process from 'node:process';
 const root = process.cwd();
 const output = path.join(root, '.pages-local');
 const VERSION_ESTUDIANTES = '2.4.3';
+const VERSION_ADMIN = '3.3.2';
 const LEGACY_SCRIPTS = [
   'estudiante.consulta.optimizada.js',
   'estudiante.devolucion.runtime.js',
@@ -50,7 +51,6 @@ function copyFile(name) {
 function prepararEstudiantesLocal() {
   const entry = path.join(output, 'estudiantes-mvp', 'estudiante.html');
   if (!fs.existsSync(entry)) return;
-
   let html = fs.readFileSync(entry, 'utf8');
   for (const legacy of LEGACY_SCRIPTS) {
     if (html.includes(legacy)) {
@@ -60,8 +60,16 @@ function prepararEstudiantesLocal() {
   if (!html.includes('estudiante.consulta.revision.js')) {
     throw new Error('El HTML local de Estudiantes no carga la consulta unificada.');
   }
-
   html = html.replace(/\?v=\d+\.\d+\.\d+/g, `?v=${VERSION_ESTUDIANTES}`);
+  fs.writeFileSync(entry, html, 'utf8');
+}
+
+function prepararAdministradorLocal() {
+  const entry = path.join(output, 'administrador', 'ad-index.html');
+  if (!fs.existsSync(entry)) return;
+  let html = fs.readFileSync(entry, 'utf8');
+  html = html.replace(/\?v=\d+\.\d+\.\d+/g, `?v=${VERSION_ADMIN}`);
+  html = html.replace(/>v\d+\.\d+\.\d+</g, `>v${VERSION_ADMIN}<`);
   fs.writeFileSync(entry, html, 'utf8');
 }
 
@@ -78,6 +86,7 @@ for (const required of ['estudiantes-mvp', 'coordinadores-mvp', 'administrador']
 }
 
 prepararEstudiantesLocal();
+prepararAdministradorLocal();
 
 if (!copiedFiles.includes('index.html')) {
   const index = `<!doctype html>
@@ -99,6 +108,6 @@ if (!copiedFiles.includes('index.html')) {
 
 console.log('[Pages local] Carpeta estática preparada en .pages-local.');
 console.log(`[Pages local] Consulta unificada de estudiantes activa (${VERSION_ESTUDIANTES}).`);
-console.log('[Pages local] Un solo modal de consulta y flujo publicado de Títulos activos.');
+console.log(`[Pages local] Administrador activo (${VERSION_ADMIN}).`);
 console.log('[Pages local] Sin controladores duplicados ni parches de runtime.');
 console.log('[Pages local] La carpeta functions permanece fuera de los archivos estáticos para habilitar /api/*.');
