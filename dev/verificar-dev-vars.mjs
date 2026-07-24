@@ -3,24 +3,23 @@ import path from 'node:path';
 import process from 'node:process';
 
 const envPath = path.join(process.cwd(), '.dev.vars');
-const required = [
-  'TITULOS_FIREBASE_SERVICE_ACCOUNT',
-  'UTET_FIREBASE_SERVICE_ACCOUNT'
-];
 
 if (!fs.existsSync(envPath)) {
-  console.error('[Configuración local] Falta .dev.vars.');
-  console.error('[Configuración local] Copia .dev.vars.example como .dev.vars y agrega las dos cuentas de servicio.');
-  process.exit(1);
+  console.log('[Configuración local] No existe .dev.vars; se usarán las configuraciones web de Firebase.');
+  console.log('[Configuración local] El acceso dependerá de las reglas actuales de Firestore.');
+  process.exit(0);
 }
 
 const content = fs.readFileSync(envPath, 'utf8');
-const missing = required.filter((name) => !new RegExp('^\\s*' + name + '\\s*=', 'm').test(content));
+const detected = [
+  'TITULOS_FIREBASE_SERVICE_ACCOUNT',
+  'UTET_FIREBASE_SERVICE_ACCOUNT'
+].filter((name) => new RegExp('^\\s*' + name + '\\s*=', 'm').test(content));
 
-if (missing.length) {
-  console.error('[Configuración local] Faltan variables obligatorias: ' + missing.join(', '));
-  process.exit(1);
+if (detected.length) {
+  console.log('[Configuración local] Cuentas de servicio opcionales detectadas: ' + detected.join(', '));
+} else {
+  console.log('[Configuración local] .dev.vars no contiene cuentas de servicio; se usarán las configuraciones web.');
 }
 
-console.log('[Configuración local] Credenciales de Títulos y UTET detectadas en .dev.vars.');
 console.log('[Configuración local] UTET=utet-4387a; Títulos=titulos-ec2fa; acceso mediante Cloudflare Functions.');
