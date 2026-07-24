@@ -6,7 +6,7 @@
   <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate" />
   <title>Coordinadores de Titulación</title>
   <link rel="icon" href="data:," />
-  <link rel="stylesheet" href="css/coordinador.css?v=2.9.0" />
+  <link rel="stylesheet" href="css/coordinador.css?v=2.9.1" />
 </head>
 <body>
   <header class="app-header">
@@ -15,9 +15,9 @@
       <div>
         <p class="app-badge">Coordinadores</p>
         <h1>Coordinadores de titulación</h1>
-        <p>Seguimiento de estudiantes y revisión de propuestas académicas.</p>
+        <p>Revisión y aprobación de propuestas registradas en Firebase Títulos.</p>
       </div>
-      <span class="version-badge">v2.9.0</span>
+      <span class="version-badge">v2.9.1</span>
     </div>
   </header>
 
@@ -29,21 +29,20 @@
         <button type="button" class="btn btn--secondary refresh-btn" data-accion="actualizar-datos">Actualizar</button>
       </div>
       <div class="coordinator-summary" id="coordinadorResumen" hidden><strong id="coordinadorNombre">-</strong><span id="coordinadorCarreras">Sin carreras asignadas</span></div>
-      <div id="estadoPrincipal" class="status-message is-info">Cargando población y envíos...</div>
+      <div id="estadoPrincipal" class="status-message is-info">Consultando Firebase Títulos...</div>
     </section>
 
     <section class="card content-card">
       <div class="content-toolbar">
-        <nav class="tabs" aria-label="Estados de seguimiento">
-          <button type="button" class="tab-btn is-active" data-accion="cambiar-vista" data-vista="faltantes">No enviados</button>
-          <button type="button" class="tab-btn" data-accion="cambiar-vista" data-vista="pendientes">Por revisar</button>
+        <nav class="tabs" aria-label="Estados de revisión">
+          <button type="button" class="tab-btn is-active" data-accion="cambiar-vista" data-vista="pendientes">Por revisar</button>
           <button type="button" class="tab-btn" data-accion="cambiar-vista" data-vista="aprobados">Aprobados</button>
           <button type="button" class="tab-btn" data-accion="cambiar-vista" data-vista="devueltos">Devueltos</button>
         </nav>
         <div class="counter-box"><span>Total</span><strong id="contadorRegistros">0</strong></div>
       </div>
       <div class="table-tools">
-        <div><p class="section-kicker" id="vistaActualKicker">No enviados</p><h2 id="tituloTablaEstudiantes">Estudiantes que todavía no han enviado</h2></div>
+        <div><p class="section-kicker" id="vistaActualKicker">Por revisar</p><h2 id="tituloTablaEstudiantes">Estudiantes con títulos pendientes de revisión</h2></div>
         <label class="field field--search"><span>Buscar</span><input type="search" id="buscadorInput" placeholder="Cédula o nombre" autocomplete="off" /></label>
       </div>
       <div class="table-wrap">
@@ -55,7 +54,7 @@
     </section>
 
     <section class="card diagnostico-card is-hidden" id="diagnosticoPanel" hidden>
-      <div class="diagnostic-head"><div><p class="section-kicker">Diagnóstico</p><h2>Estado de la conexión</h2></div><button type="button" class="btn btn--ghost" data-accion="ocultar-diagnostico">Cerrar</button></div>
+      <div class="diagnostic-head"><div><p class="section-kicker">Diagnóstico</p><h2>Estado de Firebase Títulos</h2></div><button type="button" class="btn btn--ghost" data-accion="ocultar-diagnostico">Cerrar</button></div>
       <pre id="diagnosticoResultado" class="result-box">Diagnóstico pendiente.</pre>
     </section>
     <button type="button" class="diagnostic-link" data-accion="mostrar-diagnostico">Ver diagnóstico</button>
@@ -120,9 +119,9 @@
     </div>
   </section>
 
-  <script src="js/coordinador.config.js?v=2.9.0"></script>
-  <script src="js/coordinador.utils.js?v=2.9.0"></script>
-  <script src="js/coordinador.state.js?v=2.9.0"></script>
-  <script src="js/coordinador.bootstrap.independiente.js?v=2.9.0"></script>
+  <script src="js/coordinador.config.js?v=2.9.1"></script>
+  <script src="js/coordinador.utils.js?v=2.9.1"></script>
+  <script src="js/coordinador.state.js?v=2.9.1"></script>
+  <script src="js/coordinador.bootstrap.independiente.js?v=2.9.1"></script>
 </body>
 </html>
