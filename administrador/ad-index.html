@@ -3,11 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate" />
   <title>Administrador Titulación</title>
   <link rel="icon" href="data:," />
-  <link rel="stylesheet" href="./ad-css/ad-admin.css?v=3.2.0" />
-  <link rel="stylesheet" href="./ad-css/ad-google-sheets.css?v=3.2.0" />
-  <link rel="stylesheet" href="./ad-css/ad-titulos-estadisticas.css?v=3.2.0" />
+  <link rel="stylesheet" href="./ad-css/ad-admin.css?v=3.3.3" />
+  <link rel="stylesheet" href="./ad-css/ad-google-sheets.css?v=3.3.3" />
+  <link rel="stylesheet" href="./ad-css/ad-titulos-estadisticas.css?v=3.3.3" />
 </head>
 <body>
   <div id="ad-loading" class="ad-loading" hidden>Procesando...</div>
@@ -20,7 +21,7 @@
       <nav class="ad-nav" aria-label="Menú administrador">
         <a class="is-active" href="#ad-seccion-estado" data-ad-view-target="ad-seccion-estado" aria-current="page">Estado general</a>
         <a href="#ad-seccion-periodos" data-ad-view-target="ad-seccion-periodos">Períodos</a>
-        <a href="#ad-seccion-carreras" data-ad-view-target="ad-seccion-carreras">Carreras y estudiantes</a>
+        <a href="#ad-seccion-carreras" data-ad-view-target="ad-seccion-carreras">Carreras</a>
         <a href="#ad-seccion-coordinadores" data-ad-view-target="ad-seccion-coordinadores">Coordinadores</a>
         <a href="#ad-seccion-titulos" data-ad-view-target="ad-seccion-titulos">Títulos</a>
         <a href="#ad-seccion-estadisticas" data-ad-view-target="ad-seccion-estadisticas">Estadísticas</a>
@@ -40,7 +41,7 @@
           <span class="ad-badge ad-badge-warning" id="ad-badge-requisitos">UTET: pendiente</span>
           <span class="ad-badge ad-badge-warning" id="ad-badge-titulos">Títulos: pendiente</span>
           <span class="ad-badge ad-badge-warning" id="ad-badge-claves">IA: pendiente</span>
-          <span class="ad-badge ad-badge-info" id="ad-badge-version">v3.2.0</span>
+          <span class="ad-badge ad-badge-info" id="ad-badge-version">v3.3.3</span>
         </div>
       </header>
 
@@ -66,9 +67,9 @@
       </section>
 
       <section id="ad-seccion-carreras" class="ad-view" data-ad-view hidden>
-        <div class="ad-section-head"><div><p class="ad-eyebrow">Dos Firebase</p><h3>Carreras y estudiantes</h3><p class="ad-muted">Las carreras se leen desde Firebase Títulos. La consulta individual recupera de UTET solamente cédula, nombre, carrera, período y celular.</p></div></div>
+        <div class="ad-section-head"><div><p class="ad-eyebrow">Dos Firebase</p><h3>Carreras</h3><p class="ad-muted">Las carreras se leen desde Firebase Títulos y se asignan a sus coordinadores.</p></div></div>
         <div class="ad-card">
-          <div id="ad-estado-carreras" class="ad-result-box">Selecciona un período en Períodos.</div>
+          <div id="ad-estado-carreras" class="ad-result-box">Cargando carreras.</div>
           <div class="ad-table-wrap"><table class="ad-table"><thead><tr><th>Código</th><th>Carrera</th><th>Origen</th></tr></thead><tbody id="ad-tabla-carreras"><tr><td colspan="3" class="ad-empty">Cargando...</td></tr></tbody></table></div>
         </div>
         <div class="ad-card ad-section">
@@ -164,7 +165,7 @@
         <div class="ad-card"><pre id="ad-diagnostico-salida" class="ad-diagnostic-box">Diagnóstico pendiente.</pre></div>
       </section>
 
-      <footer class="ad-footer"><span>Administrador Titulación</span><span id="ad-footer-version">Versión 3.2.0</span></footer>
+      <footer class="ad-footer"><span>Administrador Titulación</span><span id="ad-footer-version">Versión 3.3.3</span></footer>
     </main>
   </div>
 
@@ -225,7 +226,7 @@
     </div>
   </section>
 
-  <script src="./ad-js/ad-api.service.js?v=3.2.0"></script>
-  <script src="./ad-js/ad-google-sheets.app.js?v=3.2.0"></script>
+  <script src="./ad-js/ad-api.service.js?v=3.3.3"></script>
+  <script src="./ad-js/ad-google-sheets.app.js?v=3.3.3"></script>
 </body>
 </html>
