@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Administrador Titulación</title>
   <link rel="icon" href="data:," />
-  <link rel="stylesheet" href="./ad-css/ad-admin.css?v=2.0.1" />
-  <link rel="stylesheet" href="./ad-css/ad-google-sheets.css?v=2.0.1" />
+  <link rel="stylesheet" href="./ad-css/ad-admin.css?v=3.0.0" />
+  <link rel="stylesheet" href="./ad-css/ad-google-sheets.css?v=3.0.0" />
 </head>
 <body>
   <div id="ad-loading" class="ad-loading" hidden>Procesando...</div>
@@ -31,24 +31,24 @@
     <main class="ad-main">
       <header class="ad-header">
         <div>
-          <p class="ad-eyebrow">Google Sheets</p>
+          <p class="ad-eyebrow">Firebase</p>
           <h2>Administrador de titulación</h2>
-          <p class="ad-muted">REQUISITOS_BDLOCAL_SYNC se consulta; RESPALDO TITULOS APP recibe las operaciones; Claves administra servicios, estados, tokens e IA.</p>
+          <p class="ad-muted">Firebase UTET aporta cédula, nombre, carrera, período y celular; Firebase Títulos administra envíos, coordinadores, resoluciones e IA.</p>
         </div>
         <div class="ad-header-actions">
-          <span class="ad-badge ad-badge-warning" id="ad-badge-requisitos">Requisitos: pendiente</span>
+          <span class="ad-badge ad-badge-warning" id="ad-badge-requisitos">UTET: pendiente</span>
           <span class="ad-badge ad-badge-warning" id="ad-badge-titulos">Títulos: pendiente</span>
-          <span class="ad-badge ad-badge-warning" id="ad-badge-claves">Claves: pendiente</span>
-          <span class="ad-badge ad-badge-info" id="ad-badge-version">v2.0.1</span>
+          <span class="ad-badge ad-badge-warning" id="ad-badge-claves">IA: pendiente</span>
+          <span class="ad-badge ad-badge-info" id="ad-badge-version">v3.0.0</span>
         </div>
       </header>
 
       <section id="ad-seccion-estado" class="ad-view" data-ad-view>
         <div class="ad-grid ad-grid-4">
           <article class="ad-card ad-kpi-card"><span class="ad-kpi-label">Período principal</span><strong id="ad-kpi-periodo">-</strong><small id="ad-kpi-periodo-id">-</small></article>
-          <article class="ad-card ad-kpi-card"><span class="ad-kpi-label">Coordinadores</span><strong id="ad-kpi-coordinadores">0</strong><small>RESPALDO TITULOS APP</small></article>
-          <article class="ad-card ad-kpi-card"><span class="ad-kpi-label">Carreras</span><strong id="ad-kpi-carreras">0</strong><small>REQUISITOS_BDLOCAL_SYNC</small></article>
-          <article class="ad-card ad-kpi-card"><span class="ad-kpi-label">Títulos / IA activa</span><strong><span id="ad-kpi-titulos">0</span> / <span id="ad-kpi-ia">0</span></strong><small>Títulos enviados / proveedores</small></article>
+          <article class="ad-card ad-kpi-card"><span class="ad-kpi-label">Coordinadores</span><strong id="ad-kpi-coordinadores">0</strong><small>Firebase Títulos</small></article>
+          <article class="ad-card ad-kpi-card"><span class="ad-kpi-label">Carreras</span><strong id="ad-kpi-carreras">0</strong><small>Firebase Títulos</small></article>
+          <article class="ad-card ad-kpi-card"><span class="ad-kpi-label">Títulos / IA activa</span><strong><span id="ad-kpi-titulos">0</span> / <span id="ad-kpi-ia">0</span></strong><small>Envíos / proveedores</small></article>
         </div>
         <section class="ad-section">
           <div class="ad-section-head"><div><p class="ad-eyebrow">Resumen</p><h3>Estado de las bases</h3></div><button class="ad-btn ad-btn-primary" type="button" data-action="refrescar">Actualizar todo</button></div>
@@ -57,15 +57,15 @@
       </section>
 
       <section id="ad-seccion-periodos" class="ad-view" data-ad-view hidden>
-        <div class="ad-section-head"><div><p class="ad-eyebrow">Solo consulta</p><h3>Períodos académicos</h3><p class="ad-muted">Se leen exclusivamente desde REQUISITOS_BDLOCAL_SYNC. Esta app no los modifica.</p></div></div>
+        <div class="ad-section-head"><div><p class="ad-eyebrow">Firebase Títulos</p><h3>Períodos académicos</h3><p class="ad-muted">Los períodos activos se leen desde la colección periodos.</p></div></div>
         <div class="ad-card">
           <label><span>Período usado para consultar carreras</span><select id="ad-periodo-select"></select></label>
-          <div class="ad-table-wrap"><table class="ad-table"><thead><tr><th>ID</th><th>Período</th><th>Modo</th><th>Principal</th></tr></thead><tbody id="ad-tabla-periodos"><tr><td colspan="4" class="ad-empty">Cargando...</td></tr></tbody></table></div>
+          <div class="ad-table-wrap"><table class="ad-table"><thead><tr><th>ID</th><th>Período</th><th>Origen</th><th>Principal</th></tr></thead><tbody id="ad-tabla-periodos"><tr><td colspan="4" class="ad-empty">Cargando...</td></tr></tbody></table></div>
         </div>
       </section>
 
       <section id="ad-seccion-carreras" class="ad-view" data-ad-view hidden>
-        <div class="ad-section-head"><div><p class="ad-eyebrow">Solo consulta</p><h3>Carreras y estudiantes</h3><p class="ad-muted">Información académica proveniente de REQUISITOS_BDLOCAL_SYNC.</p></div></div>
+        <div class="ad-section-head"><div><p class="ad-eyebrow">Dos Firebase</p><h3>Carreras y estudiantes</h3><p class="ad-muted">Las carreras se leen desde Firebase Títulos. La consulta individual recupera de UTET solamente cédula, nombre, carrera, período y celular.</p></div></div>
         <div class="ad-card">
           <div id="ad-estado-carreras" class="ad-result-box">Selecciona un período en Períodos.</div>
           <div class="ad-table-wrap"><table class="ad-table"><thead><tr><th>Código</th><th>Carrera</th><th>Origen</th></tr></thead><tbody id="ad-tabla-carreras"><tr><td colspan="3" class="ad-empty">Cargando...</td></tr></tbody></table></div>
@@ -82,7 +82,7 @@
       </section>
 
       <section id="ad-seccion-coordinadores" class="ad-view" data-ad-view hidden>
-        <div class="ad-section-head"><div><p class="ad-eyebrow">Lectura y escritura</p><h3>Coordinadores</h3><p class="ad-muted">Los cambios se guardan en RESPALDO TITULOS APP.</p></div></div>
+        <div class="ad-section-head"><div><p class="ad-eyebrow">Firebase Títulos</p><h3>Coordinadores</h3><p class="ad-muted">Los cambios se guardan en la colección coordinadores.</p></div></div>
         <div class="ad-card">
           <form id="ad-form-coordinador" class="ad-form-grid ad-form-grid-4">
             <label><span>ID opcional</span><input id="ad-coordinador-id" placeholder="Se genera desde el nombre" /></label>
@@ -106,12 +106,12 @@
       </section>
 
       <section id="ad-seccion-titulos" class="ad-view" data-ad-view hidden>
-        <div class="ad-section-head"><div><p class="ad-eyebrow">RESPALDO TITULOS APP</p><h3>Títulos enviados</h3></div><label><span>Buscar</span><input id="ad-buscar-titulo" placeholder="Cédula, nombre, carrera o estado" /></label></div>
+        <div class="ad-section-head"><div><p class="ad-eyebrow">Firebase Títulos</p><h3>Títulos enviados</h3></div><label><span>Buscar</span><input id="ad-buscar-titulo" placeholder="Cédula, nombre, carrera o estado" /></label></div>
         <div class="ad-card"><div class="ad-table-wrap"><table class="ad-table"><thead><tr><th>Cédula</th><th>Estudiante</th><th>Carrera</th><th>Período</th><th>Estado</th><th>Acción</th></tr></thead><tbody id="ad-tabla-titulos"><tr><td colspan="6" class="ad-empty">Cargando...</td></tr></tbody></table></div></div>
       </section>
 
       <section id="ad-seccion-devolver" class="ad-view ad-danger-zone" data-ad-view hidden>
-        <div class="ad-section-head"><div><p class="ad-eyebrow">Acción administrativa</p><h3>Devolver propuestas</h3><p class="ad-muted">La resolución se registra en RESPALDO TITULOS APP y permitirá un nuevo envío.</p></div></div>
+        <div class="ad-section-head"><div><p class="ad-eyebrow">Acción administrativa</p><h3>Devolver propuestas</h3><p class="ad-muted">La resolución se registra en la colección resoluciones y habilita un nuevo envío.</p></div></div>
         <div class="ad-card">
           <form id="ad-form-devolver" class="ad-form-grid">
             <label><span>Cédula</span><input id="ad-devolver-cedula" inputmode="numeric" required /></label>
@@ -124,7 +124,7 @@
       </section>
 
       <section id="ad-seccion-ia" class="ad-view" data-ad-view hidden>
-        <div class="ad-section-head"><div><p class="ad-eyebrow">Claves</p><h3>Proveedores de IA</h3><p class="ad-muted">Credenciales, estado, modelo y prioridad se guardan en la hoja Claves.</p></div></div>
+        <div class="ad-section-head"><div><p class="ad-eyebrow">Firebase Títulos</p><h3>Proveedores de IA</h3><p class="ad-muted">Credenciales, estado, modelo y prioridad se guardan en la colección ia.</p></div></div>
         <div class="ad-card">
           <form id="ad-form-ia" class="ad-form-grid ad-form-grid-4">
             <label><span>ID</span><input id="ad-ia-id" placeholder="gemini" required /></label>
@@ -143,15 +143,15 @@
       </section>
 
       <section id="ad-seccion-diagnostico" class="ad-view" data-ad-view hidden>
-        <div class="ad-section-head"><div><p class="ad-eyebrow">Conexiones</p><h3>Diagnóstico de bases</h3></div><button class="ad-btn ad-btn-primary" type="button" data-action="diagnosticar">Ejecutar diagnóstico</button></div>
+        <div class="ad-section-head"><div><p class="ad-eyebrow">Conexiones</p><h3>Diagnóstico de las dos Firebase</h3></div><button class="ad-btn ad-btn-primary" type="button" data-action="diagnosticar">Ejecutar diagnóstico</button></div>
         <div class="ad-card"><pre id="ad-diagnostico-salida" class="ad-diagnostic-box">Diagnóstico pendiente.</pre></div>
       </section>
 
-      <footer class="ad-footer"><span>Administrador Titulación</span><span id="ad-footer-version">Versión 2.0.1</span></footer>
+      <footer class="ad-footer"><span>Administrador Titulación</span><span id="ad-footer-version">Versión 3.0.0</span></footer>
     </main>
   </div>
 
-  <script src="./ad-js/ad-api.service.js?v=2.0.1"></script>
-  <script src="./ad-js/ad-google-sheets.app.js?v=2.0.1"></script>
+  <script src="./ad-js/ad-api.service.js?v=3.0.0"></script>
+  <script src="./ad-js/ad-google-sheets.app.js?v=3.0.0"></script>
 </body>
 </html>
