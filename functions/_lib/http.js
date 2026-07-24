@@ -24,34 +24,31 @@ export function requestOrigin(request) {
   return text(request.headers.get('Origin'));
 }
 
+export function requestHost(request) {
+  try {
+    return new URL(request.url).hostname.toLowerCase();
+  } catch (_error) {
+    return '';
+  }
+}
+
 export function appId(request) {
   return text(request.headers.get('X-Titulos-App')).toLowerCase();
 }
 
 export function role(request) {
-  const origin = requestOrigin(request).toLowerCase();
+  const host = requestHost(request);
 
-  if (origin.includes('titulos-administrador.pages.dev')) return 'admin';
-  if (
-    origin.includes('titulos-coordinadores.pages.dev') ||
-    origin.includes('coordinadores.pages.dev')
-  ) {
+  if (host === 'titulos-administrador.pages.dev') return 'admin';
+  if (host === 'titulos-coordinadores.pages.dev' || host === 'coordinadores.pages.dev') {
     return 'coordinator';
   }
-  if (origin.includes('titulos.pages.dev')) return 'student';
+  if (host === 'titulos.pages.dev') return 'student';
 
-  if (
-    origin === 'null' ||
-    origin.includes('localhost') ||
-    origin.includes('127.0.0.1')
-  ) {
+  if (['localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]'].includes(host)) {
     const app = appId(request);
     if (app === 'administrador' || app === 'admin') return 'admin';
-    if (
-      app === 'coordinadores' ||
-      app === 'coordinador' ||
-      app === 'coordinator'
-    ) {
+    if (app === 'coordinadores' || app === 'coordinador' || app === 'coordinator') {
       return 'coordinator';
     }
   }
