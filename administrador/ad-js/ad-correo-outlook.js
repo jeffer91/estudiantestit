@@ -2,6 +2,8 @@
 (function(window,document){
   'use strict';
 
+  var VERSION='3.2.1';
+
   function texto(value){return String(value===null||value===undefined?'':value).trim();}
   function esc(value){return texto(value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');}
   function cedula(value){var digits=texto(value).replace(/\D/g,'');return digits.length===9?'0'+digits:digits;}
@@ -57,7 +59,7 @@
     var period=periodoActual();
     var subject='Recordatorio de registro de propuestas de titulación – '+period;
     var body=mensajeFormal(student,period);
-    var params=new URLSearchParams({to:emails.join(','),subject:subject,body:body});
+    var params=new URLSearchParams({to:emails.join(';'),subject:subject,body:body});
     window.open('https://outlook.office.com/mail/deeplink/compose?'+params.toString(),'_blank','noopener,noreferrer');
   }
 
@@ -134,8 +136,17 @@
     document.head.appendChild(style);
   }
 
+  function actualizarVersion(){
+    var badge=document.getElementById('ad-badge-version');
+    var footer=document.getElementById('ad-footer-version');
+    if(badge)badge.textContent='v'+VERSION;
+    if(footer)footer.textContent='Versión '+VERSION;
+  }
+
   function iniciar(){
     estilos();
+    setTimeout(actualizarVersion,0);
+    setTimeout(actualizarVersion,150);
     var tbody=document.getElementById('ad-tabla-faltantes');
     if(tbody){
       new MutationObserver(decorarFilas).observe(tbody,{childList:true,subtree:true});
