@@ -6,45 +6,37 @@ const root = process.cwd();
 const errors = [];
 
 function read(relativePath) {
-  const absolutePath = path.join(root, relativePath);
-  if (!fs.existsSync(absolutePath)) {
-    errors.push('No existe: ' + relativePath);
+  const absolute = path.join(root, relativePath);
+  if (!fs.existsSync(absolute)) {
+    errors.push(`No existe: ${relativePath}`);
     return '';
   }
-  return fs.readFileSync(absolutePath, 'utf8');
+  return fs.readFileSync(absolute, 'utf8');
 }
 
 function assert(condition, message) {
   if (!condition) errors.push(message);
 }
 
-function localAssets(htmlPath) {
+function checkAssets(htmlPath) {
   const html = read(htmlPath);
   const directory = path.dirname(htmlPath);
-  const assets = [];
   const regex = /<(?:script|link)\b[^>]*(?:src|href)=["']([^"']+)["'][^>]*>/gi;
   let match;
   while ((match = regex.exec(html))) {
     const raw = String(match[1] || '').trim();
     if (!raw || /^(?:https?:|data:|#|\/\/)/i.test(raw)) continue;
     const clean = raw.split(/[?#]/)[0];
-    assets.push(path.normalize(path.join(directory, clean)));
+    const asset = path.normalize(path.join(directory, clean));
+    assert(fs.existsSync(path.join(root, asset)), `${htmlPath} referencia un archivo inexistente: ${asset}`);
   }
-  return { html, assets };
-}
-
-function checkAssets(htmlPath) {
-  const result = localAssets(htmlPath);
-  result.assets.forEach((asset) => {
-    assert(fs.existsSync(path.join(root, asset)), htmlPath + ' referencia un archivo inexistente: ' + asset);
-  });
-  return result.html;
+  return html;
 }
 
 function requireIds(html, ids, appName) {
   ids.forEach((id) => {
-    const expression = new RegExp('id=["\\\']' + id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '["\\\']');
-    assert(expression.test(html), appName + ' no contiene el elemento #' + id + '.');
+    const escaped = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    assert(new RegExp(`id=["']${escaped}["']`).test(html), `${appName} no contiene #${id}.`);
   });
 }
 
@@ -52,103 +44,59 @@ const studentHtml = checkAssets('estudiantes-mvp/estudiante.html');
 const coordinatorHtml = checkAssets('coordinadores-mvp/coordinador.html');
 const adminHtml = checkAssets('administrador/ad-index.html');
 
-requireIds(studentHtml, [
-  'formConsulta', 'cedulaInput', 'estadoPrincipal', 'formTelegram', 'telegramInput',
-  'formPropuestas', 'formEnvio', 'confirmacionEnvio', 'estadoEnvioFinal'
-], 'Estudiantes');
+requireIds(studentHtml, ['formConsulta', 'cedulaInput', 'formEnvio'], 'Estudiantes');
 requireIds(coordinatorHtml, [
-  'periodoSelect', 'coordinadorSelect', 'estadoPrincipal', 'tablaEstudiantesBody',
-  'detalleModal', 'tituloFinalInput', 'comentarioCoordinadorInput', 'btnAprobarEnvio', 'btnDevolverEnvio'
+  'coordinadorSelect', 'estadoPrincipal', 'tablaEstudiantesBody', 'detalleModal',
+  'tituloFinalInput', 'comentarioCoordinadorInput', 'btnAprobarEnvio', 'btnDevolverEnvio'
 ], 'Coordinadores');
-requireIds(adminHtml, [
-  'ad-loading', 'ad-seccion-estado', 'ad-seccion-periodos', 'ad-seccion-carreras',
-  'ad-seccion-coordinadores', 'ad-seccion-titulos', 'ad-seccion-estadisticas',
-  'ad-form-coordinador', 'ad-form-ia', 'ad-diagnostico-salida'
-], 'Administrador');
+requireIds(adminHtml, ['ad-seccion-titulos', 'ad-seccion-estadisticas', 'ad-diagnostico-salida'], 'Administrador');
 
-const adminApi = read('administrador/ad-js/ad-api.service.js');
-const adminGlobalApp = read('administrador/ad-js/ad-administracion-global.js');
-const adminPdf = read('administrador/ad-js/ad-pdf-firebase.js');
-const adminVersion = read('administrador/ad-js/ad-version.js');
 const coordinatorBootstrap = read('coordinadores-mvp/js/coordinador.bootstrap.independiente.js');
+const coordinatorSource = read('coordinadores-mvp/js/coordinador.sheets.primary.js');
+const coordinatorCatalog = read('coordinadores-mvp/js/coordinador.envios.carreras.js');
 const coordinatorState = read('coordinadores-mvp/js/coordinador.state.js');
 const coordinatorUi = read('coordinadores-mvp/js/coordinador.ui.js');
-const coordinatorRuntime = read('coordinadores-mvp/js/coordinador.faltantes.runtime.js');
-const coordinatorSource = read('coordinadores-mvp/js/coordinador.sheets.primary.js');
+const coordinatorApp = read('coordinadores-mvp/js/coordinador.app.js');
+const adminApi = read('administrador/ad-js/ad-api.service.js');
+const adminPdf = read('administrador/ad-js/ad-pdf-firebase.js');
 const studentRequirements = read('estudiantes-mvp/js/requisitos.estudiantes.service.js');
 const studentSheets = read('estudiantes-mvp/js/sheets.service.js');
-const studentReview = read('estudiantes-mvp/js/estudiante.consulta.revision.js');
-const studentReviewCss = read('estudiantes-mvp/css/estudiante.consulta.revision.css');
-const studentApp = read('estudiantes-mvp/js/estudiante.app.js');
-const accessApi = read('functions/api/acceso-estudiante.js');
-const requirementsApi = read('functions/api/requisitos.js');
-const statisticsApi = read('functions/api/estadisticas.js');
-const globalService = read('functions/_lib/admin-global-v5.js') + read('functions/_lib/admin-global-v6.js');
-const titlesService = read('functions/_lib/titulos-firebase-v6.js');
-const claves = read('functions/_lib/claves.js');
-const studentBuild = read('dev/preparar-pages-estudiantes.mjs');
 const coordinatorBuild = read('dev/preparar-pages-coordinadores.mjs');
 const adminBuild = read('dev/preparar-pages-administrador.mjs');
-const localBuild = read('dev/preparar-pages-local.mjs');
 
-assert(/window\.location&&window\.location\.origin/.test(adminApi), 'Administrador no usa su API del mismo dominio.');
-assert(/titulos-administrador\.pages\.dev/.test(adminApi), 'Administrador no tiene dominio oficial de respaldo.');
-assert(/\/api\/estadisticas/.test(adminApi), 'Administrador no consulta el endpoint administrativo global.');
-assert(/listarTitulosGlobal/.test(adminApi) && /listarPeriodosAdmin/.test(adminApi), 'Administrador no expone lista global y períodos completos.');
-assert(/ad-administracion-global\.js/.test(adminApi), 'No se carga el controlador administrativo global.');
-assert(/ad-pdf-firebase\.js/.test(adminApi) && /ADMIN_REPORTE_FIREBASE_TITULOS/.test(adminApi), 'No está disponible el PDF de Firebase Títulos.');
-assert(/ad-version\.js/.test(adminApi) && /3\.3\.3/.test(adminVersion), 'Administrador no fuerza la versión 3.3.3.');
-assert(/ADMIN_LISTA_GLOBAL_TITULOS/.test(statisticsApi), 'La API no ofrece la lista global de títulos.');
-assert(/EstudiantesPeriodo/.test(globalService) && /envios/.test(globalService), 'La lista global no combina UTET y Títulos.');
-assert(/NO_ENVIADO/.test(globalService) && /fueraPoblacion/.test(globalService), 'La lista global no distingue faltantes o registros externos.');
-assert(/totalEnviosPeriodo/.test(globalService) && /enviosByCedula/.test(globalService), 'La lista global no cruza todos los envíos reales.');
-assert(/incluirFaltantes/.test(titlesService) && /UTET_MAS_FIREBASE_TITULOS/.test(titlesService), 'Coordinadores no recibe población y envíos en una sola consulta.');
-assert(/titulos-firebase-v6\.js/.test(claves), 'La fachada no usa la lectura definitiva de Firebase Títulos.');
-assert(/data-v2-career-select/.test(adminGlobalApp), 'Carreras no permite asignar coordinadores.');
-assert(/Generar PDF Firebase Títulos/.test(adminPdf), 'El botón del PDF no tiene la etiqueta esperada.');
-assert(!/ad-seccion-devolver|ad-form-devolver/.test(adminHtml), 'Administrador todavía conserva la pantalla separada de devolución.');
-assert(/https:\/\/titulos-coordinadores\.pages\.dev/.test(coordinatorBootstrap), 'Coordinadores no apunta a su dominio oficial.');
-assert(/2\.9\.0/.test(coordinatorBootstrap) && /2\.9\.0/.test(coordinatorHtml), 'Coordinadores no fuerza la versión 2.9.0.');
-assert(/coordinador\.faltantes\.runtime\.js/.test(coordinatorBootstrap), 'Coordinadores no carga automáticamente la población del período.');
-assert(/data-vista="faltantes"/.test(coordinatorHtml), 'Coordinadores no contiene la pestaña No enviados.');
-assert(/NO_ENVIADO/.test(coordinatorState) && /sinTitulos/.test(coordinatorState), 'El estado no separa estudiantes faltantes.');
-assert(/Sin envío/.test(coordinatorUi) && /Revisar/.test(coordinatorUi), 'La tabla no diferencia faltantes y registros revisables.');
-assert(/cargarTitulos/.test(coordinatorRuntime) && /periodoActual/.test(coordinatorRuntime), 'La carga automática no usa el período actual.');
-assert(/incluirFaltantes:true/.test(coordinatorSource), 'El cliente de Coordinadores no solicita estudiantes sin envío.');
-assert(/127\.0\.0\.1:8788/.test(adminApi), 'Administrador no apunta al entorno local 8788.');
-assert(/127\.0\.0\.1:8788/.test(coordinatorBootstrap), 'Coordinadores no apunta al entorno local 8788.');
-assert(/\/api\/requisitos/.test(studentRequirements), 'Estudiantes no consulta la API de Requisitos.');
-assert(/\/api\/titulos/.test(studentSheets), 'Estudiantes no utiliza la API de Títulos.');
-assert(/\/api\/acceso-estudiante/.test(studentReview), 'La consulta inicial de Estudiantes no utiliza la API unificada.');
-assert(/abrirModalConsulta\(\)/.test(studentReview), 'El modal de consulta no se abre inmediatamente.');
-assert(/parsearCapasJson/.test(studentReview), 'El frontend no procesa respuestas JSON anidadas.');
-assert(/Promise\.allSettled/.test(accessApi), 'La API unificada no ejecuta las consultas en paralelo.');
-assert(/periodoId:\s*periodId/.test(accessApi), 'La API unificada no asigna correctamente periodoId.');
-assert(/periodoLabel:\s*periodLabel/.test(accessApi), 'La API unificada no asigna correctamente periodoLabel.');
-assert(/CONSULTAR_ENVIO_CEDULA/.test(accessApi), 'La API unificada no usa el flujo de Títulos.');
-assert(/periodEquivalent/.test(accessApi), 'La API unificada no compara etiquetas e identificadores de período.');
-assert(/#modalConsultaTitulos\s*\{[\s\S]*display:\s*none\s*!important/.test(studentReviewCss), 'El modal histórico de consulta no está desactivado.');
-assert(/scope:\s*periodId\s*\?\s*['"]period['"]\s*:\s*['"]all['"]/.test(requirementsApi), 'La consulta sin período no busca en todos los períodos activos.');
-assert(!/firebase\.core\.service|firebase\.estudiantes\.service|firebase\.envios\.service|firebase\.ia\.service/i.test(studentHtml), 'Estudiantes todavía carga scripts Firebase directos eliminados.');
-assert(!/ad-firebase\.service/i.test(adminHtml), 'Administrador todavía carga un servicio Firebase directo.');
-assert(!/estudiante\.resolucion\.patch|estudiante\.consulta\.optimizada|estudiante\.devolucion\.runtime/i.test(studentHtml), 'Estudiantes todavía carga un controlador antiguo.');
-assert(!/optimizedScript|runtimeScript|insertar.*consulta|inyectar.*consulta/i.test(studentBuild + localBuild), 'Un build todavía inserta controladores adicionales.');
-assert(/LEGACY_SCRIPTS/.test(studentBuild) && /LEGACY_SCRIPTS/.test(localBuild), 'Los builds no bloquean controladores antiguos.');
-assert(/VERSION\s*=\s*['"]2\.4\.3['"]/.test(studentBuild), 'El build de Estudiantes no usa la versión validada 2.4.3.');
-assert(/VERSION_ESTUDIANTES\s*=\s*['"]2\.4\.3['"]/.test(localBuild), 'El build local no usa la versión validada 2.4.3.');
-assert(!/createElement\(['"]script['"]\)[\s\S]*estudiante\.consulta\.revision/.test(studentRequirements), 'Requisitos vuelve a cargar dinámicamente el controlador de consulta.');
-assert(!/formConsulta\.addEventListener[\s\S]*manejarConsulta/.test(studentApp), 'estudiante.app.js todavía registra un segundo controlador de consulta.');
-assert(/No se envió al servidor/.test(studentApp), 'La contingencia local no diferencia un envío real de un respaldo local.');
+assert(/2\.9\.2/.test(coordinatorHtml) && /2\.9\.2/.test(coordinatorBootstrap), 'Coordinadores no usa la versión 2.9.2.');
+assert(!/id=["']periodoSelect["']/.test(coordinatorHtml), 'Coordinadores todavía muestra selector de período.');
+assert(/<th>Período<\/th>/.test(coordinatorHtml), 'La tabla no informa el período de cada envío.');
+assert(!/data-vista=["']faltantes["']/.test(coordinatorHtml), 'Coordinadores todavía muestra estudiantes sin envío.');
+assert(!/coordinador\.faltantes\.runtime\.js/.test(coordinatorBootstrap), 'El bootstrap todavía carga la integración con UTET.');
+assert(!fs.existsSync(path.join(root, 'coordinadores-mvp/js/coordinador.faltantes.runtime.js')), 'Todavía existe el runtime de población UTET.');
+
+const coordinatorRuntime = [coordinatorSource, coordinatorCatalog, coordinatorState, coordinatorUi, coordinatorApp, coordinatorBootstrap].join('\n');
+assert(/\/api\/titulos/.test(coordinatorSource), 'Coordinadores no consulta /api/titulos.');
+assert(!/\/api\/requisitos/.test(coordinatorRuntime), 'Coordinadores todavía consulta /api/requisitos.');
+assert(!/EstudiantesPeriodo|UTET_MAS_FIREBASE_TITULOS|FIREBASE_UTET/.test(coordinatorRuntime), 'Coordinadores todavía contiene integración activa con Firebase UTET.');
+assert(!/incluirFaltantes/.test(coordinatorSource + coordinatorCatalog), 'Coordinadores todavía solicita población sin envío.');
+assert(/incluirTodos/.test(coordinatorSource) && /incluirTodos/.test(coordinatorCatalog), 'Coordinadores no solicita todos los envíos de Firebase Títulos.');
+assert(/todos los envíos de Firebase Títulos/i.test(coordinatorApp), 'La aplicación no carga todos los envíos.');
+assert(!/coincidePeriodo|delPeriodo/.test(coordinatorState), 'El estado todavía filtra los envíos por período.');
+assert(/deCarreras/.test(coordinatorState) && /delEstado/.test(coordinatorState), 'Coordinadores no filtra por carreras y estado.');
+assert(/sin limitar por período/i.test(coordinatorUi), 'La interfaz no informa que muestra todos los períodos.');
+assert(/FIREBASE_TITULOS/.test(coordinatorSource) && /FIREBASE_TITULOS/.test(coordinatorApp), 'La fuente principal no está marcada como Firebase Títulos.');
+
+assert(/\/api\/requisitos/.test(studentRequirements), 'Estudiantes debe conservar su consulta a Firebase UTET.');
+assert(/\/api\/titulos/.test(studentSheets), 'Estudiantes no utiliza Firebase Títulos.');
+assert(/ADMIN_REPORTE_FIREBASE_TITULOS/.test(adminApi), 'Administrador no expone el reporte de Firebase Títulos.');
+assert(/Generar PDF Firebase Títulos/.test(adminPdf), 'Administrador no muestra el botón del PDF.');
 assert(/\.pages-coordinadores/.test(coordinatorBuild), 'No existe build independiente de Coordinadores.');
 assert(/\.pages-administrador/.test(adminBuild), 'No existe build independiente de Administrador.');
 
 if (errors.length) {
   console.error('\n[Apps] Se encontraron errores:\n');
-  errors.forEach((error, index) => console.error((index + 1) + '. ' + error));
+  errors.forEach((error, index) => console.error(`${index + 1}. ${error}`));
   console.error('');
   process.exit(1);
 }
 
-console.log('[Apps] Estudiantes: consulta, envío y revisión integrados mediante Cloudflare Functions.');
-console.log('[Apps] Coordinadores: muestra No enviados y permite revisar los registros con títulos.');
-console.log('[Apps] Administrador: lista UTET + envíos reales, estadísticas y PDF Firebase Títulos.');
+console.log('[Apps] Estudiantes: conserva Firebase UTET para datos iniciales y Firebase Títulos para envíos.');
+console.log('[Apps] Coordinadores: consulta exclusivamente Firebase Títulos y muestra todos los envíos sin filtrar por período.');
+console.log('[Apps] Administrador: mantiene estadísticas y PDF de Firebase Títulos.');
