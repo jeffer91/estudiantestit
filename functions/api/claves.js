@@ -1,28 +1,15 @@
 import { requestClaves } from '../_lib/claves.js';
 import {
-  appId,
   corsHeaders,
   jsonReply,
   readJson,
   rejectUnknownOrigin,
-  requestOrigin,
+  role,
   text
 } from '../_lib/http.js';
 
 function isAdmin(request) {
-  const origin = requestOrigin(request).toLowerCase();
-  if (origin.includes('titulos-administrador.pages.dev')) return true;
-
-  if (
-    origin === 'null' ||
-    origin.includes('localhost') ||
-    origin.includes('127.0.0.1')
-  ) {
-    const app = appId(request);
-    return app === 'administrador' || app === 'admin';
-  }
-
-  return false;
+  return role(request) === 'admin';
 }
 
 function safeAction(value) {
@@ -81,7 +68,7 @@ export async function onRequest({ request, env }) {
 
     return jsonReply(
       request,
-      { ok: false, mensaje: 'Acción de Claves desconocida.' },
+      { ok: false, mensaje: 'Acción de configuración desconocida.' },
       400
     );
   } catch (error) {
