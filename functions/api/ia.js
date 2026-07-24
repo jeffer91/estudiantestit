@@ -1,5 +1,5 @@
 import { generateAi, listAiProviders, saveAiProvider, toggleAiProvider } from '../_lib/claves.js';
-import { ALLOWED_ORIGINS, corsHeaders, jsonReply, requestOrigin, role, text } from '../_lib/http.js';
+import { corsHeaders, jsonReply, originAllowed, requestOrigin, role, text } from '../_lib/http.js';
 
 const PROVIDERS_CACHE_MS = 30000;
 let providersCache = [];
@@ -67,7 +67,6 @@ async function activeProviders(env, force = false) {
   if (!force && providersCache.length && providersCacheExpiresAt > now) {
     return providersCache.slice();
   }
-
   if (!force && providersPending) {
     return providersPending.then((providers) => providers.slice());
   }
@@ -76,7 +75,6 @@ async function activeProviders(env, force = false) {
     .then((list) => {
       const providers = (Array.isArray(list) ? list : [])
         .filter((provider) => provider && provider.activo === true && providerId(provider.id || provider.proveedor));
-
       providers.sort((a, b) => Number(a.prioridad || 999) - Number(b.prioridad || 999));
       providersCache = providers;
       providersCacheExpiresAt = Date.now() + PROVIDERS_CACHE_MS;
@@ -98,7 +96,6 @@ function motorIndex(data, total) {
     : match
       ? Number(match[1]) - 1
       : 0;
-
   if (!Number.isFinite(index) || index < 0) index = 0;
   return total > 0 ? index % total : 0;
 }
@@ -166,7 +163,7 @@ async function input(request) {
 
 export async function onRequest({ request, env }) {
   const origin = requestOrigin(request);
-  if (origin && !ALLOWED_ORIGINS.has(origin)) {
+  if (origin && !originAllowed(origin)) {
     return jsonReply(request, { ok: false, mensaje: 'Origen no permitido.' }, 403);
   }
   if (request.method === 'OPTIONS') {
