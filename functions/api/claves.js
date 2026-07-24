@@ -59,11 +59,11 @@ export async function onRequest({ request, env }) {
     }
 
     if (action === 'admin-save') {
-      const service = input.service || input.servicio || {};
-      return jsonReply(
-        request,
-        await requestClaves(env, 'GUARDAR_SERVICIO', { servicio: service })
-      );
+      return jsonReply(request, {
+        ok: false,
+        soloLectura: true,
+        mensaje: 'Las cuentas de servicio se configuran únicamente como secretos cifrados de Cloudflare Pages.'
+      }, 403);
     }
 
     return jsonReply(
