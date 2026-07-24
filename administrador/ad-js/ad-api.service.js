@@ -9,6 +9,7 @@
   function solicitar(ruta,accion,datos,metodo){return fetch(base()+ruta,{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json','X-Titulos-App':'administrador'},body:JSON.stringify({accion:accion,action:accion,metodo:metodo||'POST',datos:datos||{}})}).then(function(resp){return leerRespuesta(resp,'El servicio');});}
   function titulos(a,d,m){return solicitar('/api/titulos',a,d,m);}
   function requisitos(a,d){return solicitar('/api/requisitos',a,d,'POST');}
+  function estadisticas(d){return solicitar('/api/estadisticas','ADMIN_ESTADISTICAS_TITULOS',d||{},'POST');}
   function clavesGet(action){return fetch(base()+'/api/claves?action='+encodeURIComponent(action),{method:'GET',cache:'no-store',headers:{'X-Titulos-App':'administrador'}}).then(function(resp){return leerRespuesta(resp,'Configuración');});}
   function clavesPost(action,data){return fetch(base()+'/api/claves',{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json','X-Titulos-App':'administrador'},body:JSON.stringify(Object.assign({action:action},data||{}))}).then(function(resp){return leerRespuesta(resp,'Configuración');});}
   function iaGet(action,providerId){var url=base()+'/api/ia?action='+encodeURIComponent(action||'admin-list');if(providerId)url+='&providerId='+encodeURIComponent(providerId);return fetch(url,{method:'GET',cache:'no-store',headers:{'X-Titulos-App':'administrador'}}).then(function(resp){return leerRespuesta(resp,'IA');});}
@@ -33,6 +34,7 @@
     consultarTitulo:function(cedula,periodo){return titulos('VERIFICAR_ENVIO',{cedula:cedula,numeroIdentificacion:cedula,periodo:periodo||''},'GET');},
     devolverTitulo:function(datos){return titulos('GUARDAR_RESOLUCION',datos||{},'POST');},
     eliminarTitulo:function(datos){return titulos('ADMIN_ELIMINAR_TITULOS',datos||{},'POST');},
+    obtenerEstadisticas:function(filtros){return estadisticas(filtros||{});},
     listarIA:function(){return iaGet('admin-list');},
     guardarIA:function(proveedor){return iaPost('admin-save',{provider:proveedor||{}});},
     cambiarEstadoIA:function(providerId,activo){return iaPost('admin-toggle',{providerId:providerId,activo:activo===true});},
@@ -44,5 +46,5 @@
     extraerTitulos:function(r){return lista(r,['envios','registros']);}
   };
   window.ADAPIService=Object.freeze(api);
-  if(window.document&&!window.document.querySelector('script[data-ad-servicios="true"]')){var script=window.document.createElement('script');script.src='./ad-js/ad-servicios.app.js?v=3.1.2';script.async=false;script.setAttribute('data-ad-servicios','true');window.document.head.appendChild(script);}
+  if(window.document&&!window.document.querySelector('script[data-ad-servicios="true"]')){var script=window.document.createElement('script');script.src='./ad-js/ad-servicios.app.js?v=3.2.0';script.async=false;script.setAttribute('data-ad-servicios','true');window.document.head.appendChild(script);}
 })(window);
