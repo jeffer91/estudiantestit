@@ -2,7 +2,7 @@
 (function(window,document){
   'use strict';
 
-  var VERSION='2.8.7';
+  var VERSION='2.9.0';
 
   function texto(valor){
     return String(valor===null||valor===undefined?'':valor).trim();
@@ -48,7 +48,8 @@
       'js/coordinador.envios.carreras.js',
       'js/coordinador.ui.js',
       'js/coordinador.modal.js',
-      'js/coordinador.app.js'
+      'js/coordinador.app.js',
+      'js/coordinador.faltantes.runtime.js'
     ];
     return archivos.reduce(function(promesa,ruta){
       return promesa.then(function(){return cargarScript(ruta);});
