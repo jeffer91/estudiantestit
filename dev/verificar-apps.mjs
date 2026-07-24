@@ -63,10 +63,13 @@ requireIds(coordinatorHtml, [
 requireIds(adminHtml, [
   'ad-loading', 'ad-seccion-estado', 'ad-periodo-select', 'ad-tabla-periodos',
   'ad-form-estudiante', 'ad-form-coordinador', 'ad-form-asignacion', 'ad-tabla-titulos',
-  'ad-form-devolver', 'ad-form-ia', 'ad-diagnostico-salida'
+  'ad-filtro-titulo-periodo', 'ad-filtro-titulo-carrera', 'ad-filtro-titulo-estado',
+  'ad-seccion-estadisticas', 'ad-tabla-estadisticas', 'ad-modal-titulo', 'ad-modal-faltantes',
+  'ad-form-ia', 'ad-diagnostico-salida'
 ], 'Administrador');
 
 const adminApi = read('administrador/ad-js/ad-api.service.js');
+const adminApp = read('administrador/ad-js/ad-google-sheets.app.js');
 const coordinatorBootstrap = read('coordinadores-mvp/js/coordinador.bootstrap.independiente.js');
 const studentRequirements = read('estudiantes-mvp/js/requisitos.estudiantes.service.js');
 const studentSheets = read('estudiantes-mvp/js/sheets.service.js');
@@ -75,6 +78,8 @@ const studentReviewCss = read('estudiantes-mvp/css/estudiante.consulta.revision.
 const studentApp = read('estudiantes-mvp/js/estudiante.app.js');
 const accessApi = read('functions/api/acceso-estudiante.js');
 const requirementsApi = read('functions/api/requisitos.js');
+const statisticsApi = read('functions/api/estadisticas.js');
+const statisticsService = read('functions/_lib/estadisticas-admin.js');
 const studentBuild = read('dev/preparar-pages-estudiantes.mjs');
 const coordinatorBuild = read('dev/preparar-pages-coordinadores.mjs');
 const adminBuild = read('dev/preparar-pages-administrador.mjs');
@@ -82,6 +87,13 @@ const localBuild = read('dev/preparar-pages-local.mjs');
 
 assert(/window\.location&&window\.location\.origin/.test(adminApi), 'Administrador no usa su API del mismo dominio.');
 assert(/titulos-administrador\.pages\.dev/.test(adminApi), 'Administrador no tiene dominio oficial de respaldo.');
+assert(/\/api\/estadisticas/.test(adminApi), 'Administrador no consulta el endpoint de estadísticas.');
+assert(/obtenerEstadisticas/.test(adminApi), 'Administrador no expone el servicio de estadísticas.');
+assert(/detalle-titulo/.test(adminApp) && /ad-modal-titulo/.test(adminApp), 'Administrador no abre el modal de detalles.');
+assert(/whatsapp-faltante/.test(adminApp) && /wa\.me/.test(adminApp), 'Administrador no incluye recordatorios de WhatsApp.');
+assert(/role\(context\.request\) !== 'admin'/.test(statisticsApi), 'Las estadísticas no están restringidas al administrador.');
+assert(/EstudiantesPeriodo/.test(statisticsService) && /envios/.test(statisticsService), 'Las estadísticas no combinan UTET y Títulos.');
+assert(!/ad-seccion-devolver|ad-form-devolver/.test(adminHtml), 'Administrador todavía conserva la pantalla separada de devolución.');
 assert(/https:\/\/titulos-coordinadores\.pages\.dev/.test(coordinatorBootstrap), 'Coordinadores no apunta a su dominio oficial.');
 assert(/127\.0\.0\.1:8788/.test(adminApi), 'Administrador no apunta al entorno local 8788.');
 assert(/127\.0\.0\.1:8788/.test(coordinatorBootstrap), 'Coordinadores no apunta al entorno local 8788.');
@@ -132,4 +144,4 @@ if (errors.length) {
 
 console.log('[Apps] Estudiantes: consulta, envío y revisión integrados mediante Cloudflare Functions.');
 console.log('[Apps] Coordinadores: dominio y build independientes correctos.');
-console.log('[Apps] Administrador: dominio, build y API del mismo origen correctos.');
+console.log('[Apps] Administrador: filtros, detalles, estadísticas y WhatsApp correctos.');
