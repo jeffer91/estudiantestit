@@ -42,6 +42,8 @@ async function listServices(includeSecrets = false) {
       key: 'TITULOS',
       nombre: 'Firebase Títulos',
       tipo: 'firebase',
+      endpoint: 'firebase://titulos-ec2fa',
+      spreadsheetId: '',
       activo: true,
       estado: 'ACTIVO',
       timeoutMs: 45000,
@@ -55,6 +57,8 @@ async function listServices(includeSecrets = false) {
       key: 'REQUISITOS',
       nombre: 'Firebase UTET',
       tipo: 'firebase',
+      endpoint: 'firebase://utet-4387a',
+      spreadsheetId: '',
       activo: true,
       estado: 'ACTIVO',
       timeoutMs: 30000,
@@ -65,7 +69,17 @@ async function listServices(includeSecrets = false) {
   ];
 
   for (const fallback of defaults) {
-    if (!services.some((item) => item.clave === fallback.clave)) services.push(fallback);
+    const index = services.findIndex((item) => item.clave === fallback.clave);
+    if (index >= 0) {
+      services[index] = {
+        ...services[index],
+        ...fallback,
+        id: services[index].id || fallback.id
+      };
+      if (includeSecrets) services[index].secreto = '';
+    } else {
+      services.push({ ...fallback, ...(includeSecrets ? { secreto: '' } : {}) });
+    }
   }
   return services;
 }
@@ -176,7 +190,7 @@ export async function listAiProviders(env, includeInactive = false) {
 
 export async function generateAi(env, providerId, prompt, options) {
   void env;
-  return generateWithProvider(providerId, prompt, options || {});
+  return generateWithProvider(providerId, prompt, { ...(options || {}), allowInactive: true });
 }
 
 export async function saveAiProvider(env, provider) {
