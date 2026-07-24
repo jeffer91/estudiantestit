@@ -2,10 +2,10 @@
 Archivo: coordinador.envios.carreras.js
 Ruta: /coordinadores-mvp/js/coordinador.envios.carreras.js
 Función:
-- Leer todos los envíos una sola vez desde RESPALDO TITULOS APP.
+- Leer todos los envíos una sola vez desde Firebase Títulos.
 - Construir períodos únicos desde esos mismos envíos.
+- Unificar IDs distintos que representan el mismo período visible.
 - Reutilizar la lectura durante 60 segundos.
-- Evitar una consulta adicional por cada carrera del coordinador.
 ========================================================= */
 (function(window){
   'use strict';
@@ -54,23 +54,75 @@ Función:
     });
     return envios;
   }
+
   function construirPeriodosDesdeEnvios(lista){
-    var mapa={};var periodos=[];
+    var alias={};var periodos=[];
+
+    function buscarExistente(claves){
+      var encontrado=null;
+      claves.some(function(clave){
+        if(clave&&alias[clave]){encontrado=alias[clave];return true;}
+        return false;
+      });
+      return encontrado;
+    }
+
+    function registrarAlias(periodo,claves){
+      claves.forEach(function(clave){if(clave)alias[clave]=periodo;});
+    }
+
     (Array.isArray(lista)?lista:[]).forEach(function(item){
       item=item||{};
       var idOriginal=texto(item.periodoId||item.periodoLabel||item.periodo);
       var label=texto(item.periodoLabel||item.periodo||item.periodoId);
-      var firma=firmaPeriodo(idOriginal)||firmaPeriodo(label);
-      var clave=firma||normal(idOriginal||label);
-      if(!clave)return;
-      if(mapa[clave]){
-        if(!mapa[clave].label&&label)mapa[clave].label=label;
+
+      /*
+        El texto visible es la referencia principal. Así, un ID antiguo o
+        reconstruido de forma distinta no genera un segundo período cuando
+        ambos muestran las mismas fechas.
+      */
+      var firmaLabel=firmaPeriodo(label);
+      var firmaId=firmaPeriodo(idOriginal);
+      var firma=firmaLabel||firmaId;
+      var claves=[
+        firmaLabel?'firma:'+firmaLabel:'',
+        firmaId?'firma:'+firmaId:'',
+        label?'texto:'+normal(label):'',
+        idOriginal?'texto:'+normal(idOriginal):''
+      ].filter(Boolean);
+
+      if(!claves.length)return;
+
+      var periodo=buscarExistente(claves);
+      if(periodo){
+        if(!periodo.label&&label)periodo.label=label;
+        if(!periodo.id&&firma)periodo.id=firma;
+        registrarAlias(periodo,claves);
         return;
       }
-      var periodo={id:firma||idOriginal||label,label:label||idOriginal,activo:true,firma:firma};
-      mapa[clave]=periodo;periodos.push(periodo);
+
+      periodo={
+        id:firma||idOriginal||label,
+        label:label||idOriginal,
+        activo:true,
+        firma:firma
+      };
+      periodos.push(periodo);
+      registrarAlias(periodo,claves);
     });
-    periodos.sort(function(a,b){
+
+    /* Defensa final: nunca conservar dos opciones con la misma firma visible. */
+    var unicos=[];var vistos={};
+    periodos.forEach(function(periodo){
+      var clave=firmaPeriodo(periodo.label)||firmaPeriodo(periodo.id)||normal(periodo.label||periodo.id);
+      if(!clave||vistos[clave])return;
+      vistos[clave]=true;
+      periodo.id=clave||periodo.id;
+      periodo.firma=clave;
+      unicos.push(periodo);
+    });
+
+    unicos.sort(function(a,b){
       var firmaA=a.firma||firmaPeriodo(a.id)||firmaPeriodo(a.label);
       var firmaB=b.firma||firmaPeriodo(b.id)||firmaPeriodo(b.label);
       var finA=firmaA.indexOf('__')>=0?firmaA.split('__')[1]:firmaA;
@@ -78,10 +130,12 @@ Función:
       if(finA!==finB)return texto(finB).localeCompare(texto(finA),'es',{numeric:true});
       return texto(firmaB).localeCompare(texto(firmaA),'es',{numeric:true});
     });
-    periodos.forEach(function(periodo){delete periodo.firma;});
-    if(periodos.length)periodos[0].principal=true;
-    return{periodos:periodos,principal:periodos[0]||null,envios:Array.isArray(lista)?lista:[]};
+
+    unicos.forEach(function(periodo){delete periodo.firma;delete periodo.principal;});
+    if(unicos.length)unicos[0].principal=true;
+    return{periodos:unicos,principal:unicos[0]||null,envios:Array.isArray(lista)?lista:[]};
   }
+
   function invalidar(){cache={envios:null,expira:0,promesa:null};}
 
   function instalar(){
