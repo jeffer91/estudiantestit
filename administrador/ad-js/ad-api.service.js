@@ -9,7 +9,7 @@
   function solicitar(ruta,accion,datos,metodo){return fetch(base()+ruta,{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json','X-Titulos-App':'administrador'},body:JSON.stringify({accion:accion,action:accion,metodo:metodo||'POST',datos:datos||{}})}).then(function(resp){return leerRespuesta(resp,'El servicio');});}
   function titulos(a,d,m){return solicitar('/api/titulos',a,d,m);}
   function requisitos(a,d){return solicitar('/api/requisitos',a,d,'POST');}
-  function estadisticas(d){return solicitar('/api/estadisticas','ADMIN_ESTADISTICAS_TITULOS',d||{},'POST').then(function(result){window.ADAdminStatisticsLast=result;return result;});}
+  function adminGlobal(a,d){return solicitar('/api/estadisticas',a,d||{},'POST');}
   function clavesGet(action){return fetch(base()+'/api/claves?action='+encodeURIComponent(action),{method:'GET',cache:'no-store',headers:{'X-Titulos-App':'administrador'}}).then(function(resp){return leerRespuesta(resp,'Configuración');});}
   function clavesPost(action,data){return fetch(base()+'/api/claves',{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json','X-Titulos-App':'administrador'},body:JSON.stringify(Object.assign({action:action},data||{}))}).then(function(resp){return leerRespuesta(resp,'Configuración');});}
   function iaGet(action,providerId){var url=base()+'/api/ia?action='+encodeURIComponent(action||'admin-list');if(providerId)url+='&providerId='+encodeURIComponent(providerId);return fetch(url,{method:'GET',cache:'no-store',headers:{'X-Titulos-App':'administrador'}}).then(function(resp){return leerRespuesta(resp,'IA');});}
@@ -24,17 +24,22 @@
     listarServicios:function(){return clavesGet('admin-list');},
     guardarServicio:function(servicio){return clavesPost('admin-save',{service:servicio||{}});},
     listarPeriodos:function(){return requisitos('LISTAR_PERIODOS_TITULACION',{});},
+    listarPeriodosAdmin:function(){return adminGlobal('ADMIN_LISTAR_PERIODOS',{});},
+    guardarPeriodoAdmin:function(datos){return adminGlobal('ADMIN_GUARDAR_PERIODO',datos||{});},
     listarCarreras:function(periodoId){return requisitos('LISTAR_CARRERAS_PERIODO',{periodoId:periodoId||''});},
+    listarCarrerasAdmin:function(){return adminGlobal('ADMIN_LISTAR_CARRERAS',{});},
+    asignarCarreraCoordinador:function(datos){return adminGlobal('ADMIN_ASIGNAR_CARRERA_COORDINADOR',datos||{});},
     consultarEstudiante:function(cedula,periodoId){return titulos('CONSULTAR_ESTUDIANTE',{cedula:cedula,numeroIdentificacion:cedula,periodoId:periodoId||''},'GET');},
     listarCoordinadores:function(){return titulos('LISTAR_COORDINADORES',{incluirInactivos:true},'GET');},
     guardarCoordinador:function(datos){return titulos('GUARDAR_COORDINADOR',datos||{},'POST');},
     cambiarEstadoCoordinador:function(datos){return titulos('CAMBIAR_ESTADO_COORDINADOR',datos||{},'POST');},
     asignarCarreras:function(datos){return titulos('ASIGNAR_CARRERA',datos||{},'POST');},
     listarTitulos:function(filtros){return titulos('LISTAR_ENVIOS_POR_CARRERA',filtros||{carreras:'',carrera:'',estado:'',periodo:''},'GET');},
+    listarTitulosGlobal:function(filtros){return adminGlobal('ADMIN_LISTA_GLOBAL_TITULOS',filtros||{}).then(function(result){window.ADAdminGlobalLast=result;return result;});},
     consultarTitulo:function(cedula,periodo){return titulos('VERIFICAR_ENVIO',{cedula:cedula,numeroIdentificacion:cedula,periodo:periodo||''},'GET');},
     devolverTitulo:function(datos){return titulos('GUARDAR_RESOLUCION',datos||{},'POST');},
     eliminarTitulo:function(datos){return titulos('ADMIN_ELIMINAR_TITULOS',datos||{},'POST');},
-    obtenerEstadisticas:function(filtros){return estadisticas(filtros||{});},
+    obtenerEstadisticas:function(filtros){return adminGlobal('ADMIN_ESTADISTICAS_TITULOS',filtros||{}).then(function(result){window.ADAdminStatisticsLast=result;return result;});},
     listarIA:function(){return iaGet('admin-list');},
     guardarIA:function(proveedor){return iaPost('admin-save',{provider:proveedor||{}});},
     cambiarEstadoIA:function(providerId,activo){return iaPost('admin-toggle',{providerId:providerId,activo:activo===true});},
@@ -43,10 +48,11 @@
     extraerPeriodos:function(r){return lista(r,['periodos','periods','registros']);},
     extraerCarreras:function(r){return lista(r,['carreras','registros']);},
     extraerCoordinadores:function(r){return lista(r,['coordinadores','registros']);},
-    extraerTitulos:function(r){return lista(r,['envios','registros']);}
+    extraerTitulos:function(r){return lista(r,['estudiantes','envios','registros']);}
   };
   window.ADAPIService=Object.freeze(api);
   function cargarComplemento(ruta,atributo){if(!window.document||window.document.querySelector('script['+atributo+'="true"]'))return;var script=window.document.createElement('script');script.src=ruta;script.async=false;script.setAttribute(atributo,'true');window.document.head.appendChild(script);}
-  cargarComplemento('./ad-js/ad-servicios.app.js?v=3.2.1','data-ad-servicios');
-  cargarComplemento('./ad-js/ad-correo-outlook.js?v=3.2.1','data-ad-correo-outlook');
+  cargarComplemento('./ad-js/ad-servicios.app.js?v=3.3.0','data-ad-servicios');
+  cargarComplemento('./ad-js/ad-correo-outlook.js?v=3.3.0','data-ad-correo-outlook');
+  cargarComplemento('./ad-js/ad-administracion-global.js?v=3.3.0','data-ad-administracion-global');
 })(window);
