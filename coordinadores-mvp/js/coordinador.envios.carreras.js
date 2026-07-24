@@ -2,17 +2,16 @@
 Archivo: coordinador.envios.carreras.js
 Ruta: /coordinadores-mvp/js/coordinador.envios.carreras.js
 Función:
-- Leer todos los envíos una sola vez desde Firebase Títulos.
-- Leer los períodos activos desde la colección periodos.
-- Ocultar en Coordinadores los períodos desactivados por Administrador.
-- Reutilizar las lecturas durante 60 segundos.
+- Leer la población UTET y los envíos de Firebase Títulos.
+- Conservar estudiantes con y sin propuestas.
+- Reutilizar la lectura del período durante 60 segundos.
 ========================================================= */
 (function(window){
   'use strict';
 
   var CACHE_MS=60*1000;
-  var cache={envios:null,periodos:null,expiraEnvios:0,expiraPeriodos:0,promesaEnvios:null,promesaPeriodos:null};
-  var ultimoDiagnostico={consultas:0,respondidas:0,fallidas:0,filasRecibidas:0,enviosNormalizados:0,cache:false};
+  var cache={envios:null,periodo:'',periodos:null,expiraEnvios:0,expiraPeriodos:0,promesaEnvios:null,promesaPeriodos:null};
+  var ultimoDiagnostico={consultas:0,respondidas:0,fallidas:0,filasRecibidas:0,enviosNormalizados:0,faltantes:0,cache:false};
 
   function texto(valor){return String(valor===null||valor===undefined?'':valor).trim();}
   function normal(valor){return texto(valor).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').replace(/\s+/g,' ').trim();}
@@ -25,26 +24,26 @@ Función:
     var ym=/\b(20\d{2})\s+(\d{1,2})\b/g;while((match=ym.exec(base)))add(match[1],match[2]);
     var my=/\b(\d{1,2})\s+(20\d{2})\b/g;while((match=my.exec(base)))add(match[2],match[1]);
     if(pares.length>=2)return pares[0]+'__'+pares[pares.length-1];
-    return pares[0]||'';
+    return pares[0]||base;
   }
   function extraerLista(valor,profundidad){
     if(profundidad>8||valor===null||valor===undefined)return[];
     if(Array.isArray(valor))return valor;
     if(typeof valor!=='object')return[];
-    var claves=['envios','periodos','periods','registros','filas','rows','items','resultados','resultado','result','data'];
+    var claves=['envios','estudiantes','registros','filas','rows','items','resultados','resultado','result','data','periodos','periods'];
     for(var i=0;i<claves.length;i+=1)if(Array.isArray(valor[claves[i]]))return valor[claves[i]];
     var nombres=Object.keys(valor);
     for(var j=0;j<nombres.length;j+=1){var encontrada=extraerLista(valor[nombres[j]],profundidad+1);if(encontrada.length)return encontrada;}
     return[];
   }
-  function claveEnvio(envio,indice){envio=envio||{};return texto(envio.id||envio._clave||[envio.cedula,envio.periodoId||envio.periodoLabel||envio.periodo,envio.carrera,envio.fila||indice].join('|'));}
+  function claveRegistro(item,indice){item=item||{};return texto(item.id||item._clave||item.envioId||[item.cedula,item.periodoId||item.periodoLabel||item.periodo,item.carrera,indice].join('|'));}
   function normalizarFilas(filas,normalizarEnvio){
-    var mapa={},envios=[];
-    (Array.isArray(filas)?filas:[]).map(normalizarEnvio).forEach(function(envio,indice){
-      if(!envio||!envio.cedula||(!envio.titulo1&&!envio.titulo2&&!envio.titulo3))return;
-      var clave=claveEnvio(envio,indice);if(mapa[clave])return;mapa[clave]=true;envios.push(envio);
+    var mapa={},registros=[];
+    (Array.isArray(filas)?filas:[]).map(normalizarEnvio).forEach(function(item,indice){
+      if(!item||!item.cedula)return;
+      var clave=claveRegistro(item,indice);if(mapa[clave])return;mapa[clave]=true;registros.push(item);
     });
-    return envios;
+    return registros;
   }
   function normalizarPeriodos(respuesta){
     var lista=extraerLista(respuesta,0),mapa={},periodos=[];
@@ -56,34 +55,47 @@ Función:
   }
   function apiBase(){return texto(window.TITULOS_API_BASE||'http://127.0.0.1:8788').replace(/\/$/,'');}
   function cargarPeriodosActivos(forzar){
-    if(!forzar&&Array.isArray(cache.periodos)&&cache.expiraPeriodos>Date.now())return Promise.resolve(cache.periodos);
+    if(!forzar&&cache.periodos&&cache.expiraPeriodos>Date.now())return Promise.resolve(cache.periodos);
     if(!forzar&&cache.promesaPeriodos)return cache.promesaPeriodos;
     cache.promesaPeriodos=fetch(apiBase()+'/api/requisitos',{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json','X-Titulos-App':'coordinadores'},body:JSON.stringify({accion:'LISTAR_PERIODOS_PUBLICOS',action:'LISTAR_PERIODOS_PUBLICOS',datos:{}})}).then(function(response){return response.text().then(function(body){var json={};try{json=body?JSON.parse(body):{};}catch(error){throw new Error('La lista de períodos respondió en formato no válido.');}if(!response.ok||json.ok===false)throw new Error(json.mensaje||json.error||('Error HTTP '+response.status));return json;});}).then(function(result){var normalized=normalizarPeriodos(result);cache.periodos=normalized;cache.expiraPeriodos=Date.now()+CACHE_MS;return normalized;}).finally(function(){cache.promesaPeriodos=null;});
     return cache.promesaPeriodos;
   }
-  function invalidar(){cache={envios:null,periodos:null,expiraEnvios:0,expiraPeriodos:0,promesaEnvios:null,promesaPeriodos:null};}
+  function invalidar(){cache={envios:null,periodo:'',periodos:null,expiraEnvios:0,expiraPeriodos:0,promesaEnvios:null,promesaPeriodos:null};}
 
   function instalar(){
     var servicio=window.CoordinadorMVPSheetsPrimary;
-    if(!servicio||servicio.__enviosFlexiblesInstalado)return false;
+    if(!servicio||servicio.__poblacionGlobalInstalada)return false;
     if(typeof servicio.enviarGet!=='function'||typeof servicio.normalizarEnvio!=='function')return false;
     var enviarGet=servicio.enviarGet,normalizarEnvio=servicio.normalizarEnvio;
 
-    function cargarTodos(forzar){
-      var vigente=Array.isArray(cache.envios)&&cache.expiraEnvios>Date.now();
+    function cargarTodos(forzar,periodo){
+      periodo=texto(periodo);
+      if(!periodo)return Promise.reject(new Error('Selecciona un período para cargar estudiantes.'));
+      var firma=firmaPeriodo(periodo)||periodo;
+      var vigente=Array.isArray(cache.envios)&&cache.periodo===firma&&cache.expiraEnvios>Date.now();
       if(!forzar&&vigente){ultimoDiagnostico.cache=true;return Promise.resolve(cache.envios);}
-      if(!forzar&&cache.promesaEnvios)return cache.promesaEnvios;
-      ultimoDiagnostico={consultas:1,respondidas:0,fallidas:0,filasRecibidas:0,enviosNormalizados:0,cache:false};
-      cache.promesaEnvios=enviarGet('LISTAR_ENVIOS_POR_CARRERA',{hoja:'Envios',estado:'',todas:'true',incluirTodos:'true'}).then(function(respuesta){ultimoDiagnostico.respondidas=1;var filas=extraerLista(respuesta,0);ultimoDiagnostico.filasRecibidas=filas.length;var envios=normalizarFilas(filas,normalizarEnvio);ultimoDiagnostico.enviosNormalizados=envios.length;cache.envios=envios;cache.expiraEnvios=Date.now()+CACHE_MS;return envios;}).catch(function(error){ultimoDiagnostico.fallidas=1;throw error;}).finally(function(){cache.promesaEnvios=null;});
+      if(!forzar&&cache.promesaEnvios&&cache.periodo===firma)return cache.promesaEnvios;
+      ultimoDiagnostico={consultas:1,respondidas:0,fallidas:0,filasRecibidas:0,enviosNormalizados:0,faltantes:0,cache:false,periodo:firma};
+      cache.periodo=firma;
+      cache.promesaEnvios=enviarGet('LISTAR_ENVIOS_POR_CARRERA',{incluirFaltantes:true,periodo:periodo,periodoId:periodo,estado:'',todas:'true'}).then(function(respuesta){
+        ultimoDiagnostico.respondidas=1;
+        var filas=extraerLista(respuesta,0);ultimoDiagnostico.filasRecibidas=filas.length;
+        var registros=normalizarFilas(filas,normalizarEnvio);
+        ultimoDiagnostico.enviosNormalizados=registros.length;
+        ultimoDiagnostico.faltantes=registros.filter(function(item){return item.estado==='NO_ENVIADO'||item.enviado===false;}).length;
+        cache.envios=registros;cache.expiraEnvios=Date.now()+CACHE_MS;
+        return registros;
+      }).catch(function(error){ultimoDiagnostico.fallidas=1;throw error;}).finally(function(){cache.promesaEnvios=null;});
       return cache.promesaEnvios;
     }
 
-    servicio.listarEnvios=function(opciones){opciones=opciones||{};return cargarTodos(opciones.forzar===true||opciones.force===true);};
-    servicio.listarPeriodos=function(opciones){opciones=opciones||{};return cargarPeriodosActivos(opciones.forzar===true||opciones.force===true).then(function(result){if(result.periodos.length)return result;throw new Error('No existen períodos activos. Activa uno desde Administrador.');});};
+    servicio.listarEnvios=function(opciones){opciones=opciones||{};return cargarTodos(opciones.forzar===true||opciones.force===true,opciones.periodo||opciones.periodoId||opciones.periodoLabel);};
+    servicio.listarPeriodos=function(opciones){opciones=opciones||{};return cargarPeriodosActivos(opciones.forzar===true||opciones.force===true).then(function(result){if(result.periodos.length)return result;throw new Error('No existen períodos disponibles.');});};
     servicio.invalidarCacheEnvios=invalidar;
-    servicio.obtenerDiagnosticoConsulta=function(){return Object.assign({},ultimoDiagnostico,{cacheVigente:Array.isArray(cache.envios)&&cache.expiraEnvios>Date.now(),periodosActivos:cache.periodos&&cache.periodos.periodos?cache.periodos.periodos.length:0});};
+    servicio.obtenerDiagnosticoConsulta=function(){return Object.assign({},ultimoDiagnostico,{cacheVigente:Array.isArray(cache.envios)&&cache.expiraEnvios>Date.now(),periodosDisponibles:cache.periodos&&cache.periodos.periodos?cache.periodos.periodos.length:0});};
     servicio.__enviosPorCarreraInstalado=true;
     servicio.__enviosFlexiblesInstalado=true;
+    servicio.__poblacionGlobalInstalada=true;
     return true;
   }
 
