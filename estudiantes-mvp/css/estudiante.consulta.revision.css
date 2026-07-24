@@ -1,5 +1,11 @@
 /* Estado del proceso dentro del Paso 2, sin superposiciones. */
 
+/* La consulta unificada usa modalConsultaRegistro. El modal informativo
+   histórico se oculta para evitar dos ventanas durante la misma consulta. */
+#modalConsultaTitulos {
+  display: none !important;
+}
+
 .student-process-panel {
   position: static;
   width: 100%;

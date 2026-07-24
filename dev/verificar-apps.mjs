@@ -71,6 +71,7 @@ const coordinatorBootstrap = read('coordinadores-mvp/js/coordinador.bootstrap.in
 const studentRequirements = read('estudiantes-mvp/js/requisitos.estudiantes.service.js');
 const studentSheets = read('estudiantes-mvp/js/sheets.service.js');
 const studentReview = read('estudiantes-mvp/js/estudiante.consulta.revision.js');
+const studentReviewCss = read('estudiantes-mvp/css/estudiante.consulta.revision.css');
 const studentApp = read('estudiantes-mvp/js/estudiante.app.js');
 const accessApi = read('functions/api/acceso-estudiante.js');
 const requirementsApi = read('functions/api/requisitos.js');
@@ -88,6 +89,8 @@ assert(/\/api\/acceso-estudiante/.test(studentReview), 'La consulta inicial de E
 assert(/abrirModalConsulta\(\)/.test(studentReview), 'El modal de consulta no se abre inmediatamente.');
 assert(/parsearCapasJson/.test(studentReview), 'El frontend no procesa respuestas JSON anidadas.');
 assert(/Promise\.allSettled/.test(accessApi), 'La API unificada no ejecuta las consultas del programa en paralelo.');
+assert(/periodoId:\s*periodId/.test(accessApi), 'La API unificada no asigna correctamente periodoId.');
+assert(/periodoLabel:\s*periodLabel/.test(accessApi), 'La API unificada no asigna correctamente periodoLabel.');
 assert(/CONSULTAR_ENVIO_CEDULA/.test(accessApi), 'La API unificada no utiliza el flujo de Títulos actualmente publicado.');
 assert(!/CONSULTAR_ENVIO_BASE_CEDULA/.test(accessApi), 'El programa todavía depende de una acción de Apps Script aún no migrada.');
 assert(!/CONSULTAR_RESOLUCION_CEDULA/.test(accessApi), 'El programa todavía depende de una acción de Apps Script aún no migrada.');
@@ -96,6 +99,7 @@ assert(/periodEquivalent/.test(accessApi), 'La API unificada no compara etiqueta
 assert(/origen:\s*['"]RESOLUCIONES['"]/.test(accessApi), 'Resoluciones no tiene la mayor jerarquía.');
 assert(/origen:\s*['"]ENVIOS['"]/.test(accessApi), 'Envíos no tiene la segunda jerarquía.');
 assert(/origen:\s*['"]REQUISITOS['"]/.test(accessApi), 'Requisitos no tiene la tercera jerarquía.');
+assert(/#modalConsultaTitulos\s*\{[\s\S]*display:\s*none\s*!important/.test(studentReviewCss), 'El modal histórico de consulta no está desactivado.');
 assert(/scope:\s*periodId\s*\?\s*['"]period['"]\s*:\s*['"]all['"]/.test(requirementsApi), 'La consulta sin período no busca en todos los períodos activos.');
 assert(!/firebase\.core\.service|firebase\.estudiantes\.service|firebase\.envios\.service|firebase\.ia\.service/i.test(studentHtml), 'Estudiantes todavía carga scripts Firebase eliminados.');
 assert(!/ad-firebase\.service/i.test(adminHtml), 'Administrador todavía carga el servicio Firebase eliminado.');
@@ -104,6 +108,8 @@ assert(!/optimizedScript|runtimeScript|insertar.*consulta|inyectar.*consulta/i.t
 assert(!/optimizedScript|runtimeScript|insertar.*consulta|inyectar.*consulta/i.test(localBuild), 'El build local todavía inserta controladores adicionales.');
 assert(/LEGACY_SCRIPTS/.test(studentBuild), 'El build de Estudiantes no bloquea controladores antiguos.');
 assert(/LEGACY_SCRIPTS/.test(localBuild), 'El build local no bloquea controladores antiguos.');
+assert(/VERSION\s*=\s*['"]2\.4\.3['"]/.test(studentBuild), 'El build de Estudiantes no usa la versión 2.4.3.');
+assert(/VERSION_ESTUDIANTES\s*=\s*['"]2\.4\.3['"]/.test(localBuild), 'El build local no usa la versión 2.4.3.');
 assert(!/createElement\(['"]script['"]\)[\s\S]*estudiante\.consulta\.revision/.test(studentRequirements), 'Requisitos vuelve a cargar dinámicamente el controlador de consulta.');
 assert(!/formConsulta\.addEventListener[\s\S]*manejarConsulta/.test(studentApp), 'estudiante.app.js todavía registra un segundo controlador de consulta.');
 assert(/No se envió al servidor/.test(studentApp), 'La contingencia local no diferencia un envío real de un respaldo local.');
@@ -127,6 +133,6 @@ if (errors.length) {
   process.exit(1);
 }
 
-console.log('[Apps] Estudiantes: controlador único, Requisitos y flujo publicado de Títulos correctamente integrados.');
+console.log('[Apps] Estudiantes: período académico, controlador único y flujo publicado de Títulos correctamente integrados.');
 console.log('[Apps] Coordinadores: archivos, API y elementos principales correctos.');
 console.log('[Apps] Administrador: archivos, API central y elementos principales correctos.');

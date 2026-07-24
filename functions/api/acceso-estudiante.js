@@ -186,14 +186,14 @@ function findAcademicEnvelope(result, cedula) {
 
 function cacheKey(cedula, period) { return cedula + '|' + text(period); }
 
-function getCached(key) {
+function getCache(key) {
   const item = studentCache.get(key);
   if (!item) return null;
   if (item.expiresAt <= Date.now()) { studentCache.delete(key); return null; }
   return item.value;
 }
 
-function setCached(key, value, cedula) {
+function setCache(key, value, cedula) {
   while (studentCache.size >= CACHE_LIMIT) studentCache.delete(studentCache.keys().next().value);
   const ttl = findAcademicEnvelope(value, cedula) ? CACHE_TTL_MS : NOT_FOUND_TTL_MS;
   studentCache.set(key, { value, expiresAt: Date.now() + ttl });
@@ -202,7 +202,7 @@ function setCached(key, value, cedula) {
 
 async function lookupStudent(env, cedula, requestedPeriod) {
   const key = cacheKey(cedula, requestedPeriod);
-  const cached = getCached(key);
+  const cached = getCache(key);
   if (cached) return cached;
   if (studentInflight.has(key)) return studentInflight.get(key);
   const task = requestClaves(env, 'CONSULTAR_ESTUDIANTE_REQUISITOS', {
@@ -218,13 +218,15 @@ async function lookupStudent(env, cedula, requestedPeriod) {
   return task;
 }
 
-async function queryPublishedTitlesFlow(env, cedula, period = '') {
+async function queryPublishedTitlesFlow(env, cedula, periodLabel, periodId) {
+  const label = text(periodLabel || periodId);
+  const id = text(periodId || periodLabel);
   const result = await runService(env, 'TITULOS', 'CONSULTAR_ENVIO_CEDULA', 'GET', {
     cedula,
     numeroIdentificacion: cedula,
-    periodo: period,
-    periodoId: period,
-    periodoLabel: period,
+    periodo: label || id,
+    periodoId: id,
+    periodoLabel: label,
     scope: 'all',
     incluirHistorico: true
   }, 'student', TITLES_TIMEOUT_MS);
@@ -252,11 +254,11 @@ function normalizeStudentResult(academic, cedula, requestedPeriod) {
     NombreCarrera: career,
     nombreCarrera: career,
     carrera: career,
-    periodoId,
+    periodoId: periodId,
     periodId: periodId,
-    periodoLabel
+    periodoLabel: periodLabel
   };
-  return { ...decoded, ...envelope, ok: true, encontrado: true, existe: true, estudiante: student, registro: student, periodoId, periodoLabel };
+  return { ...decoded, ...envelope, ok: true, encontrado: true, existe: true, estudiante: student, registro: student, periodoId: periodId, periodoLabel: periodLabel };
 }
 
 export const __test = Object.freeze({
@@ -283,7 +285,7 @@ export async function onRequest({ request, env }) {
 
     const [academicSettled, titlesSettled] = await Promise.allSettled([
       lookupStudent(env, cedula, requestedPeriod),
-      queryPublishedTitlesFlow(env, cedula, requestedPeriod)
+      queryPublishedTitlesFlow(env, cedula, requestedPeriod, requestedPeriod)
     ]);
 
     const failures = [];

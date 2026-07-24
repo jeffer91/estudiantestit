@@ -4,7 +4,7 @@ import process from 'node:process';
 
 const root = process.cwd();
 const output = path.join(root, '.pages-local');
-const VERSION_ESTUDIANTES = '2.4.2';
+const VERSION_ESTUDIANTES = '2.4.3';
 const LEGACY_SCRIPTS = [
   'estudiante.consulta.optimizada.js',
   'estudiante.devolucion.runtime.js',
@@ -99,6 +99,6 @@ if (!copiedFiles.includes('index.html')) {
 
 console.log('[Pages local] Carpeta estática preparada en .pages-local.');
 console.log(`[Pages local] Consulta unificada de estudiantes activa (${VERSION_ESTUDIANTES}).`);
-console.log('[Pages local] Modal inmediato y flujo publicado de Títulos activos.');
+console.log('[Pages local] Un solo modal de consulta y flujo publicado de Títulos activos.');
 console.log('[Pages local] Sin controladores duplicados ni parches de runtime.');
 console.log('[Pages local] La carpeta functions permanece fuera de los archivos estáticos para habilitar /api/*.');
