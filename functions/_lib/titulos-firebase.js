@@ -1,4 +1,4 @@
-/* Operación completa de Titulación sobre Firebase titulos-ec2fa. */
+/* Operación de Titulación sobre Firebase titulos-ec2fa. */
 
 import {
   commitDocuments,
@@ -16,6 +16,8 @@ import {
   text
 } from './firestore.js';
 import { getStudentBasic, listTitleCareers, listTitlePeriods } from './requisitos-firebase.js';
+
+const RESOLUTION_STATES = new Set(['APROBADO', 'REEMPLAZADO', 'DEVUELTO']);
 
 function normalizeStatus(value, fallback = 'PENDIENTE_REVISION') {
   const normalized = text(value).toUpperCase().replace(/[^A-Z0-9]+/g, '_');
@@ -41,7 +43,7 @@ function cleanTitle(value) {
   return output;
 }
 
-function titleFrom(value) {
+function proposalTitle(value) {
   if (typeof value === 'string') return cleanTitle(value);
   const item = value || {};
   return cleanTitle(item.tituloFinal || item.titulo || item.tituloMejorado || item.texto || item.title);
@@ -54,7 +56,7 @@ function titlesFromPayload(payload) {
       ? payload.titulosEnviados
       : [];
   return [1, 2, 3].map((number, index) => cleanTitle(
-    payload[`titulo${number}`] || titleFrom(proposals[index])
+    payload[`titulo${number}`] || proposalTitle(proposals[index])
   ));
 }
 
@@ -160,21 +162,24 @@ async function findEnviosByCedula(value, env) {
     queryUnique('envios', 'cedula', variants, 100, env),
     queryUnique('envios', 'numeroIdentificacion', variants, 100, env)
   ]);
-  const map = new Map([...byCedula, ...byIdentification].map((row) => [row.id, row]));
-  return [...map.values()];
+  return [...new Map([...byCedula, ...byIdentification].map((row) => [row.id, row])).values()];
 }
 
 export async function findEnvio(cedula, periodValue = '', env) {
   const rows = await findEnviosByCedula(cedula, env);
   if (!rows.length) return null;
+
   const requested = text(periodValue);
-  const exact = requested
-    ? rows.filter((row) => samePeriod(
-        row.periodoId || row.periodoNombre || row.periodoLabel || row.periodo,
-        requested
-      ))
-    : [];
-  return latestBy(exact.length ? exact : rows, ['versionActual'], [
+  let candidates = rows;
+  if (requested) {
+    candidates = rows.filter((row) => samePeriod(
+      row.periodoId || row.periodoNombre || row.periodoLabel || row.periodo,
+      requested
+    ));
+    if (!candidates.length) return null;
+  }
+
+  return latestBy(candidates, ['versionActual'], [
     'fechaResolucion', 'fechaEnvio', 'actualizadoEn', '_updateTime'
   ]);
 }
@@ -191,7 +196,7 @@ async function listCoordinators(env) {
   const careerMap = new Map(careers.map((career) => [text(career.id).toLowerCase(), career.nombre]));
 
   return rows.map((row) => {
-    const id = text(row.id || row._DocId || row._docId);
+    const id = text(row.id || row._docId);
     const careerIds = Array.isArray(row.carrerasIds)
       ? row.carrerasIds.map(text).filter(Boolean)
       : splitList(row.carrerasIds || row.carreras);
@@ -254,6 +259,7 @@ async function consultEnvio(payload = {}, env) {
   const period = text(payload.periodoId || payload.periodoLabel || payload.periodo);
   const row = await findEnvio(cedula, period, env);
   if (!row) return { ok: true, existe: false, encontrado: false, tieneEnvio: false, cedula };
+
   const envio = publicEnvio(row);
   return {
     ok: true,
@@ -383,18 +389,30 @@ async function saveStudentSubmission(payload = {}, env) {
 async function saveResolution(payload = {}, env) {
   const cedula = normalizeCedula(payload.cedula || payload.numeroIdentificacion);
   if (!cedula) throw new Error('No se recibió una cédula válida.');
+
   const period = text(payload.periodoId || payload.periodoLabel || payload.periodo);
   const envio = await findEnvio(cedula, period, env);
-  if (!envio) throw new Error('No se encontró el envío del estudiante en Firebase Títulos.');
+  if (!envio) throw new Error('No se encontró el envío del estudiante en el período indicado.');
 
-  const resolutions = await related('resoluciones', envio.id, env);
-  const number = resolutions.reduce((max, item) => Math.max(max, Number(item.numeroResolucion || 0)), 0) + 1;
-  const resolutionId = uniqueEventId(`${envio.id}__r${String(number).padStart(3, '0')}`);
   const status = normalizeStatus(payload.estadoFinal || payload.estado, 'APROBADO');
+  if (!RESOLUTION_STATES.has(status)) {
+    throw new Error('La resolución debe ser APROBADO, REEMPLAZADO o DEVUELTO.');
+  }
+
   const selected = cleanTitle(payload.tituloElegido || payload.preferido || envio.titulo1);
   const corrected = cleanTitle(payload.tituloCorregido);
   const finalTitle = corrected || selected;
   const observation = text(payload.observacion || payload.comentario || payload.comentarioCoordinador);
+  if (status === 'DEVUELTO' && observation.length < 4) {
+    throw new Error('La devolución necesita un comentario de al menos 4 caracteres.');
+  }
+  if (status !== 'DEVUELTO' && !finalTitle) {
+    throw new Error('La aprobación necesita un título final.');
+  }
+
+  const resolutions = await related('resoluciones', envio.id, env);
+  const number = resolutions.reduce((max, item) => Math.max(max, Number(item.numeroResolucion || 0)), 0) + 1;
+  const resolutionId = uniqueEventId(`${envio.id}__r${String(number).padStart(3, '0')}`);
   const coordinator = text(payload.coordinador || payload.nombreCoordinador);
   const date = text(payload.fechaResolucion) || nowIso();
 
