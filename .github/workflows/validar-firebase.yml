@@ -1,0 +1,36 @@
+name: Validar Firebase
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Revisar sintaxis, arquitectura y acceso
+        run: npm run check
+
+      - name: Construir Estudiantes
+        run: npm run build:estudiantes
+
+      - name: Construir Coordinadores
+        run: npm run build:coordinadores
+
+      - name: Construir Administrador
+        run: npm run build:administrador
