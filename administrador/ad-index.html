@@ -5,8 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Administrador Titulación</title>
   <link rel="icon" href="data:," />
-  <link rel="stylesheet" href="./ad-css/ad-admin.css?v=3.1.2" />
-  <link rel="stylesheet" href="./ad-css/ad-google-sheets.css?v=3.1.2" />
+  <link rel="stylesheet" href="./ad-css/ad-admin.css?v=3.2.0" />
+  <link rel="stylesheet" href="./ad-css/ad-google-sheets.css?v=3.2.0" />
+  <link rel="stylesheet" href="./ad-css/ad-titulos-estadisticas.css?v=3.2.0" />
 </head>
 <body>
   <div id="ad-loading" class="ad-loading" hidden>Procesando...</div>
@@ -22,7 +23,7 @@
         <a href="#ad-seccion-carreras" data-ad-view-target="ad-seccion-carreras">Carreras y estudiantes</a>
         <a href="#ad-seccion-coordinadores" data-ad-view-target="ad-seccion-coordinadores">Coordinadores</a>
         <a href="#ad-seccion-titulos" data-ad-view-target="ad-seccion-titulos">Títulos</a>
-        <a href="#ad-seccion-devolver" data-ad-view-target="ad-seccion-devolver">Devolver propuestas</a>
+        <a href="#ad-seccion-estadisticas" data-ad-view-target="ad-seccion-estadisticas">Estadísticas</a>
         <a href="#ad-seccion-ia" data-ad-view-target="ad-seccion-ia">Claves de IA</a>
         <a href="#ad-seccion-diagnostico" data-ad-view-target="ad-seccion-diagnostico">Diagnóstico</a>
       </nav>
@@ -39,7 +40,7 @@
           <span class="ad-badge ad-badge-warning" id="ad-badge-requisitos">UTET: pendiente</span>
           <span class="ad-badge ad-badge-warning" id="ad-badge-titulos">Títulos: pendiente</span>
           <span class="ad-badge ad-badge-warning" id="ad-badge-claves">IA: pendiente</span>
-          <span class="ad-badge ad-badge-info" id="ad-badge-version">v3.1.2</span>
+          <span class="ad-badge ad-badge-info" id="ad-badge-version">v3.2.0</span>
         </div>
       </header>
 
@@ -106,21 +107,36 @@
       </section>
 
       <section id="ad-seccion-titulos" class="ad-view" data-ad-view hidden>
-        <div class="ad-section-head"><div><p class="ad-eyebrow">Firebase Títulos</p><h3>Títulos enviados</h3><p class="ad-muted">Usar permite devolver las propuestas. Eliminar borra el envío, todas sus versiones y resoluciones del período.</p></div><label><span>Buscar</span><input id="ad-buscar-titulo" placeholder="Cédula, nombre, carrera o estado" /></label></div>
-        <pre id="ad-estado-titulos" class="ad-result-box">Selecciona Eliminar únicamente cuando quieras borrar definitivamente el registro del período.</pre>
-        <div class="ad-card"><div class="ad-table-wrap"><table class="ad-table"><thead><tr><th>Cédula</th><th>Estudiante</th><th>Carrera</th><th>Período</th><th>Estado</th><th>Acciones</th></tr></thead><tbody id="ad-tabla-titulos"><tr><td colspan="6" class="ad-empty">Cargando...</td></tr></tbody></table></div></div>
+        <div class="ad-section-head"><div><p class="ad-eyebrow">Firebase Títulos</p><h3>Títulos enviados</h3><p class="ad-muted">Filtra los registros y abre el detalle para revisar propuestas, favorito y resolución.</p></div></div>
+        <div class="ad-card">
+          <div class="ad-filter-grid">
+            <label><span>Período</span><select id="ad-filtro-titulo-periodo" data-periodo-select></select></label>
+            <label><span>Carrera</span><select id="ad-filtro-titulo-carrera" data-carrera-select></select></label>
+            <label><span>Estado</span><select id="ad-filtro-titulo-estado"><option value="">Todos</option><option value="PENDIENTE_REVISION">Pendiente de revisión</option><option value="APROBADO">Aprobado</option><option value="REEMPLAZADO">Aprobado con corrección</option><option value="DEVUELTO">Devuelto</option></select></label>
+            <label><span>Buscar</span><input id="ad-buscar-titulo" placeholder="Cédula o nombre" /></label>
+          </div>
+          <pre id="ad-estado-titulos" class="ad-result-box">Usa 👁️ para ver detalles y 🗑️ únicamente para eliminar definitivamente.</pre>
+          <div class="ad-table-wrap"><table class="ad-table"><thead><tr><th>Cédula</th><th>Estudiante</th><th>Carrera</th><th>Período</th><th>Estado</th><th>Acciones</th></tr></thead><tbody id="ad-tabla-titulos"><tr><td colspan="6" class="ad-empty">Cargando...</td></tr></tbody></table></div>
+        </div>
       </section>
 
-      <section id="ad-seccion-devolver" class="ad-view ad-danger-zone" data-ad-view hidden>
-        <div class="ad-section-head"><div><p class="ad-eyebrow">Acción administrativa</p><h3>Devolver propuestas</h3><p class="ad-muted">La resolución se registra en la colección resoluciones y habilita un nuevo envío.</p></div></div>
+      <section id="ad-seccion-estadisticas" class="ad-view" data-ad-view hidden>
+        <div class="ad-section-head"><div><p class="ad-eyebrow">UTET + Firebase Títulos</p><h3>Estadísticas por carrera</h3><p class="ad-muted">Compara estudiantes activos del período con quienes ya registraron sus propuestas.</p></div></div>
         <div class="ad-card">
-          <form id="ad-form-devolver" class="ad-form-grid">
-            <label><span>Cédula</span><input id="ad-devolver-cedula" inputmode="numeric" required /></label>
-            <label><span>Período</span><input id="ad-devolver-periodo" placeholder="Puede quedar vacío para tomar el último" /></label>
-            <label><span>Motivo</span><textarea id="ad-devolver-motivo" rows="4" required></textarea></label>
-            <button class="ad-btn ad-btn-danger" type="submit">Devolver propuestas</button>
-          </form>
-          <pre id="ad-estado-devolver" class="ad-result-box">Sin acción pendiente.</pre>
+          <div class="ad-filter-grid ad-filter-grid--stats">
+            <label><span>Período</span><select id="ad-estadisticas-periodo" data-periodo-select></select></label>
+            <label><span>Carrera</span><select id="ad-estadisticas-carrera" data-carrera-select></select></label>
+            <button class="ad-btn ad-btn-primary" type="button" data-action="cargar-estadisticas">Actualizar estadísticas</button>
+          </div>
+          <pre id="ad-estado-estadisticas" class="ad-result-box">Selecciona un período para calcular enviados y faltantes.</pre>
+          <div class="ad-stat-grid">
+            <article class="ad-stat-card"><span>Esperados</span><strong id="ad-stat-esperados">0</strong></article>
+            <article class="ad-stat-card"><span>Enviados</span><strong id="ad-stat-enviados">0</strong></article>
+            <article class="ad-stat-card"><span>Faltan</span><strong id="ad-stat-faltan">0</strong></article>
+            <article class="ad-stat-card"><span>Aprobados</span><strong id="ad-stat-aprobados">0</strong></article>
+            <article class="ad-stat-card"><span>Avance</span><strong id="ad-stat-avance">0 %</strong></article>
+          </div>
+          <div class="ad-table-wrap"><table class="ad-table"><thead><tr><th>Carrera</th><th>Esperados</th><th>Enviados</th><th>Faltan</th><th>Pendientes</th><th>Aprobados</th><th>Devueltos</th><th>Avance</th></tr></thead><tbody id="ad-tabla-estadisticas"><tr><td colspan="8" class="ad-empty">Estadísticas pendientes.</td></tr></tbody></table></div>
         </div>
       </section>
 
@@ -148,11 +164,68 @@
         <div class="ad-card"><pre id="ad-diagnostico-salida" class="ad-diagnostic-box">Diagnóstico pendiente.</pre></div>
       </section>
 
-      <footer class="ad-footer"><span>Administrador Titulación</span><span id="ad-footer-version">Versión 3.1.2</span></footer>
+      <footer class="ad-footer"><span>Administrador Titulación</span><span id="ad-footer-version">Versión 3.2.0</span></footer>
     </main>
   </div>
 
-  <script src="./ad-js/ad-api.service.js?v=3.1.2"></script>
-  <script src="./ad-js/ad-google-sheets.app.js?v=3.1.2"></script>
+  <section class="ad-modal" id="ad-modal-titulo" hidden role="dialog" aria-modal="true" aria-labelledby="ad-modal-titulo-nombre">
+    <div class="ad-modal__backdrop" data-action="cerrar-modal-titulo"></div>
+    <div class="ad-modal__card">
+      <header class="ad-modal__header">
+        <div><p class="ad-eyebrow">Detalle del envío</p><h3 id="ad-modal-titulo-nombre">Títulos del estudiante</h3></div>
+        <button class="ad-modal__close" type="button" data-action="cerrar-modal-titulo" aria-label="Cerrar">×</button>
+      </header>
+      <div class="ad-modal__body">
+        <div class="ad-detail-grid">
+          <div><span>Cédula</span><strong id="ad-detalle-cedula">-</strong></div>
+          <div><span>Carrera</span><strong id="ad-detalle-carrera">-</strong></div>
+          <div><span>Período</span><strong id="ad-detalle-periodo">-</strong></div>
+          <div><span>Fecha de envío</span><strong id="ad-detalle-fecha">-</strong></div>
+        </div>
+        <div class="ad-proposal-list">
+          <article class="ad-proposal" id="ad-propuesta-1"><div class="ad-proposal__head"><h4>Título 1</h4><span class="ad-favorite-label" data-favorito="1" hidden>⭐ Favorito</span></div><p id="ad-detalle-titulo1">-</p></article>
+          <article class="ad-proposal" id="ad-propuesta-2"><div class="ad-proposal__head"><h4>Título 2</h4><span class="ad-favorite-label" data-favorito="2" hidden>⭐ Favorito</span></div><p id="ad-detalle-titulo2">-</p></article>
+          <article class="ad-proposal" id="ad-propuesta-3"><div class="ad-proposal__head"><h4>Título 3</h4><span class="ad-favorite-label" data-favorito="3" hidden>⭐ Favorito</span></div><p id="ad-detalle-titulo3">-</p></article>
+        </div>
+        <section class="ad-review-card">
+          <h4>Revisión del coordinador</h4>
+          <div class="ad-review-grid">
+            <div><span>Estado</span><strong id="ad-detalle-estado">-</strong></div>
+            <div><span>Revisado</span><strong id="ad-detalle-revisado">-</strong></div>
+            <div><span>Coordinador</span><strong id="ad-detalle-coordinador">-</strong></div>
+            <div><span>Fecha de resolución</span><strong id="ad-detalle-fecha-resolucion">-</strong></div>
+            <div><span>Título final</span><strong id="ad-detalle-titulo-final">-</strong></div>
+            <div><span>Observación</span><strong id="ad-detalle-observacion">-</strong></div>
+          </div>
+        </section>
+        <section class="ad-return-box" id="ad-caja-devolver">
+          <label><span>Motivo para devolver las propuestas</span><textarea id="ad-modal-motivo-devolucion" placeholder="Escribe una observación de al menos 4 caracteres"></textarea></label>
+          <pre id="ad-modal-estado-titulo" class="ad-result-box">Desde este modal puedes devolver o eliminar el registro.</pre>
+        </section>
+      </div>
+      <footer class="ad-modal__footer">
+        <button class="ad-btn ad-btn-secondary" type="button" data-action="cerrar-modal-titulo">Cerrar</button>
+        <button class="ad-btn ad-btn-danger" type="button" data-action="eliminar-titulo-modal">🗑️ Eliminar</button>
+        <button class="ad-btn ad-btn-primary" type="button" data-action="devolver-titulo-modal">↩️ Devolver propuestas</button>
+      </footer>
+    </div>
+  </section>
+
+  <section class="ad-modal" id="ad-modal-faltantes" hidden role="dialog" aria-modal="true" aria-labelledby="ad-modal-faltantes-titulo">
+    <div class="ad-modal__backdrop" data-action="cerrar-modal-faltantes"></div>
+    <div class="ad-modal__card ad-modal__card--wide">
+      <header class="ad-modal__header">
+        <div><p class="ad-eyebrow">Recordatorios</p><h3 id="ad-modal-faltantes-titulo">Estudiantes que no han enviado</h3></div>
+        <button class="ad-modal__close" type="button" data-action="cerrar-modal-faltantes" aria-label="Cerrar">×</button>
+      </header>
+      <div class="ad-modal__body">
+        <div class="ad-table-wrap"><table class="ad-table ad-modal-table"><thead><tr><th>Cédula</th><th>Estudiante</th><th>Carrera</th><th>Celular</th><th>WhatsApp</th></tr></thead><tbody id="ad-tabla-faltantes"><tr><td colspan="5" class="ad-empty">Sin datos.</td></tr></tbody></table></div>
+      </div>
+      <footer class="ad-modal__footer"><button class="ad-btn ad-btn-secondary" type="button" data-action="cerrar-modal-faltantes">Cerrar</button></footer>
+    </div>
+  </section>
+
+  <script src="./ad-js/ad-api.service.js?v=3.2.0"></script>
+  <script src="./ad-js/ad-google-sheets.app.js?v=3.2.0"></script>
 </body>
 </html>
