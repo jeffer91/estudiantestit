@@ -72,14 +72,13 @@ const titlesApi = read('functions/api/titulos.js');
 const requirementsApi = read('functions/api/requisitos.js');
 const aiApi = read('functions/api/ia.js');
 const adminApi = read('administrador/ad-js/ad-api.service.js');
+const adminApp = read('administrador/ad-js/ad-google-sheets.app.js');
 
 assert(/titulos-ec2fa/.test(firestore), 'No está configurado Firebase Títulos titulos-ec2fa.');
 assert(/utet-4387a/.test(firestore), 'No está configurado Firebase UTET utet-4387a.');
-assert(/TITULOS_FIREBASE_SERVICE_ACCOUNT/.test(firestore), 'No se exige cuenta de servicio para Firebase Títulos.');
-assert(/UTET_FIREBASE_SERVICE_ACCOUNT/.test(firestore), 'No se exige cuenta de servicio para Firebase UTET.');
-assert(/oauth2\.googleapis\.com\/token/.test(firestore), 'No se genera token OAuth para Firestore.');
-assert(/Authorization[^\n]+Bearer/.test(firestore), 'Firestore no usa autorización Bearer.');
-assert(!/AIza[0-9A-Za-z_-]{20,}/.test(firestore), 'La capa Firestore conserva una clave web incrustada.');
+assert(/apiKey/.test(firestore) && /publicApiUrl/.test(firestore), 'La prueba local no contempla las configuraciones web de Firebase.');
+assert(/serviceAccount/.test(firestore) && /oauth2\.googleapis\.com\/token/.test(firestore), 'No existe autenticación opcional por cuenta de servicio para producción.');
+assert(/if \(token\)[^\n]+Authorization/.test(firestore), 'Firestore no usa autorización Bearer cuando existe cuenta de servicio.');
 assert(/Estudiantes/.test(requirements), 'La consulta UTET no usa la colección Estudiantes.');
 assert(/EstudiantesPeriodo/.test(requirements), 'La consulta UTET no contempla EstudiantesPeriodo.');
 assert(/numeroIdentificacion/.test(requirements) && /Nombres/.test(requirements) && /NombreCarrera/.test(requirements), 'La consulta UTET no normaliza cédula, nombre y carrera.');
@@ -87,14 +86,18 @@ assert(/includePhone/.test(requirements), 'La consulta UTET no contempla el celu
 assert(/versiones_envio/.test(titles) && /resoluciones/.test(titles), 'Títulos no usa colecciones de versiones y resoluciones.');
 assert(/commitDocuments/.test(titles), 'Los envíos y resoluciones no se guardan de forma atómica.');
 assert(/ENVIO_ESTUDIANTE/.test(titles) && /GUARDAR_RESOLUCION/.test(titles), 'Títulos no implementa envío y resolución.');
+assert(/ADMIN_ELIMINAR_TITULOS/.test(titles), 'Títulos no implementa la eliminación administrativa.');
 assert(/listProviders/.test(ai) && /generateWithProvider/.test(ai), 'IA no está conectada a Firebase Títulos.');
 assert(/executeTitulosAction/.test(claves) && /pullRequisitos/.test(claves), 'La fachada no enruta hacia las dos Firebase.');
 assert(!/CLAVES_APPS_SCRIPT_URL|script\.google\.com/.test(claves + titles + requirements + ai), 'La capa activa todavía depende de Apps Script.');
 assert(/requestHost/.test(http) && /titulos-administrador\.pages\.dev/.test(http), 'Los roles no se determinan por el host del proyecto.');
 assert(/runService\s*\(\s*env\s*,\s*['"]TITULOS['"]/.test(titlesApi), 'La API de Títulos no usa la fachada Firebase.');
+assert(/ADMIN_ELIMINAR_TITULOS/.test(titlesApi), 'La API no reserva la eliminación para Administrador.');
 assert(/runService\s*\(\s*env\s*,\s*['"]REQUISITOS['"]/.test(requirementsApi), 'La API de Requisitos no usa la fachada Firebase.');
 assert(/generateAi/.test(aiApi), 'La API de IA no usa el motor Firebase.');
 assert(/CONSULTAR_ESTUDIANTE/.test(adminApi), 'Administrador no consulta el estudiante con el rol que permite devolver celular.');
+assert(/eliminarTitulo/.test(adminApi) && /ADMIN_ELIMINAR_TITULOS/.test(adminApi), 'Administrador no expone la acción de eliminación.');
+assert(/data-action=["']eliminar-titulo/.test(adminApp) && /window\.confirm/.test(adminApp), 'La interfaz no muestra confirmación antes de eliminar.');
 assert(/window\.location&&window\.location\.origin/.test(adminApi), 'Administrador no usa su API del mismo dominio.');
 
 if (errors.length) {
@@ -105,5 +108,5 @@ if (errors.length) {
 }
 
 console.log('[Arquitectura] Correcta: UTET=datos mínimos; Títulos=envíos, coordinación, administración e IA.');
-console.log('[Arquitectura] Firestore usa OAuth de cuentas de servicio y conserva las reglas cerradas.');
-console.log('[Arquitectura] Las tres aplicaciones operan mediante Functions en dominios independientes.');
+console.log('[Arquitectura] Local usa configuración web; producción puede usar OAuth con cuenta de servicio.');
+console.log('[Arquitectura] La eliminación completa de títulos está disponible solo para Administrador.');
