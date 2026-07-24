@@ -1,7 +1,9 @@
-# La aplicación ya no necesita URL ni token de Apps Script.
-# Las conexiones activas son:
-# - Firebase UTET: utet-4387a
-# - Firebase Títulos: titulos-ec2fa
+# Copia este archivo como .dev.vars únicamente para desarrollo local.
+# No subas .dev.vars ni las cuentas de servicio a GitHub.
 #
-# Este archivo puede copiarse como .dev.vars si luego se agregan variables
-# opcionales de desarrollo, pero actualmente puede permanecer vacío.
+# Cada valor debe ser el JSON COMPLETO de la cuenta de servicio, convertido
+# a una sola línea y encerrado entre comillas simples.
+
+TITULOS_FIREBASE_SERVICE_ACCOUNT='{"type":"service_account","project_id":"titulos-ec2fa","private_key_id":"...","private_key":"-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----\\n","client_email":"...","client_id":"..."}'
+
+UTET_FIREBASE_SERVICE_ACCOUNT='{"type":"service_account","project_id":"utet-4387a","private_key_id":"...","private_key":"-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----\\n","client_email":"...","client_id":"..."}'
