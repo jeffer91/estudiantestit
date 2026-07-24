@@ -5,6 +5,7 @@ import process from 'node:process';
 const root = process.cwd();
 const source = path.join(root, 'administrador');
 const output = path.join(root, '.pages-administrador');
+const VERSION_ADMIN = '3.3.2';
 
 if (!fs.existsSync(source) || !fs.statSync(source).isDirectory()) {
   throw new Error('No se encontró la carpeta administrador.');
@@ -17,6 +18,15 @@ if (!fs.existsSync(entry)) {
 
 fs.rmSync(output, { recursive: true, force: true });
 fs.cpSync(source, output, { recursive: true, force: true });
+
+function actualizarVersionHtml(file) {
+  let html = fs.readFileSync(file, 'utf8');
+  html = html.replace(/\?v=\d+\.\d+\.\d+/g, `?v=${VERSION_ADMIN}`);
+  html = html.replace(/>v\d+\.\d+\.\d+</g, `>v${VERSION_ADMIN}<`);
+  fs.writeFileSync(file, html, 'utf8');
+}
+
+actualizarVersionHtml(path.join(output, 'ad-index.html'));
 fs.copyFileSync(path.join(output, 'ad-index.html'), path.join(output, 'index.html'));
 
 const notFoundHtml = `<!doctype html>
@@ -75,6 +85,7 @@ for (const directory of [
 }
 
 console.log('[Pages administrador] Carpeta preparada en .pages-administrador.');
+console.log(`[Pages administrador] Versión ${VERSION_ADMIN}.`);
 console.log('[Pages administrador] Ruta pública principal: /.');
 console.log('[Pages administrador] Incluye períodos, carreras, lista global, estadísticas, WhatsApp, Outlook y PDF.');
 console.log('[Pages administrador] La carpeta functions permanece en la raíz para habilitar /api/*.');
