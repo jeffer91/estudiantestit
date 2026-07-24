@@ -10,44 +10,61 @@ import {
   text
 } from './firestore.js';
 
+function normalizedKey(value) {
+  return text(value)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, '');
+}
+
 function flexible(object, names) {
   if (!object || typeof object !== 'object') return undefined;
   const normalized = Object.keys(object).reduce((output, key) => {
-    output[text(key).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '')] = key;
+    output[normalizedKey(key)] = key;
     return output;
   }, {});
   for (const name of names) {
-    const key = normalized[text(name).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '')];
+    const key = normalized[normalizedKey(name)];
     if (key !== undefined && object[key] !== undefined && object[key] !== null) return object[key];
   }
   return undefined;
 }
 
 function active(value) {
-  const normalized = text(value || 'ACTIVO').toUpperCase();
-  return !['INACTIVO', 'RETIRADO', 'ANULADO', 'CANCELADO'].includes(normalized);
+  const normalized = text(value === undefined || value === null || value === '' ? 'ACTIVO' : value).toUpperCase();
+  return !['FALSE', '0', 'NO', 'INACTIVO', 'RETIRADO', 'ANULADO', 'CANCELADO'].includes(normalized);
 }
 
-async function getStudentDocument(cedula) {
+function principal(row) {
+  return row && (
+    row.principal === true ||
+    row.esPrincipal === true ||
+    text(row.tipo).toUpperCase() === 'PRINCIPAL' ||
+    text(row.estado).toUpperCase() === 'PRINCIPAL'
+  );
+}
+
+async function getStudentDocument(cedula, env) {
   const canonical = normalizeCedula(cedula);
   if (!canonical) return null;
 
   const variants = canonical.startsWith('0') ? [canonical, canonical.slice(1)] : [canonical];
   for (const id of variants) {
-    const direct = await getDocument('UTET', 'Estudiantes', id);
+    const direct = await getDocument('UTET', 'Estudiantes', id, env);
     if (direct) return direct;
   }
 
   for (const field of ['numeroIdentificacion', 'cedula', 'Cedula', 'Cédula']) {
     for (const value of variants) {
-      const found = await queryEqual('UTET', 'Estudiantes', field, value, 5);
+      const found = await queryEqual('UTET', 'Estudiantes', field, value, 5, env);
       if (found.length) return found[0];
     }
   }
   return null;
 }
 
-async function getStudentPeriodRecord(cedula, requestedPeriod) {
+async function getStudentPeriodRecord(cedula, requestedPeriod, env) {
   const canonical = normalizeCedula(cedula);
   if (!canonical) return null;
   const variants = canonical.startsWith('0') ? [canonical, canonical.slice(1)] : [canonical];
@@ -56,7 +73,7 @@ async function getStudentPeriodRecord(cedula, requestedPeriod) {
 
   for (const field of ['numeroIdentificacion', 'cedula', 'Cedula', 'Cédula']) {
     for (const value of variants) {
-      const found = await queryEqual('UTET', 'EstudiantesPeriodo', field, value, 50);
+      const found = await queryEqual('UTET', 'EstudiantesPeriodo', field, value, 50, env);
       for (const row of found) {
         if (signatures.has(row.id)) continue;
         signatures.add(row.id);
@@ -71,39 +88,41 @@ async function getStudentPeriodRecord(cedula, requestedPeriod) {
         'periodoId', 'periodId', 'periodoCanonicoId', 'ultimoPeriodoId', 'periodoLabel', 'periodo'
       ])) === requestedSignature)
     : [];
-  const candidates = exact.length ? exact : rows.filter((row) => active(flexible(row, ['estadoMatricula', 'EstadoMatricula', 'estado'])));
-  return latestBy(candidates.length ? candidates : rows, [], [
+  const activeRows = rows.filter((row) => active(flexible(row, ['estadoMatricula', 'EstadoMatricula', 'estado'])));
+  const candidates = exact.length ? exact : activeRows.length ? activeRows : rows;
+  return latestBy(candidates, [], [
     'ultimaSincronizacion', 'actualizadoEn', 'fechaActualizacion', '_updateTime'
   ]);
 }
 
-async function activeTitlePeriod() {
-  const periods = await listTitlePeriods();
-  return periods.find((item) => item.principal || item.activo) || periods[0] || null;
+async function activeTitlePeriod(env) {
+  const periods = await listTitlePeriods(env);
+  return periods.find((item) => item.principal) || periods[0] || null;
 }
 
-export async function listTitlePeriods() {
-  const rows = await listCollection('TITULOS', 'periodos', { maxDocuments: 500 });
+export async function listTitlePeriods(env) {
+  const rows = await listCollection('TITULOS', 'periodos', { maxDocuments: 500 }, env);
   const periods = rows
+    .filter((row) => active(row.activo !== undefined ? row.activo : row.estado))
     .map((row) => ({
       id: text(row.id),
       periodoId: text(row.id),
       label: text(row.nombre || row.label || row.periodoLabel || row.id),
       periodoLabel: text(row.nombre || row.label || row.periodoLabel || row.id),
-      activo: row.activo !== false,
-      principal: row.activo === true
+      activo: true,
+      principal: principal(row)
     }))
-    .filter((item) => item.id && item.activo !== false)
+    .filter((item) => item.id)
     .sort((a, b) => periodSignature(b.id).localeCompare(periodSignature(a.id), 'es', { numeric: true }));
 
   if (periods.length && !periods.some((item) => item.principal)) periods[0].principal = true;
   return periods;
 }
 
-export async function listTitleCareers(periodId = '') {
-  const rows = await listCollection('TITULOS', 'carreras', { maxDocuments: 1000 });
+export async function listTitleCareers(periodId = '', env) {
+  const rows = await listCollection('TITULOS', 'carreras', { maxDocuments: 1000 }, env);
   return rows
-    .filter((row) => row.activo !== false)
+    .filter((row) => active(row.activo !== undefined ? row.activo : row.estado))
     .map((row) => ({
       id: text(row.id),
       codigo: text(row.codigo || row.codigoCarrera || row.id),
@@ -114,10 +133,11 @@ export async function listTitleCareers(periodId = '') {
       nombreCarrera: text(row.nombre || row.nombreCarrera || row.id),
       carrera: text(row.nombre || row.nombreCarrera || row.id),
       periodoId: text(periodId)
-    }));
+    }))
+    .filter((item) => item.id && item.nombre);
 }
 
-export async function getStudentBasic(cedula, options = {}) {
+export async function getStudentBasic(cedula, options = {}, env) {
   const canonical = normalizeCedula(cedula);
   if (!canonical) {
     return {
@@ -129,7 +149,7 @@ export async function getStudentBasic(cedula, options = {}) {
     };
   }
 
-  const document = await getStudentDocument(canonical);
+  const document = await getStudentDocument(canonical, env);
   if (!document) {
     return {
       ok: true,
@@ -151,7 +171,7 @@ export async function getStudentBasic(cedula, options = {}) {
   ]));
 
   if (!periodId || requestedPeriod) {
-    const enrollment = await getStudentPeriodRecord(canonical, requestedPeriod);
+    const enrollment = await getStudentPeriodRecord(canonical, requestedPeriod, env);
     if (enrollment) {
       periodId = text(flexible(enrollment, [
         'periodoId', 'periodId', 'periodoCanonicoId', 'ultimoPeriodoId', 'periodoLabel', 'periodo'
@@ -163,7 +183,7 @@ export async function getStudentBasic(cedula, options = {}) {
   }
 
   if (!periodId) {
-    const fallback = await activeTitlePeriod();
+    const fallback = await activeTitlePeriod(env);
     periodId = fallback && fallback.id || '';
     periodLabel = fallback && fallback.label || periodId;
   }
@@ -212,21 +232,23 @@ export async function getStudentBasic(cedula, options = {}) {
   };
 }
 
-export async function pullRequisitos(action, payload = {}) {
+export async function pullRequisitos(action, payload = {}, env) {
   const normalizedAction = text(action).toLowerCase();
   if (normalizedAction === 'ping') {
+    await listCollection('UTET', 'Estudiantes', { pageSize: 1, maxDocuments: 1 }, env);
     return {
       ok: true,
       servicio: 'REQUISITOS',
       projectId: 'utet-4387a',
-      fuente: 'FIREBASE_UTET'
+      fuente: 'FIREBASE_UTET',
+      autenticacion: 'service-account-oauth'
     };
   }
 
   if (normalizedAction === 'pull_bl2') {
     const scope = text(payload.scope || 'all').toLowerCase();
-    const periods = await listTitlePeriods();
-    const careers = scope === 'periods' ? [] : await listTitleCareers(payload.periodoId);
+    const periods = await listTitlePeriods(env);
+    const careers = scope === 'periods' ? [] : await listTitleCareers(payload.periodoId, env);
     return {
       ok: true,
       fuente: 'FIREBASE_UTET_Y_TITULOS',
@@ -248,7 +270,8 @@ export async function pullRequisitos(action, payload = {}) {
       {
         periodoId: payload.periodoId || payload.periodo || payload.periodoLabel,
         includePhone: payload.includePhone === true || payload.rol === 'admin'
-      }
+      },
+      env
     );
   }
 
