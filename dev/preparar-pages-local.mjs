@@ -4,8 +4,8 @@ import process from 'node:process';
 
 const root = process.cwd();
 const output = path.join(root, '.pages-local');
-const VERSION_ESTUDIANTES = '2.4.3';
-const VERSION_ADMIN = '3.3.2';
+const VERSION_ESTUDIANTES = '2.4.4';
+const VERSION_ADMIN = '3.3.3';
 const LEGACY_SCRIPTS = [
   'estudiante.consulta.optimizada.js',
   'estudiante.devolucion.runtime.js',
@@ -106,8 +106,7 @@ if (!copiedFiles.includes('index.html')) {
   fs.writeFileSync(path.join(output, 'index.html'), index, 'utf8');
 }
 
-console.log('[Pages local] Carpeta estática preparada en .pages-local.');
-console.log(`[Pages local] Consulta unificada de estudiantes activa (${VERSION_ESTUDIANTES}).`);
-console.log(`[Pages local] Administrador activo (${VERSION_ADMIN}).`);
-console.log('[Pages local] Sin controladores duplicados ni parches de runtime.');
-console.log('[Pages local] La carpeta functions permanece fuera de los archivos estáticos para habilitar /api/*.');
+console.log('[Pages local] Entorno preparado en .pages-local.');
+console.log(`[Pages local] Estudiantes ${VERSION_ESTUDIANTES}: UTET → Sheets → Títulos.`);
+console.log('[Pages local] Coordinadores: Firebase Títulos únicamente.');
+console.log('[Pages local] Administrador: dos Firebase y reporte PDF.');
