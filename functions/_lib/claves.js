@@ -5,6 +5,43 @@ import { generateWithProvider, listProviders, saveProvider, toggleProvider } fro
 import { getStudentBasic, pullRequisitos } from './requisitos-firebase.js';
 import { executeTitulosAction, publicTitleConfiguration } from './titulos-firebase.js';
 
+const PRIVATE_STUDENT_FIELDS = new Set([
+  'celular',
+  'telefono',
+  'telefonocelular',
+  'phone',
+  'mobile',
+  'correoinstitucional',
+  'correopersonal',
+  'correo',
+  'email',
+  'emailinstitucional',
+  'emailpersonal'
+]);
+
+function normalizedField(value) {
+  return text(value)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, '');
+}
+
+function sanitizeTitleResult(value, userRole, seen = new WeakSet()) {
+  if (userRole === 'admin' || value === null || value === undefined) return value;
+  if (Array.isArray(value)) return value.map((item) => sanitizeTitleResult(item, userRole, seen));
+  if (typeof value !== 'object') return value;
+  if (seen.has(value)) return null;
+  seen.add(value);
+
+  const output = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (PRIVATE_STUDENT_FIELDS.has(normalizedField(key))) continue;
+    output[key] = sanitizeTitleResult(item, userRole, seen);
+  }
+  return output;
+}
+
 function serviceActive(service) {
   return service && service.activo !== false && text(service.estado || 'ACTIVO').toUpperCase() !== 'INACTIVO';
 }
@@ -191,11 +228,14 @@ export async function runService(env, service, action, method, payload, role, ti
   void method;
   void timeoutMs;
   const normalizedService = text(service).toUpperCase();
+  const userRole = text(role || 'student').toLowerCase();
+
   if (normalizedService === 'TITULOS') {
-    return executeTitulosAction(action, payload || {}, text(role || 'student').toLowerCase(), env);
+    const result = await executeTitulosAction(action, payload || {}, userRole, env);
+    return sanitizeTitleResult(result, userRole);
   }
   if (normalizedService === 'REQUISITOS') {
-    return pullRequisitos(action, { ...(payload || {}), rol: role }, env);
+    return pullRequisitos(action, { ...(payload || {}), rol: userRole }, env);
   }
   throw new Error('Servicio Firebase no implementado: ' + service);
 }
