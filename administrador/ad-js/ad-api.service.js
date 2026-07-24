@@ -32,6 +32,7 @@
     listarTitulos:function(filtros){return titulos('LISTAR_ENVIOS_POR_CARRERA',filtros||{carreras:'',carrera:'',estado:'',periodo:''},'GET');},
     consultarTitulo:function(cedula,periodo){return titulos('VERIFICAR_ENVIO',{cedula:cedula,numeroIdentificacion:cedula,periodo:periodo||''},'GET');},
     devolverTitulo:function(datos){return titulos('GUARDAR_RESOLUCION',datos||{},'POST');},
+    eliminarTitulo:function(datos){return titulos('ADMIN_ELIMINAR_TITULOS',datos||{},'POST');},
     listarIA:function(){return iaGet('admin-list');},
     guardarIA:function(proveedor){return iaPost('admin-save',{provider:proveedor||{}});},
     cambiarEstadoIA:function(providerId,activo){return iaPost('admin-toggle',{providerId:providerId,activo:activo===true});},
@@ -43,5 +44,5 @@
     extraerTitulos:function(r){return lista(r,['envios','registros']);}
   };
   window.ADAPIService=Object.freeze(api);
-  if(window.document&&!window.document.querySelector('script[data-ad-servicios="true"]')){var script=window.document.createElement('script');script.src='./ad-js/ad-servicios.app.js?v=3.1.0';script.async=false;script.setAttribute('data-ad-servicios','true');window.document.head.appendChild(script);}
+  if(window.document&&!window.document.querySelector('script[data-ad-servicios="true"]')){var script=window.document.createElement('script');script.src='./ad-js/ad-servicios.app.js?v=3.1.2';script.async=false;script.setAttribute('data-ad-servicios','true');window.document.head.appendChild(script);}
 })(window);
