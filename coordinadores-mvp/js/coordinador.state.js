@@ -2,9 +2,9 @@
 Archivo: coordinador.state.js
 Ruta: /coordinadores-mvp/js/coordinador.state.js
 Función:
-- Mantener períodos, coordinadores, títulos, vista y búsqueda.
-- Filtrar con equivalencias flexibles de período y carrera.
-- Exponer conteos para diagnosticar dónde desaparecen los registros.
+- Mantener períodos, coordinadores, estudiantes y búsqueda.
+- Separar faltantes, pendientes de revisión, aprobados y devueltos.
+- Filtrar por período y carreras asignadas al coordinador.
 ========================================================= */
 (function(window){
   'use strict';
@@ -13,9 +13,9 @@ Función:
   var state={
     iniciado:false,cargando:false,periodos:[],periodoActual:null,
     coordinadores:[],coordinadorActual:null,envios:[],registrosFiltrados:[],
-    vistaActual:'pendientes',busqueda:'',estudianteSeleccionado:null,
+    vistaActual:'faltantes',busqueda:'',estudianteSeleccionado:null,
     ultimaCarga:null,ultimoError:null,
-    diagnosticoFiltros:{recibidos:0,conTitulos:0,delPeriodo:0,deCarreras:0,delEstado:0,mostrados:0}
+    diagnosticoFiltros:{recibidos:0,conTitulos:0,sinTitulos:0,delPeriodo:0,deCarreras:0,delEstado:0,mostrados:0}
   };
 
   function utils(){return window.CoordinadorMVPUtils||null;}
@@ -45,7 +45,12 @@ Función:
   function guardarLocal(clave,valor){try{window.localStorage.setItem(clave,JSON.stringify(valor));}catch(error){}}
   function leerLocal(clave){try{var valor=window.localStorage.getItem(clave);return valor?JSON.parse(valor):'';}catch(error){return '';}}
 
-  function iniciar(){state.iniciado=true;state.vistaActual=leerLocal('coordinadores_mvp__ultima_vista')||'pendientes';recalcularFiltros();emitir('iniciado');return true;}
+  function iniciar(){
+    state.iniciado=true;
+    var guardada=leerLocal('coordinadores_mvp__ultima_vista_v2');
+    state.vistaActual=['faltantes','pendientes','aprobados','devueltos'].indexOf(guardada)>=0?guardada:'faltantes';
+    recalcularFiltros();emitir('iniciado');return true;
+  }
   function obtenerEstado(){return clonar(state);}
   function estaCargando(){return state.cargando===true;}
   function setCargando(valor){state.cargando=valor===true;emitir('cargando');}
@@ -67,7 +72,6 @@ Función:
     id=texto(id);
     state.periodoActual=state.periodos.find(function(item){return item.id===id;})||null;
     if(state.periodoActual)guardarLocal('coordinadores_mvp__ultimo_periodo',state.periodoActual.id);
-    /* Los envíos ya cargados se conservan y solo se vuelven a filtrar. */
     state.estudianteSeleccionado=null;
     recalcularFiltros();emitir('periodo');return obtenerPeriodoActual();
   }
@@ -90,11 +94,13 @@ Función:
 
   function setEnvios(lista){state.envios=Array.isArray(lista)?lista.slice():[];state.ultimaCarga=new Date().toISOString();recalcularFiltros();emitir('envios');}
   function obtenerEnvios(){return clonar(state.envios);}
-  function setVistaActual(vista){if(['pendientes','aprobados','devueltos'].indexOf(vista)<0)return false;state.vistaActual=vista;guardarLocal('coordinadores_mvp__ultima_vista',vista);recalcularFiltros();emitir('vista');return true;}
+  function setVistaActual(vista){
+    if(['faltantes','pendientes','aprobados','devueltos'].indexOf(vista)<0)return false;
+    state.vistaActual=vista;guardarLocal('coordinadores_mvp__ultima_vista_v2',vista);recalcularFiltros();emitir('vista');return true;
+  }
   function obtenerVistaActual(){return state.vistaActual;}
   function setBusqueda(valor){state.busqueda=texto(valor);recalcularFiltros();emitir('busqueda');}
   function obtenerBusqueda(){return state.busqueda;}
-  function estadosVista(vista){if(vista==='aprobados')return['APROBADO','REEMPLAZADO'];if(vista==='devueltos')return['DEVUELTO'];return['PENDIENTE_REVISION','PENDIENTE_SYNC','ENVIADO','PENDIENTE'];}
 
   function tokensCarrera(valor){
     var ignorar={UNIVERSITARIA:1,UNIVERSITARIO:1,TECNOLOGIA:1,TECNOLOGO:1,SUPERIOR:1,EN:1,DE:1,DEL:1,LA:1,EL:1,Y:1,ONLINE:1,TSU:1};
@@ -118,16 +124,13 @@ Función:
   }
 
   function firmaPeriodo(valor){
-    var base=normal(valor);
-    if(!base)return'';
+    var base=normal(valor);if(!base)return'';
     var meses={ENERO:'01',FEBRERO:'02',MARZO:'03',ABRIL:'04',MAYO:'05',JUNIO:'06',JULIO:'07',AGOSTO:'08',SEPTIEMBRE:'09',SETIEMBRE:'09',OCTUBRE:'10',NOVIEMBRE:'11',DICIEMBRE:'12'};
     Object.keys(meses).forEach(function(mes){base=base.replace(new RegExp('\\b'+mes+'\\b','g'),meses[mes]);});
     var pares=[];var visto={};var m;
     var agregar=function(anio,mes){mes=String(Number(mes)).padStart(2,'0');var par=anio+'-'+mes;if(Number(mes)>=1&&Number(mes)<=12&&!visto[par]){visto[par]=true;pares.push(par);}};
-    var reYM=/\b(20\d{2})\s+(\d{1,2})\b/g;
-    while((m=reYM.exec(base)))agregar(m[1],m[2]);
-    var reMY=/\b(\d{1,2})\s+(20\d{2})\b/g;
-    while((m=reMY.exec(base)))agregar(m[2],m[1]);
+    var reYM=/\b(20\d{2})\s+(\d{1,2})\b/g;while((m=reYM.exec(base)))agregar(m[1],m[2]);
+    var reMY=/\b(\d{1,2})\s+(20\d{2})\b/g;while((m=reMY.exec(base)))agregar(m[2],m[1]);
     if(pares.length>=2)return pares[0]+'__'+pares[pares.length-1];
     if(pares.length===1)return pares[0];
     return base;
@@ -147,20 +150,30 @@ Función:
   }
 
   function tieneTitulos(envio){return Boolean(envio&&(envio.titulo1||envio.titulo2||envio.titulo3));}
+  function coincideVista(envio,vista){
+    var estado=estadoNormal(envio&&envio.estado);
+    var conTitulos=tieneTitulos(envio);
+    if(vista==='faltantes')return !conTitulos||estado==='NO_ENVIADO'||envio.enviado===false;
+    if(vista==='aprobados')return conTitulos&&(estado==='APROBADO'||estado==='REEMPLAZADO');
+    if(vista==='devueltos')return conTitulos&&estado==='DEVUELTO';
+    return conTitulos&&['PENDIENTE_REVISION','PENDIENTE_SYNC','ENVIADO','PENDIENTE'].indexOf(estado)>=0;
+  }
   function recalcularFiltros(){
-    var permitidos=estadosVista(state.vistaActual);var busqueda=normal(state.busqueda);
+    var busqueda=normal(state.busqueda);
     var periodo=state.periodoActual;var coordinador=state.coordinadorActual;
     var conTitulos=state.envios.filter(tieneTitulos);
-    var delPeriodo=conTitulos.filter(function(envio){return coincidePeriodo(envio,periodo);});
-    var deCarreras=delPeriodo.filter(function(envio){return coincideCarrera(envio,coordinador);});
-    var delEstado=deCarreras.filter(function(envio){return permitidos.indexOf(estadoNormal(envio.estado))>=0;});
-    state.registrosFiltrados=delEstado.filter(function(envio){
-      var base=normal([envio.cedula,envio.nombres,envio.carrera,envio.codigoCarrera,envio.periodoLabel].join(' '));
+    var sinTitulos=state.envios.filter(function(item){return !tieneTitulos(item)||estadoNormal(item.estado)==='NO_ENVIADO'||item.enviado===false;});
+    var delPeriodo=state.envios.filter(function(item){return coincidePeriodo(item,periodo);});
+    var deCarreras=delPeriodo.filter(function(item){return coincideCarrera(item,coordinador);});
+    var delEstado=deCarreras.filter(function(item){return coincideVista(item,state.vistaActual);});
+    state.registrosFiltrados=delEstado.filter(function(item){
+      var base=normal([item.cedula,item.nombres,item.carrera,item.codigoCarrera,item.periodoLabel].join(' '));
       return !busqueda||base.indexOf(busqueda)>=0;
     });
     state.diagnosticoFiltros={
       recibidos:state.envios.length,
       conTitulos:conTitulos.length,
+      sinTitulos:sinTitulos.length,
       delPeriodo:delPeriodo.length,
       deCarreras:deCarreras.length,
       delEstado:delEstado.length,
