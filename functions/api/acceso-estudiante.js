@@ -167,7 +167,7 @@ async function queryTitles(env, cedula, student) {
   const result = await runService(env, 'TITULOS', 'CONSULTAR_ENVIO_CEDULA', 'GET', {
     cedula,
     numeroIdentificacion: cedula,
-    periodoId,
+    periodoId: periodId,
     periodoLabel,
     periodo: periodLabel,
     scope: 'period'
