@@ -2,8 +2,8 @@
 Archivo: coordinador.ui.js
 Ruta: /coordinadores-mvp/js/coordinador.ui.js
 Función:
-- Renderizar períodos, coordinadores, pestañas y tabla.
-- Mostrar conteos de diagnóstico cuando un filtro deja cero resultados.
+- Renderizar faltantes, pendientes, aprobados y devueltos.
+- Permitir abrir únicamente los registros que sí tienen títulos.
 ========================================================= */
 (function(window,document){
   'use strict';
@@ -26,7 +26,7 @@ Función:
   }
   function pintarPeriodos(periodos,actual){
     var select=$('periodoSelect');var valor=actual&&actual.id?actual.id:(select&&select.value);if(!select)return;
-    if(!periodos.length){select.innerHTML='<option value="">No hay períodos activos</option>';select.value='';return;}
+    if(!periodos.length){select.innerHTML='<option value="">No hay períodos disponibles</option>';select.value='';return;}
     select.innerHTML=periodos.map(function(item){return'<option value="'+esc(item.id)+'">'+esc(item.label||item.id)+(item.principal?' · Principal':'')+'</option>';}).join('');
     select.value=valor&&periodos.some(function(item){return item.id===valor;})?valor:periodos[0].id;
   }
@@ -43,30 +43,46 @@ Función:
     resumen.hidden=false;setTexto('coordinadorNombre',coordinador.nombre||'-');setTexto('coordinadorCarreras',coordinador.carrerasTexto||((coordinador.carreras||[]).join(', '))||'Sin carreras asignadas');
   }
   function pintarTabs(vista){document.querySelectorAll('[data-accion="cambiar-vista"]').forEach(function(boton){boton.classList.toggle('is-active',boton.getAttribute('data-vista')===vista);});}
-  function pintarEncabezado(vista){var datos={pendientes:['Pendientes','Estudiantes pendientes'],aprobados:['Aprobados','Títulos aprobados o corregidos'],devueltos:['Devueltos','Títulos devueltos']}[vista]||['Estudiantes','Estudiantes'];setTexto('vistaActualKicker',datos[0]);setTexto('tituloTablaEstudiantes',datos[1]);}
-  function claseEstado(valor){var estado=texto(valor).toUpperCase();if(estado==='DEVUELTO')return'state-returned';if(estado==='APROBADO'||estado==='REEMPLAZADO')return'state-approved';return'state-pending';}
-  function textoEstado(valor){var estado=texto(valor).toUpperCase();if(estado==='PENDIENTE_REVISION'||estado==='PENDIENTE_SYNC'||estado==='ENVIADO'||estado==='PENDIENTE')return'Pendiente';if(estado==='REEMPLAZADO')return'Aprobado corregido';if(estado==='APROBADO')return'Aprobado';if(estado==='DEVUELTO')return'Devuelto';return estado||'Pendiente';}
+  function pintarEncabezado(vista){
+    var datos={
+      faltantes:['No enviados','Estudiantes que todavía no han enviado'],
+      pendientes:['Por revisar','Estudiantes con títulos pendientes de revisión'],
+      aprobados:['Aprobados','Títulos aprobados o corregidos'],
+      devueltos:['Devueltos','Títulos devueltos']
+    }[vista]||['Estudiantes','Estudiantes'];
+    setTexto('vistaActualKicker',datos[0]);setTexto('tituloTablaEstudiantes',datos[1]);
+  }
+  function claseEstado(valor){var estado=texto(valor).toUpperCase();if(estado==='NO_ENVIADO')return'state-missing';if(estado==='DEVUELTO')return'state-returned';if(estado==='APROBADO'||estado==='REEMPLAZADO')return'state-approved';return'state-pending';}
+  function textoEstado(valor){var estado=texto(valor).toUpperCase();if(estado==='NO_ENVIADO')return'No enviado';if(estado==='PENDIENTE_REVISION'||estado==='PENDIENTE_SYNC'||estado==='ENVIADO'||estado==='PENDIENTE')return'Por revisar';if(estado==='REEMPLAZADO')return'Aprobado corregido';if(estado==='APROBADO')return'Aprobado';if(estado==='DEVUELTO')return'Devuelto';return estado||'Pendiente';}
+  function tieneTitulos(item){return Boolean(item&&(item.titulo1||item.titulo2||item.titulo3));}
   function pintarTabla(registros){
     var tbody=$('tablaEstudiantesBody');if(!tbody)return;
     if(!registros.length){tbody.innerHTML='<tr><td colspan="5" class="empty-cell">No hay estudiantes para mostrar.</td></tr>';return;}
-    tbody.innerHTML=registros.map(function(item){var id=item._docId||item.id||item._clave||item.cedula;return'<tr><td>'+esc(item.cedula||'-')+'</td><td><strong>'+esc(item.nombres||'-')+'</strong></td><td>'+esc(item.carrera||'-')+'</td><td><span class="state-pill '+claseEstado(item.estado)+'">'+esc(textoEstado(item.estado))+'</span></td><td><button type="button" class="row-action" data-accion="ver-detalle" data-envio-id="'+esc(id)+'">Ver más</button></td></tr>';}).join('');
+    tbody.innerHTML=registros.map(function(item){
+      var id=item._docId||item.id||item._clave||item.cedula;
+      var accion=tieneTitulos(item)
+        ?'<button type="button" class="row-action" data-accion="ver-detalle" data-envio-id="'+esc(id)+'">Revisar</button>'
+        :'<span class="row-no-action">Sin envío</span>';
+      return'<tr><td>'+esc(item.cedula||'-')+'</td><td><strong>'+esc(item.nombres||'-')+'</strong></td><td>'+esc(item.carrera||'-')+'</td><td><span class="state-pill '+claseEstado(item.estado)+'">'+esc(textoEstado(item.estado))+'</span></td><td>'+accion+'</td></tr>';
+    }).join('');
   }
   function actualizarEstado(snapshot){
     if(snapshot.ultimoError){mostrarEstado('estadoPrincipal',snapshot.ultimoError.message||String(snapshot.ultimoError),'error');return;}
-    if(!snapshot.periodoActual){mostrarEstado('estadoPrincipal','No hay un período activo seleccionado.','warning');return;}
+    if(!snapshot.periodoActual){mostrarEstado('estadoPrincipal','Selecciona un período.','warning');return;}
     if(!snapshot.coordinadorActual){mostrarEstado('estadoPrincipal','Selecciona un coordinador.','info');return;}
     if(!snapshot.coordinadorActual.carreras||!snapshot.coordinadorActual.carreras.length){mostrarEstado('estadoPrincipal','El coordinador no tiene carreras asignadas.','warning');return;}
     var d=snapshot.diagnosticoFiltros||{};
     if((snapshot.registrosFiltrados||[]).length){
-      mostrarEstado('estadoPrincipal','Mostrando '+(snapshot.registrosFiltrados||[]).length+' estudiante(s).','success');
+      var textoVista=snapshot.vistaActual==='faltantes'?' sin envío':snapshot.vistaActual==='pendientes'?' por revisar':'';
+      mostrarEstado('estadoPrincipal','Mostrando '+(snapshot.registrosFiltrados||[]).length+' estudiante(s)'+textoVista+'.','success');
       return;
     }
     mostrarEstado('estadoPrincipal',
-      'No hay estudiantes en esta vista. Recibidos: '+Number(d.recibidos||0)+
+      'No hay estudiantes en esta vista. Población recibida: '+Number(d.recibidos||0)+
       ' · Con títulos: '+Number(d.conTitulos||0)+
+      ' · Sin títulos: '+Number(d.sinTitulos||0)+
       ' · Del período: '+Number(d.delPeriodo||0)+
-      ' · De sus carreras: '+Number(d.deCarreras||0)+
-      ' · Del estado seleccionado: '+Number(d.delEstado||0)+'.','warning');
+      ' · De sus carreras: '+Number(d.deCarreras||0)+'.','warning');
   }
   function mostrarEstado(id,mensaje,tipo){var el=typeof id==='string'?$(id.replace(/^#/,'')):id;if(!el)return;el.classList.remove('is-info','is-success','is-warning','is-error');el.classList.add('is-'+(tipo||'info'));el.textContent=mensaje||'';}
   function setTexto(id,valor){var el=typeof id==='string'?$(id.replace(/^#/,'')):id;if(el)el.textContent=valor===null||valor===undefined?'':String(valor);}
