@@ -11,12 +11,34 @@ export const encodeFields = base.encodeFields;
 export const decodeValue = base.decodeValue;
 export const decodeFields = base.decodeFields;
 export const getDocument = base.getDocument;
-export const listCollection = base.listCollection;
-export const queryEqual = base.queryEqual;
 export const setDocument = base.setDocument;
 export const deleteDocument = base.deleteDocument;
 export const commitDocuments = base.commitDocuments;
 export const latestBy = base.latestBy;
+
+function enrichRow(project, collectionName, row) {
+  if (!row || typeof row !== 'object') return row;
+  const key = text(project).toUpperCase();
+  if (key === 'TITULOS' && collectionName === 'envios') {
+    const label = text(row.periodoNombre || row.periodoLabel || row.periodo);
+    return {
+      ...row,
+      periodoLabel: text(row.periodoLabel) || label,
+      periodo: text(row.periodo) || label
+    };
+  }
+  return row;
+}
+
+export async function listCollection(project, collectionName, options = {}, env) {
+  const rows = await base.listCollection(project, collectionName, options, env);
+  return rows.map((row) => enrichRow(project, collectionName, row));
+}
+
+export async function queryEqual(project, collectionName, fieldPath, value, limit = 200, env) {
+  const rows = await base.queryEqual(project, collectionName, fieldPath, value, limit, env);
+  return rows.map((row) => enrichRow(project, collectionName, row));
+}
 
 const MONTHS = Object.freeze({
   enero: '01', febrero: '02', marzo: '03', abril: '04', mayo: '05', junio: '06',
