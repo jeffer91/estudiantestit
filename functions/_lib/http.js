@@ -40,6 +40,23 @@ function isPagesHost(host, projectHost) {
   return host === projectHost || host.endsWith('.' + projectHost);
 }
 
+export function originAllowed(originValue) {
+  const origin = text(originValue);
+  if (!origin || ALLOWED_ORIGINS.has(origin)) return true;
+  try {
+    const url = new URL(origin);
+    if (url.protocol !== 'https:') return false;
+    return (
+      isPagesHost(url.hostname.toLowerCase(), 'titulos.pages.dev') ||
+      isPagesHost(url.hostname.toLowerCase(), 'titulos-administrador.pages.dev') ||
+      isPagesHost(url.hostname.toLowerCase(), 'titulos-coordinadores.pages.dev') ||
+      isPagesHost(url.hostname.toLowerCase(), 'coordinadores.pages.dev')
+    );
+  } catch (_error) {
+    return false;
+  }
+}
+
 export function role(request) {
   const host = requestHost(request);
 
@@ -72,7 +89,7 @@ export function corsHeaders(request) {
     'Vary': 'Origin'
   };
 
-  if (origin && ALLOWED_ORIGINS.has(origin)) {
+  if (origin && originAllowed(origin)) {
     headers['Access-Control-Allow-Origin'] = origin;
   }
 
@@ -93,7 +110,7 @@ export function jsonReply(request, data, status = 200) {
 
 export function rejectUnknownOrigin(request) {
   const origin = requestOrigin(request);
-  if (origin && !ALLOWED_ORIGINS.has(origin)) {
+  if (origin && !originAllowed(origin)) {
     return jsonReply(request, { ok: false, mensaje: 'Origen no permitido.' }, 403);
   }
   return null;
