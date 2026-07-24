@@ -27,14 +27,20 @@ function normalizedField(value) {
     .replace(/[^a-z0-9]/g, '');
 }
 
-function sanitizeTitleResult(value, userRole, seen = new WeakSet()) {
+function sanitizeTitleResult(value, userRole, seen = new WeakMap()) {
   if (userRole === 'admin' || value === null || value === undefined) return value;
-  if (Array.isArray(value)) return value.map((item) => sanitizeTitleResult(item, userRole, seen));
   if (typeof value !== 'object') return value;
-  if (seen.has(value)) return null;
-  seen.add(value);
+  if (seen.has(value)) return seen.get(value);
+
+  if (Array.isArray(value)) {
+    const output = [];
+    seen.set(value, output);
+    for (const item of value) output.push(sanitizeTitleResult(item, userRole, seen));
+    return output;
+  }
 
   const output = {};
+  seen.set(value, output);
   for (const [key, item] of Object.entries(value)) {
     if (PRIVATE_STUDENT_FIELDS.has(normalizedField(key))) continue;
     output[key] = sanitizeTitleResult(item, userRole, seen);
