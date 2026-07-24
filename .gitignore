@@ -3,6 +3,8 @@ dist/
 build/
 .pages-local/
 .pages-estudiantes/
+.pages-coordinadores/
+.pages-administrador/
 .env
 .env.*
 .dev.vars
