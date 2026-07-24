@@ -1,9 +1,9 @@
-# Copia este archivo como .dev.vars únicamente para desarrollo local.
-# No subas .dev.vars ni las cuentas de servicio a GitHub.
+# Este archivo es OPCIONAL para desarrollo local.
 #
-# Cada valor debe ser el JSON COMPLETO de la cuenta de servicio, convertido
-# a una sola línea y encerrado entre comillas simples.
-
-TITULOS_FIREBASE_SERVICE_ACCOUNT='{"type":"service_account","project_id":"titulos-ec2fa","private_key_id":"...","private_key":"-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----\\n","client_email":"...","client_id":"..."}'
-
-UTET_FIREBASE_SERVICE_ACCOUNT='{"type":"service_account","project_id":"utet-4387a","private_key_id":"...","private_key":"-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----\\n","client_email":"...","client_id":"..."}'
+# Sin .dev.vars, Wrangler usa las configuraciones web de Firebase ya incluidas
+# en el backend y el acceso depende de las reglas actuales de Firestore.
+#
+# Para producción con reglas cerradas, puedes agregar cuentas de servicio:
+#
+# TITULOS_FIREBASE_SERVICE_ACCOUNT='{"type":"service_account","project_id":"titulos-ec2fa","private_key_id":"...","private_key":"-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----\\n","client_email":"...","client_id":"..."}'
+# UTET_FIREBASE_SERVICE_ACCOUNT='{"type":"service_account","project_id":"utet-4387a","private_key_id":"...","private_key":"-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----\\n","client_email":"...","client_id":"..."}'
