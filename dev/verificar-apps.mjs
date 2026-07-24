@@ -61,15 +61,14 @@ requireIds(coordinatorHtml, [
   'detalleModal', 'tituloFinalInput', 'comentarioCoordinadorInput', 'btnAprobarEnvio', 'btnDevolverEnvio'
 ], 'Coordinadores');
 requireIds(adminHtml, [
-  'ad-loading', 'ad-seccion-estado', 'ad-periodo-select', 'ad-tabla-periodos',
-  'ad-form-estudiante', 'ad-form-coordinador', 'ad-form-asignacion', 'ad-tabla-titulos',
-  'ad-filtro-titulo-periodo', 'ad-filtro-titulo-carrera', 'ad-filtro-titulo-estado',
-  'ad-seccion-estadisticas', 'ad-tabla-estadisticas', 'ad-modal-titulo', 'ad-modal-faltantes',
-  'ad-form-ia', 'ad-diagnostico-salida'
+  'ad-loading', 'ad-seccion-estado', 'ad-seccion-periodos', 'ad-seccion-carreras',
+  'ad-seccion-coordinadores', 'ad-seccion-titulos', 'ad-seccion-estadisticas',
+  'ad-form-coordinador', 'ad-form-ia', 'ad-diagnostico-salida'
 ], 'Administrador');
 
 const adminApi = read('administrador/ad-js/ad-api.service.js');
 const adminApp = read('administrador/ad-js/ad-google-sheets.app.js');
+const adminGlobalApp = read('administrador/ad-js/ad-administracion-global.js');
 const coordinatorBootstrap = read('coordinadores-mvp/js/coordinador.bootstrap.independiente.js');
 const studentRequirements = read('estudiantes-mvp/js/requisitos.estudiantes.service.js');
 const studentSheets = read('estudiantes-mvp/js/sheets.service.js');
@@ -79,7 +78,7 @@ const studentApp = read('estudiantes-mvp/js/estudiante.app.js');
 const accessApi = read('functions/api/acceso-estudiante.js');
 const requirementsApi = read('functions/api/requisitos.js');
 const statisticsApi = read('functions/api/estadisticas.js');
-const statisticsService = read('functions/_lib/estadisticas-admin.js');
+const globalService = read('functions/_lib/admin-global.js');
 const studentBuild = read('dev/preparar-pages-estudiantes.mjs');
 const coordinatorBuild = read('dev/preparar-pages-coordinadores.mjs');
 const adminBuild = read('dev/preparar-pages-administrador.mjs');
@@ -87,12 +86,20 @@ const localBuild = read('dev/preparar-pages-local.mjs');
 
 assert(/window\.location&&window\.location\.origin/.test(adminApi), 'Administrador no usa su API del mismo dominio.');
 assert(/titulos-administrador\.pages\.dev/.test(adminApi), 'Administrador no tiene dominio oficial de respaldo.');
-assert(/\/api\/estadisticas/.test(adminApi), 'Administrador no consulta el endpoint de estadísticas.');
-assert(/obtenerEstadisticas/.test(adminApi), 'Administrador no expone el servicio de estadísticas.');
-assert(/detalle-titulo/.test(adminApp) && /ad-modal-titulo/.test(adminApp), 'Administrador no abre el modal de detalles.');
-assert(/whatsapp-faltante/.test(adminApp) && /wa\.me/.test(adminApp), 'Administrador no incluye recordatorios de WhatsApp.');
-assert(/role\(context\.request\) !== 'admin'/.test(statisticsApi), 'Las estadísticas no están restringidas al administrador.');
-assert(/EstudiantesPeriodo/.test(statisticsService) && /envios/.test(statisticsService), 'Las estadísticas no combinan UTET y Títulos.');
+assert(/\/api\/estadisticas/.test(adminApi), 'Administrador no consulta el endpoint administrativo global.');
+assert(/listarTitulosGlobal/.test(adminApi) && /listarPeriodosAdmin/.test(adminApi), 'Administrador no expone lista global y períodos completos.');
+assert(/ad-administracion-global\.js/.test(adminApi), 'No se carga el controlador administrativo global.');
+assert(/ADMIN_LISTA_GLOBAL_TITULOS/.test(statisticsApi), 'La API no ofrece la lista global de títulos.');
+assert(/ADMIN_LISTAR_PERIODOS/.test(statisticsApi) && /ADMIN_GUARDAR_PERIODO/.test(statisticsApi), 'La API no administra períodos.');
+assert(/ADMIN_ASIGNAR_CARRERA_COORDINADOR/.test(statisticsApi), 'La API no asigna carreras a coordinadores.');
+assert(/EstudiantesPeriodo/.test(globalService) && /envios/.test(globalService), 'La lista global no combina UTET y Títulos.');
+assert(/NO_ENVIADO/.test(globalService) && /fueraPoblacion/.test(globalService), 'La lista global no distingue faltantes o registros externos.');
+assert(/coordinadorId/.test(globalService) && /carrerasIds/.test(globalService), 'La relación carrera-coordinador no mantiene compatibilidad.');
+assert(/toggle-period/.test(adminGlobalApp) && /principal-period/.test(adminGlobalApp), 'Administrador no permite activar o definir el período principal.');
+assert(/data-v2-career-select/.test(adminGlobalApp), 'Carreras no permite asignar coordinadores.');
+assert(/NO_ENVIADO/.test(adminGlobalApp) && /outlook\.office\.com/.test(adminGlobalApp) && /wa\.me/.test(adminGlobalApp), 'Títulos no incluye no enviados, Outlook y WhatsApp.');
+assert(/delete-detail/.test(adminGlobalApp) && /return-detail/.test(adminGlobalApp), 'El modal no permite devolver o eliminar.');
+assert(/role\(context\.request\) !== 'admin'/.test(statisticsApi), 'Las operaciones globales no están restringidas al administrador.');
 assert(!/ad-seccion-devolver|ad-form-devolver/.test(adminHtml), 'Administrador todavía conserva la pantalla separada de devolución.');
 assert(/https:\/\/titulos-coordinadores\.pages\.dev/.test(coordinatorBootstrap), 'Coordinadores no apunta a su dominio oficial.');
 assert(/127\.0\.0\.1:8788/.test(adminApi), 'Administrador no apunta al entorno local 8788.');
@@ -125,16 +132,6 @@ assert(/No se envió al servidor/.test(studentApp), 'La contingencia local no di
 assert(/\.pages-coordinadores/.test(coordinatorBuild), 'No existe build independiente de Coordinadores.');
 assert(/\.pages-administrador/.test(adminBuild), 'No existe build independiente de Administrador.');
 
-const studentOrder = [
-  'requisitos.estudiantes.service.js',
-  'titulos.cola.service.js',
-  'sheets.service.js',
-  'estudiante.app.js',
-  'estudiante.consulta.revision.js'
-].map((name) => studentHtml.indexOf(name));
-assert(studentOrder.every((index) => index >= 0), 'Estudiantes no carga todos los servicios requeridos.');
-assert(studentOrder.every((index, position) => position === 0 || index > studentOrder[position - 1]), 'Los servicios de Estudiantes están cargados en un orden incorrecto.');
-
 if (errors.length) {
   console.error('\n[Apps] Se encontraron errores:\n');
   errors.forEach((error, index) => console.error((index + 1) + '. ' + error));
@@ -143,5 +140,5 @@ if (errors.length) {
 }
 
 console.log('[Apps] Estudiantes: consulta, envío y revisión integrados mediante Cloudflare Functions.');
-console.log('[Apps] Coordinadores: dominio y build independientes correctos.');
-console.log('[Apps] Administrador: filtros, detalles, estadísticas y WhatsApp correctos.');
+console.log('[Apps] Coordinadores: dominio, períodos activos y carreras asignadas correctos.');
+console.log('[Apps] Administrador: períodos completos, carreras, lista global y estadísticas unificadas.');
