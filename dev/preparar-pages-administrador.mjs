@@ -53,8 +53,10 @@ fs.writeFileSync(path.join(output, '_redirects'), redirects, 'utf8');
 for (const required of [
   path.join(output, 'index.html'),
   path.join(output, 'ad-css', 'ad-admin.css'),
+  path.join(output, 'ad-css', 'ad-titulos-estadisticas.css'),
   path.join(output, 'ad-js', 'ad-api.service.js'),
-  path.join(output, 'ad-js', 'ad-google-sheets.app.js')
+  path.join(output, 'ad-js', 'ad-google-sheets.app.js'),
+  path.join(output, 'ad-js', 'ad-correo-outlook.js')
 ]) {
   if (!fs.existsSync(required)) {
     throw new Error(`Falta un archivo obligatorio para Administrador: ${required}`);
@@ -72,5 +74,6 @@ for (const directory of [
 
 console.log('[Pages administrador] Carpeta preparada en .pages-administrador.');
 console.log('[Pages administrador] Ruta pública principal: /.');
+console.log('[Pages administrador] Incluye filtros, estadísticas, WhatsApp y Outlook.');
 console.log('[Pages administrador] La carpeta functions permanece en la raíz para habilitar /api/*.');
 console.log('[Pages administrador] Protege este proyecto con Cloudflare Access antes de usarlo en producción.');
