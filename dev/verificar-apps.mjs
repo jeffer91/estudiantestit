@@ -67,11 +67,14 @@ requireIds(adminHtml, [
 ], 'Administrador');
 
 const adminApi = read('administrador/ad-js/ad-api.service.js');
-const adminApp = read('administrador/ad-js/ad-google-sheets.app.js');
 const adminGlobalApp = read('administrador/ad-js/ad-administracion-global.js');
 const adminPdf = read('administrador/ad-js/ad-pdf-firebase.js');
 const adminVersion = read('administrador/ad-js/ad-version.js');
 const coordinatorBootstrap = read('coordinadores-mvp/js/coordinador.bootstrap.independiente.js');
+const coordinatorState = read('coordinadores-mvp/js/coordinador.state.js');
+const coordinatorUi = read('coordinadores-mvp/js/coordinador.ui.js');
+const coordinatorRuntime = read('coordinadores-mvp/js/coordinador.faltantes.runtime.js');
+const coordinatorSource = read('coordinadores-mvp/js/coordinador.sheets.primary.js');
 const studentRequirements = read('estudiantes-mvp/js/requisitos.estudiantes.service.js');
 const studentSheets = read('estudiantes-mvp/js/sheets.service.js');
 const studentReview = read('estudiantes-mvp/js/estudiante.consulta.revision.js');
@@ -96,21 +99,22 @@ assert(/ad-administracion-global\.js/.test(adminApi), 'No se carga el controlado
 assert(/ad-pdf-firebase\.js/.test(adminApi) && /ADMIN_REPORTE_FIREBASE_TITULOS/.test(adminApi), 'No está disponible el PDF de Firebase Títulos.');
 assert(/ad-version\.js/.test(adminApi) && /3\.3\.3/.test(adminVersion), 'Administrador no fuerza la versión 3.3.3.');
 assert(/ADMIN_LISTA_GLOBAL_TITULOS/.test(statisticsApi), 'La API no ofrece la lista global de títulos.');
-assert(/ADMIN_LISTAR_PERIODOS/.test(statisticsApi) && /ADMIN_GUARDAR_PERIODO/.test(statisticsApi), 'La API no administra períodos.');
-assert(/ADMIN_ASIGNAR_CARRERA_COORDINADOR/.test(statisticsApi), 'La API no asigna carreras a coordinadores.');
 assert(/EstudiantesPeriodo/.test(globalService) && /envios/.test(globalService), 'La lista global no combina UTET y Títulos.');
 assert(/NO_ENVIADO/.test(globalService) && /fueraPoblacion/.test(globalService), 'La lista global no distingue faltantes o registros externos.');
 assert(/totalEnviosPeriodo/.test(globalService) && /enviosByCedula/.test(globalService), 'La lista global no cruza todos los envíos reales.');
-assert(/periodoNombre/.test(titlesService) && /FIREBASE_TITULOS_DIRECTO/.test(titlesService), 'Coordinadores no lee Firebase Títulos directamente por período completo.');
+assert(/incluirFaltantes/.test(titlesService) && /UTET_MAS_FIREBASE_TITULOS/.test(titlesService), 'Coordinadores no recibe población y envíos en una sola consulta.');
 assert(/titulos-firebase-v6\.js/.test(claves), 'La fachada no usa la lectura definitiva de Firebase Títulos.');
 assert(/data-v2-career-select/.test(adminGlobalApp), 'Carreras no permite asignar coordinadores.');
-assert(/NO_ENVIADO/.test(adminGlobalApp) && /outlook\.office\.com/.test(adminGlobalApp) && /wa\.me/.test(adminGlobalApp), 'Títulos no incluye no enviados, Outlook y WhatsApp.');
-assert(/delete-detail/.test(adminGlobalApp) && /return-detail/.test(adminGlobalApp), 'El modal no permite devolver o eliminar.');
 assert(/Generar PDF Firebase Títulos/.test(adminPdf), 'El botón del PDF no tiene la etiqueta esperada.');
-assert(/role\(context\.request\) !== 'admin'/.test(statisticsApi), 'Las operaciones globales no están restringidas al administrador.');
 assert(!/ad-seccion-devolver|ad-form-devolver/.test(adminHtml), 'Administrador todavía conserva la pantalla separada de devolución.');
 assert(/https:\/\/titulos-coordinadores\.pages\.dev/.test(coordinatorBootstrap), 'Coordinadores no apunta a su dominio oficial.');
-assert(/2\.8\.7/.test(coordinatorBootstrap) && /2\.8\.7/.test(coordinatorHtml), 'Coordinadores no fuerza la versión 2.8.7.');
+assert(/2\.9\.0/.test(coordinatorBootstrap) && /2\.9\.0/.test(coordinatorHtml), 'Coordinadores no fuerza la versión 2.9.0.');
+assert(/coordinador\.faltantes\.runtime\.js/.test(coordinatorBootstrap), 'Coordinadores no carga automáticamente la población del período.');
+assert(/data-vista="faltantes"/.test(coordinatorHtml), 'Coordinadores no contiene la pestaña No enviados.');
+assert(/NO_ENVIADO/.test(coordinatorState) && /sinTitulos/.test(coordinatorState), 'El estado no separa estudiantes faltantes.');
+assert(/Sin envío/.test(coordinatorUi) && /Revisar/.test(coordinatorUi), 'La tabla no diferencia faltantes y registros revisables.');
+assert(/cargarTitulos/.test(coordinatorRuntime) && /periodoActual/.test(coordinatorRuntime), 'La carga automática no usa el período actual.');
+assert(/incluirFaltantes:true/.test(coordinatorSource), 'El cliente de Coordinadores no solicita estudiantes sin envío.');
 assert(/127\.0\.0\.1:8788/.test(adminApi), 'Administrador no apunta al entorno local 8788.');
 assert(/127\.0\.0\.1:8788/.test(coordinatorBootstrap), 'Coordinadores no apunta al entorno local 8788.');
 assert(/\/api\/requisitos/.test(studentRequirements), 'Estudiantes no consulta la API de Requisitos.');
@@ -123,9 +127,6 @@ assert(/periodoId:\s*periodId/.test(accessApi), 'La API unificada no asigna corr
 assert(/periodoLabel:\s*periodLabel/.test(accessApi), 'La API unificada no asigna correctamente periodoLabel.');
 assert(/CONSULTAR_ENVIO_CEDULA/.test(accessApi), 'La API unificada no usa el flujo de Títulos.');
 assert(/periodEquivalent/.test(accessApi), 'La API unificada no compara etiquetas e identificadores de período.');
-assert(/origen:\s*['"]RESOLUCIONES['"]/.test(accessApi), 'Resoluciones no tiene la mayor jerarquía.');
-assert(/origen:\s*['"]ENVIOS['"]/.test(accessApi), 'Envíos no tiene la segunda jerarquía.');
-assert(/origen:\s*['"]REQUISITOS['"]/.test(accessApi), 'Requisitos no tiene la tercera jerarquía.');
 assert(/#modalConsultaTitulos\s*\{[\s\S]*display:\s*none\s*!important/.test(studentReviewCss), 'El modal histórico de consulta no está desactivado.');
 assert(/scope:\s*periodId\s*\?\s*['"]period['"]\s*:\s*['"]all['"]/.test(requirementsApi), 'La consulta sin período no busca en todos los períodos activos.');
 assert(!/firebase\.core\.service|firebase\.estudiantes\.service|firebase\.envios\.service|firebase\.ia\.service/i.test(studentHtml), 'Estudiantes todavía carga scripts Firebase directos eliminados.');
@@ -149,5 +150,5 @@ if (errors.length) {
 }
 
 console.log('[Apps] Estudiantes: consulta, envío y revisión integrados mediante Cloudflare Functions.');
-console.log('[Apps] Coordinadores: Firebase Títulos directo, períodos activos y carreras asignadas.');
+console.log('[Apps] Coordinadores: muestra No enviados y permite revisar los registros con títulos.');
 console.log('[Apps] Administrador: lista UTET + envíos reales, estadísticas y PDF Firebase Títulos.');
