@@ -1,6 +1,6 @@
 /* Fachada compatible: Títulos, Requisitos e IA usan Firebase autenticado. */
 
-import { listCollection, nowIso, setDocument, slug, text } from './firestore.js';
+import { text } from './firestore.js';
 import { generateWithProvider, listProviders, saveProvider, toggleProvider } from './ia-firebase.js';
 import { getStudentBasic, pullRequisitos } from './requisitos-firebase.js';
 import { executeTitulosAction, publicTitleConfiguration } from './titulos-firebase.js';
@@ -48,19 +48,6 @@ function sanitizeTitleResult(value, userRole, seen = new WeakMap()) {
   return output;
 }
 
-function serviceActive(service) {
-  return service && service.activo !== false && text(service.estado || 'ACTIVO').toUpperCase() !== 'INACTIVO';
-}
-
-function sanitizeService(service) {
-  const output = { ...(service || {}) };
-  output.secretoConfigurado = Boolean(text(output.secreto || output.credencial || output.token));
-  delete output.secreto;
-  delete output.credencial;
-  delete output.token;
-  return output;
-}
-
 function sanitizeProvider(provider) {
   const output = { ...(provider || {}) };
   output.apiKeyConfigurada = Boolean(text(output.credencial || output.apiKey || output.token));
@@ -70,32 +57,9 @@ function sanitizeProvider(provider) {
   return output;
 }
 
-async function listServices(includeSecrets = false, env) {
-  const rows = await listCollection('TITULOS', 'servicios', { maxDocuments: 500 }, env);
-  const services = rows.map((row) => {
-    const id = slug(row.id || row.clave || row.nombre);
-    const secret = text(row.secreto || row.credencial || row.token);
-    const output = {
-      ...row,
-      id,
-      clave: text(row.clave || id).toUpperCase(),
-      key: text(row.clave || id).toUpperCase(),
-      nombre: text(row.nombre || row.clave || id),
-      tipo: text(row.tipo || 'firebase'),
-      endpoint: text(row.endpoint),
-      spreadsheetId: text(row.spreadsheetId),
-      activo: serviceActive(row),
-      estado: serviceActive(row) ? 'ACTIVO' : 'INACTIVO',
-      timeoutMs: Number(row.timeoutMs || 45000),
-      version: text(row.version || 'firebase-2'),
-      mensaje: text(row.mensaje),
-      secretoConfigurado: Boolean(secret)
-    };
-    if (includeSecrets) output.secreto = secret;
-    return output;
-  });
-
-  const defaults = [
+async function serviceStatuses(env) {
+  const titleConfig = await publicTitleConfiguration(env);
+  return [
     {
       id: 'titulos',
       clave: 'TITULOS',
@@ -103,13 +67,15 @@ async function listServices(includeSecrets = false, env) {
       nombre: 'Firebase Títulos',
       tipo: 'firebase-iam',
       endpoint: 'firebase://titulos-ec2fa',
-      spreadsheetId: '',
-      activo: true,
-      estado: 'ACTIVO',
+      projectId: 'titulos-ec2fa',
+      activo: titleConfig.activo !== false,
+      estado: text(titleConfig.estado || (titleConfig.activo === false ? 'INACTIVO' : 'ACTIVO')),
       timeoutMs: 45000,
-      version: 'firebase-2',
-      mensaje: 'Operación autenticada sobre titulos-ec2fa.',
-      secretoConfigurado: false
+      version: text(titleConfig.version || 'firebase-3'),
+      mensaje: text(titleConfig.mensaje || 'Operación autenticada sobre Firebase Títulos.'),
+      soloLectura: false,
+      configuracion: 'cloudflare-secrets',
+      secretoConfigurado: true
     },
     {
       id: 'requisitos',
@@ -118,77 +84,37 @@ async function listServices(includeSecrets = false, env) {
       nombre: 'Firebase UTET',
       tipo: 'firebase-iam',
       endpoint: 'firebase://utet-4387a',
-      spreadsheetId: '',
+      projectId: 'utet-4387a',
       activo: true,
       estado: 'ACTIVO',
       timeoutMs: 30000,
-      version: 'firebase-2',
-      mensaje: 'Consulta mínima autenticada de estudiantes en utet-4387a.',
-      secretoConfigurado: false
+      version: 'firebase-3',
+      mensaje: 'Consulta mínima autenticada de estudiantes en Firebase UTET.',
+      soloLectura: true,
+      configuracion: 'cloudflare-secrets',
+      secretoConfigurado: true
     }
   ];
-
-  for (const fallback of defaults) {
-    const index = services.findIndex((item) => item.clave === fallback.clave);
-    if (index >= 0) {
-      const internalSecret = includeSecrets ? text(services[index].secreto) : '';
-      services[index] = {
-        ...services[index],
-        ...fallback,
-        id: services[index].id || fallback.id,
-        ...(includeSecrets ? { secreto: internalSecret } : {})
-      };
-    } else {
-      services.push({ ...fallback, ...(includeSecrets ? { secreto: '' } : {}) });
-    }
-  }
-  return services;
-}
-
-async function saveService(service = {}, env) {
-  const key = text(service.clave || service.key || service.id || service.nombre).toUpperCase();
-  const id = slug(service.id || key);
-  if (!id || !key) throw new Error('El servicio necesita una clave.');
-  const current = (await listServices(true, env)).find((item) => item.id === id || item.clave === key) || {};
-  const secret = text(service.secreto || service.credencial || service.token) || current.secreto || '';
-  const active = service.activo === false || text(service.estado).toUpperCase() === 'INACTIVO' ? false : true;
-
-  const saved = await setDocument('TITULOS', 'servicios', id, {
-    clave: key,
-    nombre: text(service.nombre || current.nombre || key),
-    tipo: text(service.tipo || current.tipo || 'firebase-iam'),
-    endpoint: text(service.endpoint || current.endpoint),
-    secreto: secret,
-    spreadsheetId: text(service.spreadsheetId || current.spreadsheetId),
-    estado: active ? 'ACTIVO' : 'INACTIVO',
-    activo: active,
-    timeoutMs: Number(service.timeoutMs || current.timeoutMs || 45000),
-    version: text(service.version || current.version || 'firebase-2'),
-    mensaje: text(service.mensaje || current.mensaje),
-    actualizadoEn: nowIso()
-  }, { merge: true }, env);
-  return {
-    ok: true,
-    servicio: sanitizeService(saved),
-    service: sanitizeService(saved),
-    mensaje: 'Servicio guardado en Firebase Títulos.'
-  };
 }
 
 export async function requestClaves(env, action, data = {}, timeoutMs) {
   void timeoutMs;
   const normalized = text(action).toUpperCase();
 
-  if (normalized === 'LISTAR_SERVICIOS_PUBLICOS') {
-    const servicios = (await listServices(false, env)).filter((item) => item.activo).map(sanitizeService);
-    return { ok: true, servicios, total: servicios.length, origen: 'FIREBASE_TITULOS_IAM' };
-  }
-  if (normalized === 'LISTAR_SERVICIOS_ADMIN') {
-    const servicios = (await listServices(false, env)).map(sanitizeService);
-    return { ok: true, servicios, registros: servicios, total: servicios.length, origen: 'FIREBASE_TITULOS_IAM' };
+  if (normalized === 'LISTAR_SERVICIOS_PUBLICOS' || normalized === 'LISTAR_SERVICIOS_ADMIN') {
+    const servicios = await serviceStatuses(env);
+    return {
+      ok: true,
+      servicios,
+      registros: servicios,
+      total: servicios.length,
+      origen: 'FIREBASE_IAM_CLOUDFLARE'
+    };
   }
   if (normalized === 'GUARDAR_SERVICIO') {
-    return saveService(data.servicio || data.service || data, env);
+    throw new Error(
+      'Títulos y UTET se configuran mediante secretos cifrados de Cloudflare Pages; no se guardan endpoints ni tokens desde el navegador.'
+    );
   }
   if (normalized === 'CONSULTAR_ESTUDIANTE_REQUISITOS' || normalized === 'CONSULTAR_ACCESO_ESTUDIANTE') {
     return getStudentBasic(data.cedula || data.numeroIdentificacion || data.identificacion, {
