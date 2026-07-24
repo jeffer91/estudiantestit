@@ -1,145 +1,195 @@
-/* Acceso al Apps Script central Claves. Los secretos se usan dentro de Apps Script. */
+/* Fachada compatible: ahora Claves, Títulos, Requisitos e IA usan Firebase. */
 
-export function text(value) {
-  return String(value === null || value === undefined ? '' : value).trim();
+import { listCollection, nowIso, setDocument, slug, text } from './firestore.js';
+import { generateWithProvider, listProviders, saveProvider, toggleProvider } from './ia-firebase.js';
+import { getStudentBasic, pullRequisitos } from './requisitos-firebase.js';
+import { executeTitulosAction, publicTitleConfiguration } from './titulos-firebase.js';
+
+function serviceActive(service) {
+  return service && service.activo !== false && text(service.estado || 'ACTIVO').toUpperCase() !== 'INACTIVO';
 }
 
-function validateUrl(value) {
-  const raw = text(value);
-  if (!raw) throw new Error('No está configurada CLAVES_APPS_SCRIPT_URL.');
-  const url = new URL(raw);
-  if (
-    url.protocol !== 'https:' ||
-    !['script.google.com', 'script.googleusercontent.com'].includes(url.hostname) ||
-    !url.pathname.endsWith('/exec')
-  ) {
-    throw new Error('CLAVES_APPS_SCRIPT_URL no es una URL válida terminada en /exec.');
-  }
-  return url.toString();
-}
+async function listServices(includeSecrets = false) {
+  const rows = await listCollection('TITULOS', 'servicios', { maxDocuments: 500 });
+  const services = rows.map((row) => {
+    const id = slug(row.id || row.clave || row.nombre);
+    const secret = text(row.secreto || row.credencial || row.token);
+    const output = {
+      ...row,
+      id,
+      clave: text(row.clave || id).toUpperCase(),
+      key: text(row.clave || id).toUpperCase(),
+      nombre: text(row.nombre || row.clave || id),
+      tipo: text(row.tipo || 'firebase'),
+      endpoint: text(row.endpoint),
+      spreadsheetId: text(row.spreadsheetId),
+      activo: serviceActive(row),
+      estado: serviceActive(row) ? 'ACTIVO' : 'INACTIVO',
+      timeoutMs: Number(row.timeoutMs || 45000),
+      version: text(row.version || 'firebase-1'),
+      mensaje: text(row.mensaje),
+      secretoConfigurado: Boolean(secret)
+    };
+    if (includeSecrets) output.secreto = secret;
+    else delete output.secreto;
+    return output;
+  });
 
-function timeoutValue(value, fallback) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : Number(fallback || 30000);
-}
-
-async function fetchTimed(url, options, timeoutMs) {
-  const controller = new AbortController();
-  const ms = Math.min(120000, Math.max(5000, timeoutValue(timeoutMs, 30000)));
-  const timer = setTimeout(() => controller.abort(), ms);
-  try {
-    return await fetch(url, { ...options, signal: controller.signal });
-  } catch (error) {
-    if (error && error.name === 'AbortError') {
-      throw new Error('La conexión con Claves superó el tiempo máximo.');
+  const defaults = [
+    {
+      id: 'titulos',
+      clave: 'TITULOS',
+      key: 'TITULOS',
+      nombre: 'Firebase Títulos',
+      tipo: 'firebase',
+      activo: true,
+      estado: 'ACTIVO',
+      timeoutMs: 45000,
+      version: 'firebase-1',
+      mensaje: 'Operación directa sobre titulos-ec2fa.',
+      secretoConfigurado: false
+    },
+    {
+      id: 'requisitos',
+      clave: 'REQUISITOS',
+      key: 'REQUISITOS',
+      nombre: 'Firebase UTET',
+      tipo: 'firebase',
+      activo: true,
+      estado: 'ACTIVO',
+      timeoutMs: 30000,
+      version: 'firebase-1',
+      mensaje: 'Consulta mínima de estudiantes en utet-4387a.',
+      secretoConfigurado: false
     }
-    throw error;
-  } finally {
-    clearTimeout(timer);
+  ];
+
+  for (const fallback of defaults) {
+    if (!services.some((item) => item.clave === fallback.clave)) services.push(fallback);
   }
+  return services;
 }
 
-function decodeJsonLayers(value, maxDepth = 4) {
-  let current = value;
-  for (let depth = 0; depth < maxDepth && typeof current === 'string'; depth += 1) {
-    const raw = current.trim();
-    if (!raw) return {};
-    try {
-      current = JSON.parse(raw);
-    } catch (error) {
-      break;
-    }
-  }
-  return current;
-}
+async function saveService(service = {}) {
+  const key = text(service.clave || service.key || service.id || service.nombre).toUpperCase();
+  const id = slug(service.id || key);
+  if (!id || !key) throw new Error('El servicio necesita una clave.');
+  const current = (await listServices(true)).find((item) => item.id === id || item.clave === key) || {};
+  const secret = text(service.secreto || service.credencial || service.token) || current.secreto || '';
+  const active = service.activo === false || text(service.estado).toUpperCase() === 'INACTIVO' ? false : true;
 
-function normalizeJsonResponse(value) {
-  const decoded = decodeJsonLayers(value);
-  if (!decoded || typeof decoded !== 'object') return decoded;
-
-  const output = Array.isArray(decoded) ? decoded.slice() : { ...decoded };
-  for (const key of ['respuesta', 'data', 'resultado', 'result']) {
-    if (typeof output[key] === 'string') {
-      output[key] = decodeJsonLayers(output[key]);
-    }
-  }
-  return output;
+  const saved = await setDocument('TITULOS', 'servicios', id, {
+    clave: key,
+    nombre: text(service.nombre || current.nombre || key),
+    tipo: text(service.tipo || current.tipo || 'firebase'),
+    endpoint: text(service.endpoint || current.endpoint),
+    secreto: secret,
+    spreadsheetId: text(service.spreadsheetId || current.spreadsheetId),
+    estado: active ? 'ACTIVO' : 'INACTIVO',
+    activo: active,
+    timeoutMs: Number(service.timeoutMs || current.timeoutMs || 45000),
+    version: text(service.version || current.version || 'firebase-1'),
+    mensaje: text(service.mensaje || current.mensaje),
+    actualizadoEn: nowIso()
+  });
+  return { ok: true, servicio: saved, service: saved, mensaje: 'Servicio guardado en Firebase Títulos.' };
 }
 
 export async function requestClaves(env, action, data = {}, timeoutMs) {
-  const access = text(env.CLAVES_ACCESS_TOKEN);
-  if (!access) throw new Error('No está configurado CLAVES_ACCESS_TOKEN.');
+  void env;
+  void timeoutMs;
+  const normalized = text(action).toUpperCase();
 
-  const response = await fetchTimed(
-    validateUrl(env.CLAVES_APPS_SCRIPT_URL),
-    {
-      method: 'POST',
-      cache: 'no-store',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({
-        accion: text(action).toUpperCase(),
-        action: text(action).toUpperCase(),
-        acceso: access,
-        datos: data || {}
-      })
-    },
-    timeoutMs || env.CLAVES_TIMEOUT_MS || 30000
-  );
-
-  const raw = await response.text();
-  let result;
-  try {
-    result = normalizeJsonResponse(raw || '{}');
-  } catch (error) {
-    throw new Error('Claves respondió en un formato no válido.');
+  if (normalized === 'LISTAR_SERVICIOS_PUBLICOS') {
+    const servicios = (await listServices(false)).filter((item) => item.activo);
+    return { ok: true, servicios, total: servicios.length, origen: 'FIREBASE_TITULOS' };
+  }
+  if (normalized === 'LISTAR_SERVICIOS_ADMIN') {
+    const servicios = await listServices(true);
+    return { ok: true, servicios, registros: servicios, total: servicios.length, origen: 'FIREBASE_TITULOS' };
+  }
+  if (normalized === 'GUARDAR_SERVICIO') {
+    return saveService(data.servicio || data.service || data);
+  }
+  if (normalized === 'CONSULTAR_ESTUDIANTE_REQUISITOS' || normalized === 'CONSULTAR_ACCESO_ESTUDIANTE') {
+    return getStudentBasic(data.cedula || data.numeroIdentificacion || data.identificacion, {
+      periodoId: data.periodoId || data.periodo || data.periodoLabel,
+      includePhone: data.includePhone === true || data.rol === 'admin'
+    });
+  }
+  if (normalized === 'EJECUTAR_SERVICIO') {
+    return runService(
+      env,
+      data.servicio,
+      data.accionServicio,
+      data.metodo,
+      data.payload || {},
+      data.rol,
+      timeoutMs
+    );
+  }
+  if (normalized === 'LISTAR_PROVEEDORES_IA_PUBLICOS') {
+    const proveedores = await listProviders(false);
+    return { ok: true, proveedores, total: proveedores.length };
+  }
+  if (normalized === 'LISTAR_PROVEEDORES_IA_ADMIN') {
+    const proveedores = await listProviders(true);
+    return { ok: true, proveedores, total: proveedores.length };
+  }
+  if (normalized === 'GUARDAR_PROVEEDOR_IA') {
+    const proveedor = await saveProvider(data.proveedor || data.provider || data);
+    return { ok: true, proveedor, data: proveedor };
+  }
+  if (normalized === 'CAMBIAR_ESTADO_PROVEEDOR_IA') {
+    const proveedor = await toggleProvider(data.providerId || data.proveedorId, data.activo === true);
+    return { ok: true, proveedor, providerId: proveedor.id };
+  }
+  if (normalized === 'GENERAR_IA') {
+    return generateWithProvider(data.providerId || data.proveedorId, data.prompt, data.options || {});
   }
 
-  if (!result || typeof result !== 'object') {
-    throw new Error('Claves respondió en un formato no válido.');
-  }
-  if (!response.ok || result.ok === false) {
-    throw new Error(text(result.mensaje || result.error) || 'Claves devolvió un error.');
-  }
-  return result;
+  throw new Error('Acción no reconocida en Firebase: ' + action);
 }
 
-export function runService(env, service, action, method, payload, role, timeoutMs) {
-  return requestClaves(env, 'EJECUTAR_SERVICIO', {
-    servicio: text(service).toUpperCase(),
-    accionServicio: text(action).toUpperCase(),
-    metodo: text(method || 'POST').toUpperCase(),
-    rol: text(role || 'student'),
-    payload: payload || {}
-  }, timeoutMs);
+export async function runService(env, service, action, method, payload, role, timeoutMs) {
+  void env;
+  void method;
+  void timeoutMs;
+  const normalizedService = text(service).toUpperCase();
+  if (normalizedService === 'TITULOS') {
+    return executeTitulosAction(action, payload || {}, text(role || 'student').toLowerCase());
+  }
+  if (normalizedService === 'REQUISITOS') {
+    return pullRequisitos(action, { ...(payload || {}), rol: role });
+  }
+  throw new Error('Servicio Firebase no implementado: ' + service);
 }
 
-export function getPublicStatus(env) {
+export async function getPublicStatus(env) {
   return requestClaves(env, 'LISTAR_SERVICIOS_PUBLICOS', {});
 }
 
-export function listAiProviders(env, includeInactive = false) {
-  return requestClaves(
-    env,
-    includeInactive ? 'LISTAR_PROVEEDORES_IA_ADMIN' : 'LISTAR_PROVEEDORES_IA_PUBLICOS',
-    {}
-  ).then((result) => Array.isArray(result.proveedores) ? result.proveedores : []);
+export async function listAiProviders(env, includeInactive = false) {
+  void env;
+  return listProviders(includeInactive);
 }
 
-export function generateAi(env, providerId, prompt, options) {
-  return requestClaves(env, 'GENERAR_IA', {
-    providerId: text(providerId),
-    prompt: text(prompt),
-    options: options || {}
-  });
+export async function generateAi(env, providerId, prompt, options) {
+  void env;
+  return generateWithProvider(providerId, prompt, options || {});
 }
 
-export function saveAiProvider(env, provider) {
-  return requestClaves(env, 'GUARDAR_PROVEEDOR_IA', { proveedor: provider || {} });
+export async function saveAiProvider(env, provider) {
+  void env;
+  const saved = await saveProvider(provider || {});
+  return { ok: true, proveedor: saved, data: saved };
 }
 
-export function toggleAiProvider(env, providerId, active) {
-  return requestClaves(env, 'CAMBIAR_ESTADO_PROVEEDOR_IA', {
-    providerId: text(providerId),
-    activo: active === true
-  });
+export async function toggleAiProvider(env, providerId, active) {
+  void env;
+  return toggleProvider(providerId, active === true);
+}
+
+export async function getTitlePublicConfiguration() {
+  return publicTitleConfiguration();
 }
