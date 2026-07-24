@@ -37,58 +37,53 @@ const studentHtml = read('estudiantes-mvp/estudiante.html');
 const coordinatorHtml = read('coordinadores-mvp/coordinador.html');
 const adminHtml = read('administrador/ad-index.html');
 
-assert(!/firebase/i.test(studentHtml), 'estudiante.html todavía contiene referencias Firebase.');
-assert(!/firebase/i.test(coordinatorHtml), 'coordinador.html todavía contiene referencias Firebase.');
-assert(!/firebase/i.test(adminHtml), 'ad-index.html todavía contiene referencias Firebase.');
+assert(!/firebase-app|firebase-firestore/i.test(studentHtml), 'El estudiante no debe cargar Firebase directamente en el navegador.');
+assert(!/firebase-app|firebase-firestore/i.test(coordinatorHtml), 'Coordinadores no debe cargar Firebase directamente en el navegador.');
+assert(!/firebase-app|firebase-firestore/i.test(adminHtml), 'Administrador no debe cargar Firebase directamente en el navegador.');
 
 [
   'functions/_lib/http.js',
+  'functions/_lib/firestore.js',
+  'functions/_lib/requisitos-firebase.js',
+  'functions/_lib/titulos-firebase.js',
+  'functions/_lib/ia-firebase.js',
   'functions/_lib/claves.js',
   'functions/api/claves.js',
   'functions/api/titulos.js',
   'functions/api/requisitos.js',
   'functions/api/ia.js',
-  'google-apps-script/CLAVES_01_CONFIG.gs',
-  'google-apps-script/CLAVES_02_RELAY.gs',
   'estudiantes-mvp/js/requisitos.estudiantes.service.js',
   'estudiantes-mvp/js/titulos.cola.service.js',
-  'estudiantes-mvp/js/ia.config.service.js',
   'coordinadores-mvp/js/coordinador.sheets.primary.js',
   'coordinadores-mvp/js/coordinador.app.js',
   'administrador/ad-js/ad-api.service.js',
-  'administrador/ad-js/ad-google-sheets.app.js',
-  'administrador/ad-js/ad-servicios.app.js'
+  'administrador/ad-js/ad-google-sheets.app.js'
 ].forEach(read);
 
-[
-  'functions/_lib/firestore.js',
-  'estudiantes-mvp/js/firebase.core.service.js',
-  'estudiantes-mvp/js/firebase.estudiantes.service.js',
-  'estudiantes-mvp/js/firebase.ia.service.js',
-  'estudiantes-mvp/js/firebase.envios.service.js',
-  'administrador/ad-js/ad-firebase.service.js'
-].forEach((relativePath) => {
-  assert(!fs.existsSync(path.join(root, relativePath)), 'Archivo Firebase obsoleto presente: ' + relativePath);
-});
+const firestore = read('functions/_lib/firestore.js');
+const requirements = read('functions/_lib/requisitos-firebase.js');
+const titles = read('functions/_lib/titulos-firebase.js');
+const ai = read('functions/_lib/ia-firebase.js');
+const claves = read('functions/_lib/claves.js');
+const titlesApi = read('functions/api/titulos.js');
+const requirementsApi = read('functions/api/requisitos.js');
+const aiApi = read('functions/api/ia.js');
+const adminApi = read('administrador/ad-js/ad-api.service.js');
 
-const titulosApi = read('functions/api/titulos.js');
-const requisitosApi = read('functions/api/requisitos.js');
-const iaApi = read('functions/api/ia.js');
-const clavesApi = read('functions/api/claves.js');
-const clavesLib = read('functions/_lib/claves.js');
-const clavesRelay = read('google-apps-script/CLAVES_02_RELAY.gs');
-const devExample = read('.dev.vars.example');
-
-assert(/runService\s*\(\s*env\s*,\s*['"]TITULOS['"]/.test(titulosApi), 'La API de Títulos no está conectada a Claves.');
-assert(/runService\s*\(\s*env\s*,\s*['"]REQUISITOS['"]/.test(requisitosApi), 'La API de Requisitos no está conectada a Claves.');
-assert(/REQUISITOS_BDLOCAL_SYNC es de solo consulta/.test(requisitosApi), 'La API de Requisitos no declara modo solo consulta.');
-assert(/generateAi/.test(iaApi), 'La API de IA no usa la generación central de Claves.');
-assert(/LISTAR_SERVICIOS_ADMIN/.test(clavesApi + clavesRelay), 'Claves no permite administrar los servicios de forma segura.');
-assert(/GUARDAR_SERVICIO/.test(clavesApi + clavesRelay), 'Claves no permite guardar endpoints, tokens y estados.');
-assert(/pull_bl2/.test(clavesRelay) && /ping/.test(clavesRelay) && /solo consulta/.test(clavesRelay), 'El relay no limita Requisitos a operaciones de consulta.');
-assert(!/firestore|firebase/i.test(titulosApi + requisitosApi + iaApi + clavesApi + clavesLib), 'El backend activo todavía contiene Firebase o Firestore.');
-assert(/CLAVES_APPS_SCRIPT_URL/.test(devExample), '.dev.vars.example no contiene CLAVES_APPS_SCRIPT_URL.');
-assert(/CLAVES_ACCESS_TOKEN/.test(devExample), '.dev.vars.example no contiene CLAVES_ACCESS_TOKEN.');
+assert(/titulos-ec2fa/.test(firestore), 'No está configurado Firebase Títulos titulos-ec2fa.');
+assert(/utet-4387a/.test(firestore), 'No está configurado Firebase UTET utet-4387a.');
+assert(/Estudiantes/.test(requirements), 'La consulta UTET no usa la colección Estudiantes.');
+assert(/numeroIdentificacion/.test(requirements) && /Nombres/.test(requirements) && /NombreCarrera/.test(requirements), 'La consulta UTET no normaliza cédula, nombre y carrera.');
+assert(/includePhone/.test(requirements), 'La consulta UTET no contempla el celular exclusivo del administrador.');
+assert(/versiones_envio/.test(titles) && /resoluciones/.test(titles), 'Títulos no usa colecciones principales para versiones y resoluciones.');
+assert(/ENVIO_ESTUDIANTE/.test(titles) && /GUARDAR_RESOLUCION/.test(titles), 'Títulos no implementa envío y resolución.');
+assert(/listProviders/.test(ai) && /generateWithProvider/.test(ai), 'IA no está conectada a Firebase Títulos.');
+assert(/executeTitulosAction/.test(claves) && /pullRequisitos/.test(claves), 'La fachada no enruta hacia las dos Firebase.');
+assert(!/CLAVES_APPS_SCRIPT_URL|script\.google\.com/.test(claves + titles + requirements + ai), 'La capa activa todavía depende de Apps Script.');
+assert(/runService\s*\(\s*env\s*,\s*['"]TITULOS['"]/.test(titlesApi), 'La API de Títulos no usa la fachada Firebase.');
+assert(/runService\s*\(\s*env\s*,\s*['"]REQUISITOS['"]/.test(requirementsApi), 'La API de Requisitos no usa la fachada Firebase.');
+assert(/generateAi/.test(aiApi), 'La API de IA no usa el motor Firebase.');
+assert(/CONSULTAR_ESTUDIANTE/.test(adminApi), 'Administrador no consulta el estudiante con el rol que permite devolver celular.');
 
 if (errors.length) {
   console.error('\n[Arquitectura] Se encontraron errores:\n');
@@ -97,5 +92,5 @@ if (errors.length) {
   process.exit(1);
 }
 
-console.log('[Arquitectura] Correcta: Requisitos=consulta, Títulos=operación, Claves=configuración/IA.');
-console.log('[Arquitectura] Firebase y Firestore no están cargados por las tres aplicaciones.');
+console.log('[Arquitectura] Correcta: UTET=datos mínimos del estudiante; Títulos=envíos, coordinación, administración e IA.');
+console.log('[Arquitectura] Las tres aplicaciones acceden por Cloudflare Functions y no exponen Firebase directamente en el navegador.');
