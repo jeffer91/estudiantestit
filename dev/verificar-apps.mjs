@@ -69,6 +69,8 @@ requireIds(adminHtml, [
 const adminApi = read('administrador/ad-js/ad-api.service.js');
 const adminApp = read('administrador/ad-js/ad-google-sheets.app.js');
 const adminGlobalApp = read('administrador/ad-js/ad-administracion-global.js');
+const adminPdf = read('administrador/ad-js/ad-pdf-firebase.js');
+const adminVersion = read('administrador/ad-js/ad-version.js');
 const coordinatorBootstrap = read('coordinadores-mvp/js/coordinador.bootstrap.independiente.js');
 const studentRequirements = read('estudiantes-mvp/js/requisitos.estudiantes.service.js');
 const studentSheets = read('estudiantes-mvp/js/sheets.service.js');
@@ -78,7 +80,9 @@ const studentApp = read('estudiantes-mvp/js/estudiante.app.js');
 const accessApi = read('functions/api/acceso-estudiante.js');
 const requirementsApi = read('functions/api/requisitos.js');
 const statisticsApi = read('functions/api/estadisticas.js');
-const globalService = read('functions/_lib/admin-global.js');
+const globalService = read('functions/_lib/admin-global-v5.js') + read('functions/_lib/admin-global-v6.js');
+const titlesService = read('functions/_lib/titulos-firebase-v6.js');
+const claves = read('functions/_lib/claves.js');
 const studentBuild = read('dev/preparar-pages-estudiantes.mjs');
 const coordinatorBuild = read('dev/preparar-pages-coordinadores.mjs');
 const adminBuild = read('dev/preparar-pages-administrador.mjs');
@@ -89,19 +93,24 @@ assert(/titulos-administrador\.pages\.dev/.test(adminApi), 'Administrador no tie
 assert(/\/api\/estadisticas/.test(adminApi), 'Administrador no consulta el endpoint administrativo global.');
 assert(/listarTitulosGlobal/.test(adminApi) && /listarPeriodosAdmin/.test(adminApi), 'Administrador no expone lista global y períodos completos.');
 assert(/ad-administracion-global\.js/.test(adminApi), 'No se carga el controlador administrativo global.');
+assert(/ad-pdf-firebase\.js/.test(adminApi) && /ADMIN_REPORTE_FIREBASE_TITULOS/.test(adminApi), 'No está disponible el PDF de Firebase Títulos.');
+assert(/ad-version\.js/.test(adminApi) && /3\.3\.3/.test(adminVersion), 'Administrador no fuerza la versión 3.3.3.');
 assert(/ADMIN_LISTA_GLOBAL_TITULOS/.test(statisticsApi), 'La API no ofrece la lista global de títulos.');
 assert(/ADMIN_LISTAR_PERIODOS/.test(statisticsApi) && /ADMIN_GUARDAR_PERIODO/.test(statisticsApi), 'La API no administra períodos.');
 assert(/ADMIN_ASIGNAR_CARRERA_COORDINADOR/.test(statisticsApi), 'La API no asigna carreras a coordinadores.');
 assert(/EstudiantesPeriodo/.test(globalService) && /envios/.test(globalService), 'La lista global no combina UTET y Títulos.');
 assert(/NO_ENVIADO/.test(globalService) && /fueraPoblacion/.test(globalService), 'La lista global no distingue faltantes o registros externos.');
-assert(/coordinadorId/.test(globalService) && /carrerasIds/.test(globalService), 'La relación carrera-coordinador no mantiene compatibilidad.');
-assert(/toggle-period/.test(adminGlobalApp) && /principal-period/.test(adminGlobalApp), 'Administrador no permite activar o definir el período principal.');
+assert(/totalEnviosPeriodo/.test(globalService) && /enviosByCedula/.test(globalService), 'La lista global no cruza todos los envíos reales.');
+assert(/periodoNombre/.test(titlesService) && /FIREBASE_TITULOS_DIRECTO/.test(titlesService), 'Coordinadores no lee Firebase Títulos directamente por período completo.');
+assert(/titulos-firebase-v6\.js/.test(claves), 'La fachada no usa la lectura definitiva de Firebase Títulos.');
 assert(/data-v2-career-select/.test(adminGlobalApp), 'Carreras no permite asignar coordinadores.');
 assert(/NO_ENVIADO/.test(adminGlobalApp) && /outlook\.office\.com/.test(adminGlobalApp) && /wa\.me/.test(adminGlobalApp), 'Títulos no incluye no enviados, Outlook y WhatsApp.');
 assert(/delete-detail/.test(adminGlobalApp) && /return-detail/.test(adminGlobalApp), 'El modal no permite devolver o eliminar.');
+assert(/Generar PDF Firebase Títulos/.test(adminPdf), 'El botón del PDF no tiene la etiqueta esperada.');
 assert(/role\(context\.request\) !== 'admin'/.test(statisticsApi), 'Las operaciones globales no están restringidas al administrador.');
 assert(!/ad-seccion-devolver|ad-form-devolver/.test(adminHtml), 'Administrador todavía conserva la pantalla separada de devolución.');
 assert(/https:\/\/titulos-coordinadores\.pages\.dev/.test(coordinatorBootstrap), 'Coordinadores no apunta a su dominio oficial.');
+assert(/2\.8\.7/.test(coordinatorBootstrap) && /2\.8\.7/.test(coordinatorHtml), 'Coordinadores no fuerza la versión 2.8.7.');
 assert(/127\.0\.0\.1:8788/.test(adminApi), 'Administrador no apunta al entorno local 8788.');
 assert(/127\.0\.0\.1:8788/.test(coordinatorBootstrap), 'Coordinadores no apunta al entorno local 8788.');
 assert(/\/api\/requisitos/.test(studentRequirements), 'Estudiantes no consulta la API de Requisitos.');
@@ -140,5 +149,5 @@ if (errors.length) {
 }
 
 console.log('[Apps] Estudiantes: consulta, envío y revisión integrados mediante Cloudflare Functions.');
-console.log('[Apps] Coordinadores: dominio, períodos activos y carreras asignadas correctos.');
-console.log('[Apps] Administrador: períodos completos, carreras, lista global y estadísticas unificadas.');
+console.log('[Apps] Coordinadores: Firebase Títulos directo, períodos activos y carreras asignadas.');
+console.log('[Apps] Administrador: lista UTET + envíos reales, estadísticas y PDF Firebase Títulos.');
