@@ -1,10 +1,10 @@
 (function(window){
   'use strict';
-  var API_PUBLICA='https://titulos.pages.dev';
   var API_LOCAL='http://127.0.0.1:8788';
+  var API_ADMIN='https://titulos-administrador.pages.dev';
   function texto(v){return String(v===null||v===undefined?'':v).trim();}
   function esLocal(){var h=texto(window.location&&window.location.hostname).toLowerCase();return['localhost','127.0.0.1','0.0.0.0','::1','[::1]'].indexOf(h)>=0;}
-  function base(){var f=texto(window.TITULOS_API_BASE||'');if(f)return f.replace(/\/$/,'');return esLocal()?API_LOCAL:API_PUBLICA;}
+  function base(){var f=texto(window.TITULOS_API_BASE||'');if(f)return f.replace(/\/$/,'');if(esLocal())return API_LOCAL;var o=texto(window.location&&window.location.origin);return/^https?:\/\//i.test(o)?o.replace(/\/$/,''):API_ADMIN;}
   function leerRespuesta(resp,nombre){return resp.text().then(function(body){var json={};try{json=body?JSON.parse(body):{};}catch(error){throw new Error((nombre||'El servicio')+' respondió en un formato no válido.');}if(!resp.ok||json.ok===false)throw new Error(json.mensaje||json.message||json.error||('Error HTTP '+resp.status));return json;});}
   function solicitar(ruta,accion,datos,metodo){return fetch(base()+ruta,{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json','X-Titulos-App':'administrador'},body:JSON.stringify({accion:accion,action:accion,metodo:metodo||'POST',datos:datos||{}})}).then(function(resp){return leerRespuesta(resp,'El servicio');});}
   function titulos(a,d,m){return solicitar('/api/titulos',a,d,m);}
@@ -43,5 +43,5 @@
     extraerTitulos:function(r){return lista(r,['envios','registros']);}
   };
   window.ADAPIService=Object.freeze(api);
-  if(window.document&&!window.document.querySelector('script[data-ad-servicios="true"]')){var script=window.document.createElement('script');script.src='./ad-js/ad-servicios.app.js?v=3.0.0';script.async=false;script.setAttribute('data-ad-servicios','true');window.document.head.appendChild(script);}
+  if(window.document&&!window.document.querySelector('script[data-ad-servicios="true"]')){var script=window.document.createElement('script');script.src='./ad-js/ad-servicios.app.js?v=3.1.0';script.async=false;script.setAttribute('data-ad-servicios','true');window.document.head.appendChild(script);}
 })(window);
