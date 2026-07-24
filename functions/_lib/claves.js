@@ -1,9 +1,9 @@
 /* Fachada compatible: Títulos, Requisitos e IA usan Firebase autenticado. */
 
-import { text } from './firestore.js';
+import { text } from './firestore-fixed.js';
 import { generateWithProvider, listProviders, saveProvider, toggleProvider } from './ia-firebase.js';
-import { getStudentBasic, pullRequisitos } from './requisitos-firebase.js';
-import { executeTitulosAction, publicTitleConfiguration } from './titulos-firebase.js';
+import { getStudentBasic, pullRequisitos } from './requisitos-firebase-fixed.js';
+import { executeTitulosAction, publicTitleConfiguration } from './titulos-firebase-fixed.js';
 
 const PRIVATE_STUDENT_FIELDS = new Set([
   'celular',
@@ -65,7 +65,7 @@ async function serviceStatuses(env) {
       clave: 'TITULOS',
       key: 'TITULOS',
       nombre: 'Firebase Títulos',
-      tipo: 'firebase-iam',
+      tipo: 'firebase-rest',
       endpoint: 'firebase://titulos-ec2fa',
       projectId: 'titulos-ec2fa',
       activo: titleConfig.activo !== false,
@@ -74,7 +74,7 @@ async function serviceStatuses(env) {
       version: text(titleConfig.version || 'firebase-3'),
       mensaje: text(titleConfig.mensaje || 'Operación autenticada sobre Firebase Títulos.'),
       soloLectura: false,
-      configuracion: 'cloudflare-secrets',
+      configuracion: 'firebase-web-o-service-account',
       secretoConfigurado: true
     },
     {
@@ -82,16 +82,16 @@ async function serviceStatuses(env) {
       clave: 'REQUISITOS',
       key: 'REQUISITOS',
       nombre: 'Firebase UTET',
-      tipo: 'firebase-iam',
+      tipo: 'firebase-rest',
       endpoint: 'firebase://utet-4387a',
       projectId: 'utet-4387a',
       activo: true,
       estado: 'ACTIVO',
       timeoutMs: 30000,
       version: 'firebase-3',
-      mensaje: 'Consulta mínima autenticada de estudiantes en Firebase UTET.',
+      mensaje: 'Consulta mínima de estudiantes en Firebase UTET.',
       soloLectura: true,
-      configuracion: 'cloudflare-secrets',
+      configuracion: 'firebase-web-o-service-account',
       secretoConfigurado: true
     }
   ];
@@ -108,12 +108,12 @@ export async function requestClaves(env, action, data = {}, timeoutMs) {
       servicios,
       registros: servicios,
       total: servicios.length,
-      origen: 'FIREBASE_IAM_CLOUDFLARE'
+      origen: 'FIREBASE_REST_CLOUDFLARE'
     };
   }
   if (normalized === 'GUARDAR_SERVICIO') {
     throw new Error(
-      'Títulos y UTET se configuran mediante secretos cifrados de Cloudflare Pages; no se guardan endpoints ni tokens desde el navegador.'
+      'Títulos y UTET se configuran en Cloudflare Pages; no se guardan endpoints ni tokens desde el navegador.'
     );
   }
   if (normalized === 'CONSULTAR_ESTUDIANTE_REQUISITOS' || normalized === 'CONSULTAR_ACCESO_ESTUDIANTE') {
