@@ -1,15 +1,13 @@
-/* Cliente Firestore REST compartido para Cloudflare Pages Functions. */
+/* Cliente Firestore REST autenticado para Cloudflare Pages Functions. */
 
 export const FIREBASE_PROJECTS = Object.freeze({
-  TITULOS: Object.freeze({
-    projectId: 'titulos-ec2fa',
-    apiKey: 'AIzaSyDkSOhJ552LwxQtt8GhP5iDJk49y0t4mOg'
-  }),
-  UTET: Object.freeze({
-    projectId: 'utet-4387a',
-    apiKey: 'AIzaSyCaHf1C0BB0X_H3BDZ1o-UDAsPmLTjsZLA'
-  })
+  TITULOS: Object.freeze({ projectId: 'titulos-ec2fa' }),
+  UTET: Object.freeze({ projectId: 'utet-4387a' })
 });
+
+const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
+const FIRESTORE_SCOPE = 'https://www.googleapis.com/auth/datastore';
+const tokenCache = new Map();
 
 export function text(value) {
   return String(value === null || value === undefined ? '' : value).trim();
@@ -39,7 +37,7 @@ function projectConfig(project) {
   const key = text(project).toUpperCase();
   const config = FIREBASE_PROJECTS[key];
   if (!config) throw new Error('Proyecto Firebase no configurado: ' + key);
-  return config;
+  return { key, ...config };
 }
 
 function apiBase(project) {
@@ -47,19 +45,165 @@ function apiBase(project) {
   return `https://firestore.googleapis.com/v1/projects/${config.projectId}/databases/(default)`;
 }
 
-function withKey(project, url) {
-  const config = projectConfig(project);
-  const parsed = new URL(url);
-  parsed.searchParams.set('key', config.apiKey);
-  return parsed.toString();
-}
-
 function documentPath(parts) {
   return parts.map((item) => encodeURIComponent(text(item))).join('/');
 }
 
-function isIsoDate(value) {
-  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(value);
+function documentName(project, collectionName, documentId) {
+  const config = projectConfig(project);
+  return `projects/${config.projectId}/databases/(default)/documents/${collectionName}/${documentId}`;
+}
+
+function readEnv(env, name) {
+  return env && Object.prototype.hasOwnProperty.call(env, name) ? env[name] : undefined;
+}
+
+function parseServiceAccount(raw, bindingName) {
+  if (!raw) return null;
+  let value = raw;
+  if (typeof value === 'string') {
+    try {
+      value = JSON.parse(value);
+    } catch (_error) {
+      throw new Error(`${bindingName} debe contener el JSON completo de una cuenta de servicio.`);
+    }
+  }
+  if (!value || typeof value !== 'object') {
+    throw new Error(`${bindingName} no contiene una cuenta de servicio válida.`);
+  }
+  const clientEmail = text(value.client_email || value.clientEmail);
+  const privateKey = text(value.private_key || value.privateKey).replace(/\\n/g, '\n');
+  if (!clientEmail || !privateKey) {
+    throw new Error(`${bindingName} debe incluir client_email y private_key.`);
+  }
+  return {
+    clientEmail,
+    privateKey,
+    privateKeyId: text(value.private_key_id || value.privateKeyId),
+    projectId: text(value.project_id || value.projectId)
+  };
+}
+
+function serviceAccount(env, project) {
+  const config = projectConfig(project);
+  const names = config.key === 'TITULOS'
+    ? ['TITULOS_FIREBASE_SERVICE_ACCOUNT', 'FIREBASE_TITULOS_SERVICE_ACCOUNT']
+    : ['UTET_FIREBASE_SERVICE_ACCOUNT', 'FIREBASE_UTET_SERVICE_ACCOUNT'];
+
+  for (const name of names) {
+    const parsed = parseServiceAccount(readEnv(env, name), name);
+    if (parsed) return parsed;
+  }
+
+  const generic = parseServiceAccount(readEnv(env, 'FIREBASE_SERVICE_ACCOUNT'), 'FIREBASE_SERVICE_ACCOUNT');
+  if (generic) return generic;
+
+  throw new Error(
+    `Falta el secreto ${names[0]} en Cloudflare Pages. ` +
+    `Debe contener el JSON de una cuenta de servicio con acceso IAM a ${config.projectId}.`
+  );
+}
+
+function bytesToBase64Url(bytes) {
+  let binary = '';
+  const chunk = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(index, Math.min(index + chunk, bytes.length)));
+  }
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function stringToBase64Url(value) {
+  return bytesToBase64Url(new TextEncoder().encode(value));
+}
+
+function pemToArrayBuffer(pem) {
+  const base64 = pem
+    .replace(/-----BEGIN PRIVATE KEY-----/g, '')
+    .replace(/-----END PRIVATE KEY-----/g, '')
+    .replace(/\s+/g, '');
+  if (!base64) throw new Error('La clave privada de Firebase está vacía.');
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return bytes.buffer;
+}
+
+async function createSignedJwt(account) {
+  const now = Math.floor(Date.now() / 1000);
+  const header = {
+    alg: 'RS256',
+    typ: 'JWT',
+    ...(account.privateKeyId ? { kid: account.privateKeyId } : {})
+  };
+  const payload = {
+    iss: account.clientEmail,
+    scope: FIRESTORE_SCOPE,
+    aud: TOKEN_ENDPOINT,
+    iat: now,
+    exp: now + 3600
+  };
+  const unsigned = `${stringToBase64Url(JSON.stringify(header))}.${stringToBase64Url(JSON.stringify(payload))}`;
+  const key = await crypto.subtle.importKey(
+    'pkcs8',
+    pemToArrayBuffer(account.privateKey),
+    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const signature = await crypto.subtle.sign(
+    'RSASSA-PKCS1-v1_5',
+    key,
+    new TextEncoder().encode(unsigned)
+  );
+  return `${unsigned}.${bytesToBase64Url(new Uint8Array(signature))}`;
+}
+
+async function accessToken(env, project) {
+  const config = projectConfig(project);
+  const account = serviceAccount(env, project);
+  const cacheKey = `${config.key}|${account.clientEmail}`;
+  const cached = tokenCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now() + 60 * 1000) return cached.token;
+
+  const assertion = await createSignedJwt(account);
+  const response = await fetch(TOKEN_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+      assertion
+    }).toString()
+  });
+  const raw = await response.text();
+  let data = {};
+  try {
+    data = raw ? JSON.parse(raw) : {};
+  } catch (_error) {
+    throw new Error('Google OAuth respondió en un formato no válido.');
+  }
+  if (!response.ok || !data.access_token) {
+    throw new Error(
+      `No se pudo autenticar Firebase ${config.projectId}: ` +
+      text(data.error_description || data.error || `HTTP ${response.status}`)
+    );
+  }
+
+  const expiresIn = Math.max(300, Number(data.expires_in || 3600));
+  const result = {
+    token: data.access_token,
+    expiresAt: Date.now() + expiresIn * 1000
+  };
+  tokenCache.set(cacheKey, result);
+  return result.token;
+}
+
+async function firestoreFetch(project, url, options = {}, env) {
+  const token = await accessToken(env, project);
+  const headers = new Headers(options.headers || {});
+  headers.set('Authorization', `Bearer ${token}`);
+  if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+  return fetch(url, { ...options, headers });
 }
 
 export function encodeValue(value) {
@@ -72,12 +216,8 @@ export function encodeValue(value) {
       : { doubleValue: value };
   }
   if (value instanceof Date) return { timestampValue: value.toISOString() };
-  if (Array.isArray(value)) {
-    return { arrayValue: { values: value.map(encodeValue) } };
-  }
-  if (typeof value === 'object') {
-    return { mapValue: { fields: encodeFields(value) } };
-  }
+  if (Array.isArray(value)) return { arrayValue: { values: value.map(encodeValue) } };
+  if (typeof value === 'object') return { mapValue: { fields: encodeFields(value) } };
   return { stringValue: String(value) };
 }
 
@@ -101,20 +241,14 @@ export function decodeValue(value) {
   if ('referenceValue' in value) return value.referenceValue;
   if ('bytesValue' in value) return value.bytesValue;
   if ('geoPointValue' in value) return value.geoPointValue;
-  if ('arrayValue' in value) {
-    return (value.arrayValue && value.arrayValue.values || []).map(decodeValue);
-  }
-  if ('mapValue' in value) {
-    return decodeFields(value.mapValue && value.mapValue.fields || {});
-  }
+  if ('arrayValue' in value) return (value.arrayValue && value.arrayValue.values || []).map(decodeValue);
+  if ('mapValue' in value) return decodeFields(value.mapValue && value.mapValue.fields || {});
   return null;
 }
 
 export function decodeFields(fields) {
   const output = {};
-  for (const [key, value] of Object.entries(fields || {})) {
-    output[key] = decodeValue(value);
-  }
+  for (const [key, value] of Object.entries(fields || {})) output[key] = decodeValue(value);
   return output;
 }
 
@@ -139,7 +273,6 @@ async function parseResponse(response, source) {
   } catch (_error) {
     throw new Error((source || 'Firestore') + ' respondió en un formato no válido.');
   }
-
   if (!response.ok) {
     const message = data && data.error && (data.error.message || data.error.status)
       || data && data.message
@@ -152,26 +285,29 @@ async function parseResponse(response, source) {
   return data;
 }
 
-export async function getDocument(project, collectionName, documentId) {
+export async function getDocument(project, collectionName, documentId, env) {
   const path = documentPath([collectionName, documentId]);
-  const url = withKey(project, `${apiBase(project)}/documents/${path}`);
-  const response = await fetch(url, { method: 'GET', cache: 'no-store' });
+  const response = await firestoreFetch(
+    project,
+    `${apiBase(project)}/documents/${path}`,
+    { method: 'GET', cache: 'no-store' },
+    env
+  );
   if (response.status === 404) return null;
   return decodeDocument(await parseResponse(response, 'Firestore'));
 }
 
-export async function listCollection(project, collectionName, options = {}) {
+export async function listCollection(project, collectionName, options = {}, env) {
   const pageSize = Math.min(300, Math.max(1, Number(options.pageSize || 300)));
   const maxDocuments = Math.min(10000, Math.max(1, Number(options.maxDocuments || 5000)));
   const documents = [];
   let pageToken = '';
 
   do {
-    const base = `${apiBase(project)}/documents/${documentPath([collectionName])}`;
-    const url = new URL(withKey(project, base));
+    const url = new URL(`${apiBase(project)}/documents/${documentPath([collectionName])}`);
     url.searchParams.set('pageSize', String(pageSize));
     if (pageToken) url.searchParams.set('pageToken', pageToken);
-    const response = await fetch(url.toString(), { method: 'GET', cache: 'no-store' });
+    const response = await firestoreFetch(project, url.toString(), { method: 'GET', cache: 'no-store' }, env);
     if (response.status === 404) return [];
     const data = await parseResponse(response, 'Firestore');
     for (const document of data.documents || []) {
@@ -185,12 +321,10 @@ export async function listCollection(project, collectionName, options = {}) {
   return documents;
 }
 
-export async function queryEqual(project, collectionName, fieldPath, value, limit = 200) {
-  const url = withKey(project, `${apiBase(project)}/documents:runQuery`);
-  const response = await fetch(url, {
+export async function queryEqual(project, collectionName, fieldPath, value, limit = 200, env) {
+  const response = await firestoreFetch(project, `${apiBase(project)}/documents:runQuery`, {
     method: 'POST',
     cache: 'no-store',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       structuredQuery: {
         from: [{ collectionId: collectionName }],
@@ -204,57 +338,82 @@ export async function queryEqual(project, collectionName, fieldPath, value, limi
         limit: Math.min(1000, Math.max(1, Number(limit || 200)))
       }
     })
-  });
+  }, env);
   const data = await parseResponse(response, 'Firestore');
   return (Array.isArray(data) ? data : [])
     .map((item) => decodeDocument(item.document))
     .filter(Boolean);
 }
 
-export async function setDocument(project, collectionName, documentId, data, options = {}) {
+export async function setDocument(project, collectionName, documentId, data, options = {}, env) {
   const clean = {};
   for (const [key, value] of Object.entries(data || {})) {
     if (value !== undefined) clean[key] = value;
   }
-  if (!Object.keys(clean).length) return getDocument(project, collectionName, documentId);
+  if (!Object.keys(clean).length) return getDocument(project, collectionName, documentId, env);
 
-  const base = `${apiBase(project)}/documents/${documentPath([collectionName, documentId])}`;
-  const url = new URL(withKey(project, base));
+  const url = new URL(`${apiBase(project)}/documents/${documentPath([collectionName, documentId])}`);
   if (options.merge !== false) {
-    for (const field of Object.keys(clean)) {
-      url.searchParams.append('updateMask.fieldPaths', field);
-    }
+    for (const field of Object.keys(clean)) url.searchParams.append('updateMask.fieldPaths', field);
   }
+  if (options.exists !== undefined) url.searchParams.set('currentDocument.exists', String(options.exists === true));
+  if (options.updateTime) url.searchParams.set('currentDocument.updateTime', text(options.updateTime));
 
-  const response = await fetch(url.toString(), {
+  const response = await firestoreFetch(project, url.toString(), {
     method: 'PATCH',
     cache: 'no-store',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ fields: encodeFields(clean) })
-  });
+  }, env);
   return decodeDocument(await parseResponse(response, 'Firestore'));
 }
 
-export async function deleteDocument(project, collectionName, documentId) {
-  const url = withKey(
+export async function deleteDocument(project, collectionName, documentId, env) {
+  const response = await firestoreFetch(
     project,
-    `${apiBase(project)}/documents/${documentPath([collectionName, documentId])}`
+    `${apiBase(project)}/documents/${documentPath([collectionName, documentId])}`,
+    { method: 'DELETE', cache: 'no-store' },
+    env
   );
-  const response = await fetch(url, { method: 'DELETE', cache: 'no-store' });
   if (response.status === 404) return false;
   await parseResponse(response, 'Firestore');
   return true;
 }
 
-export async function pingProject(project) {
-  const config = projectConfig(project);
-  try {
-    await listCollection(project, '__ping_inexistente__', { pageSize: 1, maxDocuments: 1 });
-    return { ok: true, projectId: config.projectId };
-  } catch (error) {
-    if (error.status === 404) return { ok: true, projectId: config.projectId };
-    throw error;
+function writeForCommit(project, item) {
+  if (item.delete === true) {
+    return { delete: documentName(project, item.collection, item.id) };
   }
+  const clean = {};
+  for (const [key, value] of Object.entries(item.data || {})) {
+    if (value !== undefined) clean[key] = value;
+  }
+  const write = {
+    update: {
+      name: documentName(project, item.collection, item.id),
+      fields: encodeFields(clean)
+    }
+  };
+  if (item.merge !== false) write.updateMask = { fieldPaths: Object.keys(clean) };
+  if (item.exists !== undefined) write.currentDocument = { exists: item.exists === true };
+  if (item.updateTime) write.currentDocument = { updateTime: text(item.updateTime) };
+  return write;
+}
+
+export async function commitDocuments(project, writes, env) {
+  const normalized = (Array.isArray(writes) ? writes : []).filter((item) => item && item.collection && item.id);
+  if (!normalized.length) return { writeResults: [], commitTime: '' };
+  const response = await firestoreFetch(project, `${apiBase(project)}/documents:commit`, {
+    method: 'POST',
+    cache: 'no-store',
+    body: JSON.stringify({ writes: normalized.map((item) => writeForCommit(project, item)) })
+  }, env);
+  return parseResponse(response, 'Firestore');
+}
+
+export async function pingProject(project, env) {
+  const config = projectConfig(project);
+  await listCollection(project, '__ping_inexistente__', { pageSize: 1, maxDocuments: 1 }, env);
+  return { ok: true, projectId: config.projectId, autenticacion: 'service-account-oauth' };
 }
 
 export function periodSignature(value) {
