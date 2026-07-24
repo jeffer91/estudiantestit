@@ -22,11 +22,12 @@ const access = read('functions/api/acceso-estudiante.js');
 const adminApi = read('administrador/ad-js/ad-api.service.js');
 const packageJson = read('package.json');
 
-assert(/TITULOS_FIREBASE_SERVICE_ACCOUNT/.test(firestore), 'Firestore no exige la cuenta de servicio de Títulos.');
-assert(/UTET_FIREBASE_SERVICE_ACCOUNT/.test(firestore), 'Firestore no exige la cuenta de servicio de UTET.');
-assert(/oauth2\.googleapis\.com\/token/.test(firestore), 'Firestore no obtiene un token OAuth de Google.');
-assert(/Authorization[^\n]+Bearer/.test(firestore), 'Firestore no envía el token Bearer.');
-assert(!/apiKey\s*:|AIza[0-9A-Za-z_-]{20,}/.test(firestore), 'Firestore todavía contiene claves web como mecanismo de autorización.');
+assert(/titulos-ec2fa/.test(firestore), 'No está configurado Firebase Títulos.');
+assert(/utet-4387a/.test(firestore), 'No está configurado Firebase UTET.');
+assert(/apiKey/.test(firestore) && /AIza[0-9A-Za-z_-]{20,}/.test(firestore), 'Faltan las configuraciones web de Firebase.');
+assert(/publicApiUrl/.test(firestore), 'Firestore no tiene modo de acceso con configuración web.');
+assert(/serviceAccount/.test(firestore) && /oauth2\.googleapis\.com\/token/.test(firestore), 'Firestore no conserva OAuth opcional para producción.');
+assert(/token \? url : publicApiUrl/.test(firestore), 'Firestore no selecciona entre OAuth y configuración web.');
 assert(/requestHost/.test(http) && /titulos-administrador\.pages\.dev/.test(http), 'Los roles no se determinan por el dominio de destino.');
 assert(/endsWith\(['"]\.['"]\s*\+\s*projectHost/.test(http), 'Los roles no contemplan dominios de vista previa de Pages.');
 assert(!/origin\.includes\(['"]titulos-administrador/.test(http), 'El rol administrador todavía confía en el encabezado Origin.');
@@ -47,4 +48,4 @@ if (errors.length) {
   process.exit(1);
 }
 
-console.log('[Firebase/Auth] Correcto: OAuth, roles por host, períodos exactos, caché válida y escrituras atómicas.');
+console.log('[Firebase/Auth] Correcto: configuración web para pruebas, OAuth opcional, roles, períodos exactos y escrituras atómicas.');
