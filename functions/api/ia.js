@@ -1,5 +1,5 @@
 import { generateAi, listAiProviders, saveAiProvider, toggleAiProvider } from '../_lib/claves.js';
-import { ALLOWED_ORIGINS, appId, corsHeaders, jsonReply, requestOrigin, text } from '../_lib/http.js';
+import { ALLOWED_ORIGINS, corsHeaders, jsonReply, requestOrigin, role, text } from '../_lib/http.js';
 
 const PROVIDERS_CACHE_MS = 30000;
 let providersCache = [];
@@ -17,13 +17,7 @@ function clearProvidersCache() {
 }
 
 function admin(request) {
-  const origin = requestOrigin(request).toLowerCase();
-  if (origin.includes('titulos-administrador.pages.dev')) return true;
-  if (origin === 'null' || origin.includes('localhost') || origin.includes('127.0.0.1')) {
-    const app = appId(request);
-    return app === 'administrador' || app === 'admin';
-  }
-  return false;
+  return role(request) === 'admin';
 }
 
 function adminProvider(provider) {
