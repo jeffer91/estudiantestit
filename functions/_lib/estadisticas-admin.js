@@ -6,4 +6,4 @@ export {
   saveAdminPeriod,
   listAdminCareers,
   assignCareerCoordinator
-} from './admin-global-v5.js';
+} from './admin-global-v6.js';
