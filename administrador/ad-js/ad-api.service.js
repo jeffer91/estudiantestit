@@ -9,8 +9,8 @@
   function solicitar(ruta,accion,datos,metodo){return fetch(base()+ruta,{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json','X-Titulos-App':'administrador'},body:JSON.stringify({accion:accion,action:accion,metodo:metodo||'POST',datos:datos||{}})}).then(function(resp){return leerRespuesta(resp,'El servicio');});}
   function titulos(a,d,m){return solicitar('/api/titulos',a,d,m);}
   function requisitos(a,d){return solicitar('/api/requisitos',a,d,'POST');}
-  function clavesGet(action){return fetch(base()+'/api/claves?action='+encodeURIComponent(action),{method:'GET',cache:'no-store',headers:{'X-Titulos-App':'administrador'}}).then(function(resp){return leerRespuesta(resp,'Claves');});}
-  function clavesPost(action,data){return fetch(base()+'/api/claves',{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json','X-Titulos-App':'administrador'},body:JSON.stringify(Object.assign({action:action},data||{}))}).then(function(resp){return leerRespuesta(resp,'Claves');});}
+  function clavesGet(action){return fetch(base()+'/api/claves?action='+encodeURIComponent(action),{method:'GET',cache:'no-store',headers:{'X-Titulos-App':'administrador'}}).then(function(resp){return leerRespuesta(resp,'Configuración');});}
+  function clavesPost(action,data){return fetch(base()+'/api/claves',{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json','X-Titulos-App':'administrador'},body:JSON.stringify(Object.assign({action:action},data||{}))}).then(function(resp){return leerRespuesta(resp,'Configuración');});}
   function iaGet(action,providerId){var url=base()+'/api/ia?action='+encodeURIComponent(action||'admin-list');if(providerId)url+='&providerId='+encodeURIComponent(providerId);return fetch(url,{method:'GET',cache:'no-store',headers:{'X-Titulos-App':'administrador'}}).then(function(resp){return leerRespuesta(resp,'IA');});}
   function iaPost(action,data){return fetch(base()+'/api/ia',{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json','X-Titulos-App':'administrador'},body:JSON.stringify(Object.assign({action:action},data||{}))}).then(function(resp){return leerRespuesta(resp,'IA');});}
   function lista(r,claves){if(Array.isArray(r))return r;r=r||{};for(var i=0;i<claves.length;i++)if(Array.isArray(r[claves[i]]))return r[claves[i]];if(r.data&&typeof r.data==='object')return lista(r.data,claves);if(r.resultado&&typeof r.resultado==='object')return lista(r.resultado,claves);return[];}
@@ -24,7 +24,7 @@
     guardarServicio:function(servicio){return clavesPost('admin-save',{service:servicio||{}});},
     listarPeriodos:function(){return requisitos('LISTAR_PERIODOS_TITULACION',{});},
     listarCarreras:function(periodoId){return requisitos('LISTAR_CARRERAS_PERIODO',{periodoId:periodoId||''});},
-    consultarEstudiante:function(cedula,periodoId){return requisitos('CONSULTAR_ESTUDIANTE_TITULACION',{cedula:cedula,numeroIdentificacion:cedula,periodoId:periodoId||''});},
+    consultarEstudiante:function(cedula,periodoId){return titulos('CONSULTAR_ESTUDIANTE',{cedula:cedula,numeroIdentificacion:cedula,periodoId:periodoId||''},'GET');},
     listarCoordinadores:function(){return titulos('LISTAR_COORDINADORES',{incluirInactivos:true},'GET');},
     guardarCoordinador:function(datos){return titulos('GUARDAR_COORDINADOR',datos||{},'POST');},
     cambiarEstadoCoordinador:function(datos){return titulos('CAMBIAR_ESTADO_COORDINADOR',datos||{},'POST');},
@@ -43,5 +43,5 @@
     extraerTitulos:function(r){return lista(r,['envios','registros']);}
   };
   window.ADAPIService=Object.freeze(api);
-  if(window.document&&!window.document.querySelector('script[data-ad-servicios="true"]')){var script=window.document.createElement('script');script.src='./ad-js/ad-servicios.app.js?v=2.0.1';script.async=false;script.setAttribute('data-ad-servicios','true');window.document.head.appendChild(script);}
+  if(window.document&&!window.document.querySelector('script[data-ad-servicios="true"]')){var script=window.document.createElement('script');script.src='./ad-js/ad-servicios.app.js?v=3.0.0';script.async=false;script.setAttribute('data-ad-servicios','true');window.document.head.appendChild(script);}
 })(window);
