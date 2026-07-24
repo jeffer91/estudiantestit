@@ -162,14 +162,14 @@ async function lookupAcademic(env, cedula) {
 }
 
 async function queryTitles(env, cedula, student) {
-  const periodId = text(flexible(student, ['periodoId', 'periodId']));
-  const periodLabel = text(flexible(student, ['periodoLabel', 'periodo'])) || periodId;
+  const periodoId = text(flexible(student, ['periodoId', 'periodId']));
+  const periodoLabel = text(flexible(student, ['periodoLabel', 'periodo'])) || periodoId;
   const result = await runService(env, 'TITULOS', 'CONSULTAR_ENVIO_CEDULA', 'GET', {
     cedula,
     numeroIdentificacion: cedula,
-    periodoId: periodId,
+    periodoId,
     periodoLabel,
-    periodo: periodLabel,
+    periodo: periodoLabel,
     scope: 'period'
   }, 'student', TITLES_TIMEOUT_MS);
   if (!result || result.ok === false) {
