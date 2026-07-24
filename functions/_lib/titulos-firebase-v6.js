@@ -3,6 +3,7 @@ import {
   executeTitulosAction as executePrevious,
   publicTitleConfiguration
 } from './titulos-firebase-fixed.js';
+import { buildAdminGlobalList } from './admin-global-v6.js';
 import {
   latestBy,
   listCollection,
@@ -17,6 +18,7 @@ import {
 function normalizeStatus(value, fallback = 'PENDIENTE_REVISION') {
   const normalized = text(value).toUpperCase().replace(/[^A-Z0-9]+/g, '_');
   if (!normalized) return fallback;
+  if (normalized.includes('NO_ENVIADO')) return 'NO_ENVIADO';
   if (normalized.includes('DEVUEL')) return 'DEVUELTO';
   if (normalized.includes('REEMPLAZ')) return 'REEMPLAZADO';
   if (normalized.includes('APROBAD')) return 'APROBADO';
@@ -51,23 +53,26 @@ function periodId(row) {
 
 function normalizeEnvio(row) {
   row = row || {};
-  const id = text(row.id || row._docId || row._id);
+  const id = text(row.id || row._docId || row._id || row.envioId);
   const cedula = normalizeCedula(row.cedula || row.numeroIdentificacion);
   const names = text(row.nombres || row.estudiante || row.Nombres);
   const career = text(row.carreraNombre || row.nombreCarrera || row.carrera);
   const label = periodLabel(row);
   const canonicalPeriod = periodId(row) || text(row.periodoId || row.periodId || label);
   const titles = [cleanTitle(row.titulo1), cleanTitle(row.titulo2), cleanTitle(row.titulo3)];
+  const hasTitles = titles.some(Boolean);
   const preferred = Number(row.tituloPreferidoNumero || row.preferido || 0);
-  const status = normalizeStatus(row.estado || row.estadoFinal);
+  const status = hasTitles
+    ? normalizeStatus(row.estado || row.estadoFinal)
+    : 'NO_ENVIADO';
   const finalTitle = cleanTitle(row.tituloFinal || row.tituloCorregido || row.tituloElegido);
   const observation = text(row.observacion || row.comentarioCoordinador || row.comentario);
 
   return {
     ...row,
-    id,
-    _id: id,
-    _clave: id,
+    id: id || `${canonicalPeriod || 'sin_periodo'}__${cedula}`,
+    _id: id || `${canonicalPeriod || 'sin_periodo'}__${cedula}`,
+    _clave: id || `${canonicalPeriod || 'sin_periodo'}__${cedula}`,
     idRegistro: id,
     envioId: id,
     cedula,
@@ -76,9 +81,13 @@ function normalizeEnvio(row) {
     estudiante: names,
     carrera: career,
     nombreCarrera: career,
+    codigoCarrera: text(row.codigoCarrera || row.carreraCodigo || row.carreraId),
     periodoId: canonicalPeriod,
     periodo: label || canonicalPeriod,
     periodoLabel: label || canonicalPeriod,
+    celular: text(row.celular || row.telefono || row.Telefono),
+    correoInstitucional: text(row.correoInstitucional),
+    correoPersonal: text(row.correoPersonal),
     titulo1: titles[0],
     titulo2: titles[1],
     titulo3: titles[2],
@@ -88,6 +97,8 @@ function normalizeEnvio(row) {
     estado: status,
     estadoFinal: status,
     estadoProceso: status,
+    enviado: hasTitles,
+    tieneTitulos: hasTitles,
     tituloAprobado: finalTitle,
     tituloFinal: finalTitle,
     comentarioCoordinador: observation,
@@ -124,6 +135,25 @@ async function listEnvios(payload = {}, env) {
     return b - a;
   });
   return rows.map(normalizeEnvio);
+}
+
+async function listCoordinatorPopulation(payload = {}, env) {
+  const global = await buildAdminGlobalList({
+    periodoId: text(payload.periodoId || payload.periodoLabel || payload.periodo),
+    periodo: text(payload.periodo || payload.periodoLabel || payload.periodoId),
+    carrera: ''
+  }, env);
+  const records = (global.registros || global.estudiantes || []).map(normalizeEnvio);
+  return {
+    ...global,
+    ok: true,
+    envios: records,
+    registros: records,
+    filas: records,
+    estudiantes: records,
+    total: records.length,
+    fuente: 'UTET_MAS_FIREBASE_TITULOS'
+  };
 }
 
 async function queryUnique(field, values, env) {
@@ -197,6 +227,9 @@ export async function executeTitulosAction(action, payload = {}, userRole = 'stu
   const normalized = text(action).toUpperCase();
   if (normalized === 'PING') return pingProject('TITULOS', env);
   if (normalized === 'LISTAR_ENVIOS_COORDINADOR' || normalized === 'LISTAR_ENVIOS_POR_CARRERA') {
+    if (payload.incluirFaltantes === true || text(payload.incluirFaltantes).toLowerCase() === 'true') {
+      return listCoordinatorPopulation(payload, env);
+    }
     const envios = await listEnvios(payload, env);
     return {
       ok: true,
