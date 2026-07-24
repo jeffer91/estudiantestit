@@ -41,7 +41,7 @@ assert(!/firebase-app|firebase-firestore/i.test(studentHtml), 'El estudiante no 
 assert(!/firebase-app|firebase-firestore/i.test(coordinatorHtml), 'Coordinadores no debe cargar Firebase directamente en el navegador.');
 assert(!/firebase-app|firebase-firestore/i.test(adminHtml), 'Administrador no debe cargar Firebase directamente en el navegador.');
 
-[
+const requiredFiles = [
   'functions/_lib/http.js',
   'functions/_lib/firestore.js',
   'functions/_lib/requisitos-firebase.js',
@@ -57,14 +57,17 @@ assert(!/firebase-app|firebase-firestore/i.test(adminHtml), 'Administrador no de
   'coordinadores-mvp/js/coordinador.sheets.primary.js',
   'coordinadores-mvp/js/coordinador.app.js',
   'administrador/ad-js/ad-api.service.js',
-  'administrador/ad-js/ad-google-sheets.app.js'
-].forEach(read);
+  'administrador/ad-js/ad-google-sheets.app.js',
+  'dev/preparar-pages-administrador.mjs'
+];
+requiredFiles.forEach(read);
 
 const firestore = read('functions/_lib/firestore.js');
 const requirements = read('functions/_lib/requisitos-firebase.js');
 const titles = read('functions/_lib/titulos-firebase.js');
 const ai = read('functions/_lib/ia-firebase.js');
 const claves = read('functions/_lib/claves.js');
+const http = read('functions/_lib/http.js');
 const titlesApi = read('functions/api/titulos.js');
 const requirementsApi = read('functions/api/requisitos.js');
 const aiApi = read('functions/api/ia.js');
@@ -72,18 +75,27 @@ const adminApi = read('administrador/ad-js/ad-api.service.js');
 
 assert(/titulos-ec2fa/.test(firestore), 'No está configurado Firebase Títulos titulos-ec2fa.');
 assert(/utet-4387a/.test(firestore), 'No está configurado Firebase UTET utet-4387a.');
+assert(/TITULOS_FIREBASE_SERVICE_ACCOUNT/.test(firestore), 'No se exige cuenta de servicio para Firebase Títulos.');
+assert(/UTET_FIREBASE_SERVICE_ACCOUNT/.test(firestore), 'No se exige cuenta de servicio para Firebase UTET.');
+assert(/oauth2\.googleapis\.com\/token/.test(firestore), 'No se genera token OAuth para Firestore.');
+assert(/Authorization[^\n]+Bearer/.test(firestore), 'Firestore no usa autorización Bearer.');
+assert(!/AIza[0-9A-Za-z_-]{20,}/.test(firestore), 'La capa Firestore conserva una clave web incrustada.');
 assert(/Estudiantes/.test(requirements), 'La consulta UTET no usa la colección Estudiantes.');
+assert(/EstudiantesPeriodo/.test(requirements), 'La consulta UTET no contempla EstudiantesPeriodo.');
 assert(/numeroIdentificacion/.test(requirements) && /Nombres/.test(requirements) && /NombreCarrera/.test(requirements), 'La consulta UTET no normaliza cédula, nombre y carrera.');
 assert(/includePhone/.test(requirements), 'La consulta UTET no contempla el celular exclusivo del administrador.');
-assert(/versiones_envio/.test(titles) && /resoluciones/.test(titles), 'Títulos no usa colecciones principales para versiones y resoluciones.');
+assert(/versiones_envio/.test(titles) && /resoluciones/.test(titles), 'Títulos no usa colecciones de versiones y resoluciones.');
+assert(/commitDocuments/.test(titles), 'Los envíos y resoluciones no se guardan de forma atómica.');
 assert(/ENVIO_ESTUDIANTE/.test(titles) && /GUARDAR_RESOLUCION/.test(titles), 'Títulos no implementa envío y resolución.');
 assert(/listProviders/.test(ai) && /generateWithProvider/.test(ai), 'IA no está conectada a Firebase Títulos.');
 assert(/executeTitulosAction/.test(claves) && /pullRequisitos/.test(claves), 'La fachada no enruta hacia las dos Firebase.');
 assert(!/CLAVES_APPS_SCRIPT_URL|script\.google\.com/.test(claves + titles + requirements + ai), 'La capa activa todavía depende de Apps Script.');
+assert(/requestHost/.test(http) && /titulos-administrador\.pages\.dev/.test(http), 'Los roles no se determinan por el host del proyecto.');
 assert(/runService\s*\(\s*env\s*,\s*['"]TITULOS['"]/.test(titlesApi), 'La API de Títulos no usa la fachada Firebase.');
 assert(/runService\s*\(\s*env\s*,\s*['"]REQUISITOS['"]/.test(requirementsApi), 'La API de Requisitos no usa la fachada Firebase.');
 assert(/generateAi/.test(aiApi), 'La API de IA no usa el motor Firebase.');
 assert(/CONSULTAR_ESTUDIANTE/.test(adminApi), 'Administrador no consulta el estudiante con el rol que permite devolver celular.');
+assert(/window\.location&&window\.location\.origin/.test(adminApi), 'Administrador no usa su API del mismo dominio.');
 
 if (errors.length) {
   console.error('\n[Arquitectura] Se encontraron errores:\n');
@@ -92,5 +104,6 @@ if (errors.length) {
   process.exit(1);
 }
 
-console.log('[Arquitectura] Correcta: UTET=datos mínimos del estudiante; Títulos=envíos, coordinación, administración e IA.');
-console.log('[Arquitectura] Las tres aplicaciones acceden por Cloudflare Functions y no exponen Firebase directamente en el navegador.');
+console.log('[Arquitectura] Correcta: UTET=datos mínimos; Títulos=envíos, coordinación, administración e IA.');
+console.log('[Arquitectura] Firestore usa OAuth de cuentas de servicio y conserva las reglas cerradas.');
+console.log('[Arquitectura] Las tres aplicaciones operan mediante Functions en dominios independientes.');
