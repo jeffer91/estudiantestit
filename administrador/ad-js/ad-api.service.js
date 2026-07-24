@@ -9,7 +9,7 @@
   function solicitar(ruta,accion,datos,metodo){return fetch(base()+ruta,{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json','X-Titulos-App':'administrador'},body:JSON.stringify({accion:accion,action:accion,metodo:metodo||'POST',datos:datos||{}})}).then(function(resp){return leerRespuesta(resp,'El servicio');});}
   function titulos(a,d,m){return solicitar('/api/titulos',a,d,m);}
   function requisitos(a,d){return solicitar('/api/requisitos',a,d,'POST');}
-  function estadisticas(d){return solicitar('/api/estadisticas','ADMIN_ESTADISTICAS_TITULOS',d||{},'POST');}
+  function estadisticas(d){return solicitar('/api/estadisticas','ADMIN_ESTADISTICAS_TITULOS',d||{},'POST').then(function(result){window.ADAdminStatisticsLast=result;return result;});}
   function clavesGet(action){return fetch(base()+'/api/claves?action='+encodeURIComponent(action),{method:'GET',cache:'no-store',headers:{'X-Titulos-App':'administrador'}}).then(function(resp){return leerRespuesta(resp,'Configuración');});}
   function clavesPost(action,data){return fetch(base()+'/api/claves',{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json','X-Titulos-App':'administrador'},body:JSON.stringify(Object.assign({action:action},data||{}))}).then(function(resp){return leerRespuesta(resp,'Configuración');});}
   function iaGet(action,providerId){var url=base()+'/api/ia?action='+encodeURIComponent(action||'admin-list');if(providerId)url+='&providerId='+encodeURIComponent(providerId);return fetch(url,{method:'GET',cache:'no-store',headers:{'X-Titulos-App':'administrador'}}).then(function(resp){return leerRespuesta(resp,'IA');});}
@@ -46,5 +46,7 @@
     extraerTitulos:function(r){return lista(r,['envios','registros']);}
   };
   window.ADAPIService=Object.freeze(api);
-  if(window.document&&!window.document.querySelector('script[data-ad-servicios="true"]')){var script=window.document.createElement('script');script.src='./ad-js/ad-servicios.app.js?v=3.2.0';script.async=false;script.setAttribute('data-ad-servicios','true');window.document.head.appendChild(script);}
+  function cargarComplemento(ruta,atributo){if(!window.document||window.document.querySelector('script['+atributo+'="true"]'))return;var script=window.document.createElement('script');script.src=ruta;script.async=false;script.setAttribute(atributo,'true');window.document.head.appendChild(script);}
+  cargarComplemento('./ad-js/ad-servicios.app.js?v=3.2.1','data-ad-servicios');
+  cargarComplemento('./ad-js/ad-correo-outlook.js?v=3.2.1','data-ad-correo-outlook');
 })(window);
