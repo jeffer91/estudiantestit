@@ -5,7 +5,7 @@ import process from 'node:process';
 const root = process.cwd();
 const source = path.join(root, 'administrador');
 const output = path.join(root, '.pages-administrador');
-const VERSION_ADMIN = '3.3.2';
+const VERSION_ADMIN = '3.3.3';
 
 if (!fs.existsSync(source) || !fs.statSync(source).isDirectory()) {
   throw new Error('No se encontró la carpeta administrador.');
@@ -23,6 +23,7 @@ function actualizarVersionHtml(file) {
   let html = fs.readFileSync(file, 'utf8');
   html = html.replace(/\?v=\d+\.\d+\.\d+/g, `?v=${VERSION_ADMIN}`);
   html = html.replace(/>v\d+\.\d+\.\d+</g, `>v${VERSION_ADMIN}<`);
+  html = html.replace(/Versión \d+\.\d+\.\d+/g, `Versión ${VERSION_ADMIN}`);
   fs.writeFileSync(file, html, 'utf8');
 }
 
@@ -68,7 +69,8 @@ for (const required of [
   path.join(output, 'ad-js', 'ad-google-sheets.app.js'),
   path.join(output, 'ad-js', 'ad-administracion-global.js'),
   path.join(output, 'ad-js', 'ad-correo-outlook.js'),
-  path.join(output, 'ad-js', 'ad-pdf-firebase.js')
+  path.join(output, 'ad-js', 'ad-pdf-firebase.js'),
+  path.join(output, 'ad-js', 'ad-version.js')
 ]) {
   if (!fs.existsSync(required)) {
     throw new Error(`Falta un archivo obligatorio para Administrador: ${required}`);
