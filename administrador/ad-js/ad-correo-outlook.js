@@ -45,6 +45,11 @@
     return 'el período académico vigente';
   }
 
+  function periodoIdTitulos(){
+    var select=document.getElementById('ad-v2-title-period');
+    return select?texto(select.value):'';
+  }
+
   function carreraTitulos(){
     var select=document.getElementById('ad-v2-title-career');
     return select?texto(select.value):'';
@@ -103,7 +108,10 @@
   }
 
   function faltantesMasivos(){
-    var rows=globalTitulos().registros||[];
+    var data=globalTitulos();
+    var selectedPeriod=periodoIdTitulos();
+    if(selectedPeriod&&texto(data.periodoId)&&texto(data.periodoId)!==selectedPeriod)return[];
+    var rows=data.registros||[];
     var career=carreraTitulos();
     return rows.filter(function(item){
       if(texto(item.estado).toUpperCase()!=='NO_ENVIADO')return false;
@@ -171,7 +179,8 @@
     var button=document.getElementById('ad-correo-masivo-btn');
     if(!button)return;
     var summary=resumenMasivo();
-    button.textContent='✉️ Correo a faltantes ('+summary.estudiantes.length+')';
+    var label='✉️ Correo a faltantes ('+summary.estudiantes.length+')';
+    if(button.textContent!==label)button.textContent=label;
     button.disabled=!summary.estudiantes.length||!summary.correos.length;
     button.title=!summary.estudiantes.length?'No hay estudiantes con estado No enviado en esta selección.':(!summary.correos.length?'Los estudiantes faltantes no tienen correos válidos.':'Preparar recordatorio para '+summary.estudiantes.length+' estudiantes faltantes.');
   }
