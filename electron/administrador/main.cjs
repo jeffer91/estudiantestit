@@ -13,6 +13,7 @@ const ADMIN_FILE_URL = pathToFileURL(ADMIN_HTML).toString();
 const PARTITION = 'persist:administrador-titulacion';
 const MIN_WIDTH = 900;
 const MIN_HEIGHT = 600;
+const SMOKE_TEST = process.argv.includes('--smoke-test');
 
 let mainWindow = null;
 let cacheStore = null;
@@ -120,7 +121,7 @@ function createWindow() {
       nodeIntegration: false,
       sandbox: true,
       webSecurity: true,
-      devTools: process.env.ELECTRON_DEVTOOLS === '1',
+      devTools: !SMOKE_TEST && process.env.ELECTRON_DEVTOOLS === '1',
       partition: PARTITION
     }
   });
@@ -137,7 +138,9 @@ function createWindow() {
   });
 
   mainWindow.webContents.on('will-attach-webview', (event) => event.preventDefault());
-  mainWindow.once('ready-to-show', () => mainWindow && mainWindow.show());
+  mainWindow.once('ready-to-show', () => {
+    if (!SMOKE_TEST && mainWindow) mainWindow.show();
+  });
   mainWindow.on('close', () => {
     if (!mainWindow) return;
     cacheStore.set('electron:window-bounds', mainWindow.getBounds(), 365 * 24 * 60 * 60 * 1000);
@@ -145,8 +148,27 @@ function createWindow() {
   });
   mainWindow.on('closed', () => { mainWindow = null; });
 
-  mainWindow.loadFile(ADMIN_HTML).catch((error) => {
+  const smokeTimer = SMOKE_TEST
+    ? setTimeout(() => {
+        console.error('[Electron administrador] La prueba de arranque superó 15 segundos.');
+        process.exitCode = 1;
+        app.quit();
+      }, 15000)
+    : null;
+
+  mainWindow.loadFile(ADMIN_HTML).then(() => {
+    if (!SMOKE_TEST) return;
+    clearTimeout(smokeTimer);
+    console.log('[Electron administrador] Prueba de arranque correcta.');
+    setTimeout(() => app.quit(), 250);
+  }).catch((error) => {
+    if (smokeTimer) clearTimeout(smokeTimer);
     console.error('[Electron administrador] No se pudo abrir el Administrador:', error);
+    if (SMOKE_TEST) {
+      process.exitCode = 1;
+      app.quit();
+      return;
+    }
     if (mainWindow) mainWindow.show();
     dialog.showErrorBox(
       'Administrador de Titulación',
