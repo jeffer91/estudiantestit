@@ -49,7 +49,6 @@ const files = [
   'electron/administrador/main.cjs',
   'electron/administrador/preload.cjs',
   'electron/administrador/cache.cjs',
-  'electron/administrador/microsoft-graph.cjs',
   'dev/preparar-pages-local.mjs',
   'dev/preparar-pages-estudiantes.mjs',
   'dev/preparar-pages-coordinadores.mjs',
