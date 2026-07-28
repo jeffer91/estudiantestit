@@ -1,7 +1,7 @@
 {
   "name": "estudiantestit",
   "private": true,
-  "version": "3.4.3",
+  "version": "3.4.4",
   "type": "module",
   "main": "electron/administrador/main.cjs",
   "scripts": {
@@ -28,9 +28,6 @@
     "check:apps-script": "node dev/verificar-apps-script.mjs",
     "check:electron": "node dev/verificar-electron-administrador.mjs",
     "check": "npm run check:syntax && npm run check:apps && npm run check:outlook && npm run check:architecture && npm run check:firebase-auth && npm run check:access && npm run check:apps-script && npm run check:electron"
-  },
-  "dependencies": {
-    "@azure/msal-node": "3.8.10"
   },
   "devDependencies": {
     "electron": "43.2.0"
