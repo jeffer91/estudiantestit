@@ -2,7 +2,7 @@
 (function(window,document){
   'use strict';
 
-  var VERSION='3.4.4';
+  var VERSION='3.4.5';
   var MASS_BATCH_SIZE=50;
   var OUTLOOK_COMPOSE='https://outlook.office.com/mail/deeplink/compose';
   var massSession=null;
@@ -14,6 +14,7 @@
   function cedula(value){var digits=texto(value).replace(/\D/g,'');return digits.length===9?'0'+digits:digits;}
   function correoValido(value){return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(texto(value));}
   function errorTexto(error){return texto(error&&error.message||error)||'Ocurrió un error inesperado.';}
+  function agregarUnico(list,value){if(value&&list.indexOf(value)<0)list.push(value);}
 
   function update(){
     var badge=document.getElementById('ad-badge-version');
@@ -114,16 +115,31 @@
 
   function resumenMasivo(){
     var students=faltantesMasivos();
+    var institucionales=[];
+    var personales=[];
     var emails=[];
     var conCorreo=0;
     var sinCorreo=0;
     students.forEach(function(student){
-      var list=correosDe(student);
-      if(list.length)conCorreo+=1;else sinCorreo+=1;
-      list.forEach(function(email){if(emails.indexOf(email)<0)emails.push(email);});
+      var institutional=texto(student&&student.correoInstitucional).toLowerCase();
+      var personal=texto(student&&student.correoPersonal).toLowerCase();
+      var tieneCorreo=false;
+      if(correoValido(institutional)){
+        agregarUnico(institucionales,institutional);
+        agregarUnico(emails,institutional);
+        tieneCorreo=true;
+      }
+      if(correoValido(personal)){
+        agregarUnico(personales,personal);
+        agregarUnico(emails,personal);
+        tieneCorreo=true;
+      }
+      if(tieneCorreo)conCorreo+=1;else sinCorreo+=1;
     });
     return{
       estudiantes:students,
+      institucionales:institucionales,
+      personales:personales,
       correos:emails,
       conCorreo:conCorreo,
       sinCorreo:sinCorreo,
@@ -203,8 +219,16 @@
     style.textContent=''+
       '.ad-mail-manual-panel{margin:14px 0;padding:15px;border:1px solid #cfe0f5;border-radius:16px;background:#f7fbff}'+
       '.ad-mail-manual-panel strong{display:block;margin-bottom:8px;font-size:1rem}'+
-      '.ad-mail-manual-panel ol{margin:8px 0 0 22px;padding:0;line-height:1.55}'+
-      '.ad-mail-manual-badge{display:inline-flex;margin-bottom:8px;padding:5px 9px;border-radius:999px;background:#e8f7ee;color:#17663a;font-size:.78rem;font-weight:800}';
+      '.ad-mail-manual-badge{display:inline-flex;margin-bottom:8px;padding:5px 9px;border-radius:999px;background:#e8f7ee;color:#17663a;font-size:.78rem;font-weight:800}'+
+      '.ad-mail-privacy-warning{margin:10px 0;padding:10px 12px;border:1px solid #edc46a;border-radius:12px;background:#fff8df;color:#664c00;font-weight:700;line-height:1.4}'+
+      '.ad-mail-copy-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:12px 0}'+
+      '.ad-mail-copy-card{padding:12px;border:1px solid #dce8f5;border-radius:12px;background:#fff}'+
+      '.ad-mail-copy-card span{display:block;margin-bottom:8px;color:#526b88;font-size:.82rem;font-weight:800}'+
+      '.ad-mail-copy-card button{width:100%}'+
+      '.ad-mail-address-field{display:grid;gap:7px;margin-top:10px;font-weight:800}'+
+      '.ad-mail-address-field textarea{width:100%;min-height:100px;box-sizing:border-box;resize:vertical;font:500 .82rem/1.4 ui-monospace,SFMono-Regular,Consolas,monospace}'+
+      '.ad-mail-manual-help{margin:10px 0 0;color:#38516e;line-height:1.45}'+
+      '@media(max-width:760px){.ad-mail-copy-grid{grid-template-columns:1fr}}';
     document.head.appendChild(style);
   }
 
@@ -215,18 +239,55 @@
     var card=document.querySelector('#ad-correo-masivo-modal .ad-mail-mass-card');
     if(!card)return false;
     var intro=card.querySelector('.ad-muted');
-    if(intro)intro.textContent='No requiere permisos de administrador ni conexión con Microsoft Graph. La aplicación copiará los correos y abrirá Outlook con el asunto y el mensaje preparados.';
+    if(intro)intro.textContent='No requiere permisos administrativos. Outlook se abrirá con los correos institucionales y personales colocados en el campo Para.';
     if(!document.getElementById('ad-mail-manual-panel')){
       var panel=document.createElement('section');
       panel.id='ad-mail-manual-panel';
       panel.className='ad-mail-manual-panel';
       panel.innerHTML=''+
         '<span class="ad-mail-manual-badge">Sin permisos especiales</span>'+
-        '<strong>En cada borrador realiza estos tres pasos:</strong>'+
-        '<ol><li>Pulsa <b>CCO</b> en Outlook.</li><li>Haz clic en el campo CCO y presiona <b>Ctrl + V</b>.</li><li>Revisa el mensaje y pulsa <b>Enviar</b>.</li></ol>';
+        '<strong>Correos disponibles para copiar</strong>'+
+        '<p class="ad-mail-privacy-warning">Importante: al utilizar el campo Para, los destinatarios podrán ver las demás direcciones incluidas en el mismo borrador.</p>'+
+        '<div class="ad-mail-copy-grid">'+
+          '<div class="ad-mail-copy-card"><span id="ad-mail-count-institutional">Institucionales: 0</span><button class="ad-btn ad-btn-secondary" type="button" data-action="copiar-correos-institucionales">Copiar institucionales</button></div>'+
+          '<div class="ad-mail-copy-card"><span id="ad-mail-count-personal">Personales: 0</span><button class="ad-btn ad-btn-secondary" type="button" data-action="copiar-correos-personales">Copiar personales</button></div>'+
+          '<div class="ad-mail-copy-card"><span id="ad-mail-count-all">Todos: 0</span><button class="ad-btn ad-btn-primary" type="button" data-action="copiar-todos-correos">Copiar todos</button></div>'+
+        '</div>'+
+        '<label class="ad-mail-address-field"><span>Vista previa de todos los correos institucionales y personales</span><textarea id="ad-mail-address-list" readonly></textarea></label>'+
+        '<p class="ad-mail-manual-help">Al abrir cada borrador, Outlook intentará colocar automáticamente las direcciones del grupo en <b>Para</b>. Como respaldo, el grupo también quedará copiado; si Outlook lo omite, haz clic en Para y presiona <b>Ctrl + V</b>.</p>';
       if(intro)intro.insertAdjacentElement('afterend',panel);else card.insertBefore(panel,card.firstChild);
     }
     return true;
+  }
+
+  function actualizarPanelCorreos(summary){
+    var institutional=document.getElementById('ad-mail-count-institutional');
+    var personal=document.getElementById('ad-mail-count-personal');
+    var all=document.getElementById('ad-mail-count-all');
+    var list=document.getElementById('ad-mail-address-list');
+    if(institutional)institutional.textContent='Institucionales: '+summary.institucionales.length;
+    if(personal)personal.textContent='Personales: '+summary.personales.length;
+    if(all)all.textContent='Todos únicos: '+summary.correos.length;
+    if(list)list.value=summary.correos.join('; ');
+    var actions=[
+      ['copiar-correos-institucionales',summary.institucionales],
+      ['copiar-correos-personales',summary.personales],
+      ['copiar-todos-correos',summary.correos]
+    ];
+    actions.forEach(function(entry){
+      var button=document.querySelector('[data-action="'+entry[0]+'"]');
+      if(button)button.disabled=!entry[1].length;
+    });
+  }
+
+  function copiarLista(tipo){
+    var summary=resumenMasivo();
+    var list=tipo==='institucionales'?summary.institucionales:(tipo==='personales'?summary.personales:summary.correos);
+    var label=tipo==='institucionales'?'institucionales':(tipo==='personales'?'personales':'institucionales y personales');
+    if(!list.length){estadoModal('No hay correos '+label+' válidos en la selección actual.','ad-status-error');return;}
+    copiarDirecciones(list).then(function(){
+      estadoModal('Se copiaron '+list.length+' correos '+label+'. Puedes pegarlos en el campo Para con Ctrl + V.','ad-status-success');
+    }).catch(function(error){estadoModal(errorTexto(error),'ad-status-error');});
   }
 
   function firmaResumen(summary){return[summary.periodo,summary.carrera,summary.correos.join('|')].join('||');}
@@ -254,14 +315,14 @@
     var checkbox=document.getElementById('ad-mail-mass-confirm');
     var total=session&&session.batches?session.batches.length:0;
     var current=session?session.index+1:1;
-    button.textContent='📋 Copiar correos y abrir borrador '+Math.min(current,Math.max(1,total))+' de '+Math.max(1,total);
+    button.textContent='✉️ Abrir borrador '+Math.min(current,Math.max(1,total))+' de '+Math.max(1,total)+' con correos en PARA';
     button.disabled=busy||!checkbox||!checkbox.checked||!total||current>total;
   }
 
   function actualizarEstadoPrincipal(summary){
     var status=document.getElementById('ad-v2-title-status');
     if(!status)return;
-    status.textContent='Se prepararon '+summary.lotes+' borrador(es) para '+summary.conCorreo+' estudiantes y '+summary.correos.length+' direcciones. En cada borrador debes pegar las direcciones copiadas en CCO antes de enviarlo.'+(summary.sinCorreo?' '+summary.sinCorreo+' estudiante(s) no tenían correo válido.':'');
+    status.textContent='Se prepararon '+summary.lotes+' borrador(es) para '+summary.conCorreo+' estudiantes y '+summary.correos.length+' direcciones. Los correos institucionales y personales se colocaron en Para y también se copiaron como respaldo.'+(summary.sinCorreo?' '+summary.sinCorreo+' estudiante(s) no tenían correo válido.':'');
     status.className='ad-result-box ad-status-success';
   }
 
@@ -285,17 +346,17 @@
 
     busy=true;
     actualizarBotonSesion(session);
-    estadoModal('Copiando '+batch.length+' direcciones y abriendo Outlook...','ad-status-info');
+    estadoModal('Copiando '+batch.length+' direcciones y abriendo Outlook con los correos en Para...','ad-status-info');
     copiarDirecciones(batch).then(function(){
-      return abrirCorreo({subject:session.subject,body:session.body});
+      return abrirCorreo({to:batch,subject:session.subject,body:session.body});
     }).then(function(){
       session.index+=1;
       var current=session.index;
       var total=session.batches.length;
       if(session.index<total){
-        estadoModal('Grupo '+current+' de '+total+' listo: se copiaron '+batch.length+' direcciones. En Outlook pulsa CCO, presiona Ctrl + V, revisa y envía. Después vuelve aquí para preparar el siguiente grupo.','ad-status-success');
+        estadoModal('Grupo '+current+' de '+total+' listo. Outlook se abrió con '+batch.length+' direcciones en Para. También quedaron copiadas; si el campo aparece vacío, haz clic en Para y presiona Ctrl + V. Después vuelve aquí para abrir el siguiente borrador.','ad-status-success');
       }else{
-        estadoModal('Último grupo listo: se copiaron '+batch.length+' direcciones. En Outlook pulsa CCO, presiona Ctrl + V, revisa y envía.','ad-status-success');
+        estadoModal('Último grupo listo. Outlook se abrió con '+batch.length+' direcciones en Para. También quedaron copiadas como respaldo.','ad-status-success');
         actualizarEstadoPrincipal(summary);
       }
     }).catch(function(error){
@@ -315,9 +376,10 @@
     resetSesionMasiva();
     asegurarPanelManual();
     var summary=resumenMasivo();
+    actualizarPanelCorreos(summary);
     var session=prepararSesionMasiva(summary);
     actualizarBotonSesion(session);
-    estadoModal('Hay '+summary.correos.length+' direcciones en '+summary.lotes+' grupo(s). Al pulsar el botón se copiará el grupo actual y se abrirá Outlook. Después pega las direcciones en CCO con Ctrl + V.','ad-status-info');
+    estadoModal('Hay '+summary.institucionales.length+' correos institucionales y '+summary.personales.length+' personales ('+summary.correos.length+' únicos) en '+summary.lotes+' borrador(es). Outlook los colocará en Para.','ad-status-info');
   }
 
   window.addEventListener('click',function(event){
@@ -327,6 +389,13 @@
 
     if(action==='correo-masivo-faltantes'){
       window.setTimeout(prepararModal,0);
+      return;
+    }
+    if(['copiar-correos-institucionales','copiar-correos-personales','copiar-todos-correos'].indexOf(action)>=0){
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      copiarLista(action==='copiar-correos-institucionales'?'institucionales':(action==='copiar-correos-personales'?'personales':'todos'));
       return;
     }
     if(action!=='correo-faltante'&&action!=='abrir-correo-masivo-outlook')return;
