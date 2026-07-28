@@ -50,6 +50,11 @@ jobs:
       - name: Instalar Electron
         run: npm install --no-package-lock --no-audit --no-fund --silent
 
+      - name: Configurar sandbox de Chromium
+        run: |
+          sudo chown root:root node_modules/electron/dist/chrome-sandbox
+          sudo chmod 4755 node_modules/electron/dist/chrome-sandbox
+
       - name: Probar npm start del Administrador
         shell: bash
         run: |
