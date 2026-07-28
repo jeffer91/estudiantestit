@@ -1,9 +1,11 @@
-/* Mantiene visible la versión y corrige la apertura de correos en Outlook. */
+/* Mantiene visible la versión y asegura la apertura de borradores en Outlook Web. */
 (function(window,document){
   'use strict';
 
-  var VERSION='3.4.1';
+  var VERSION='3.4.2';
   var MASS_BATCH_SIZE=50;
+  var OUTLOOK_COMPOSE='https://outlook.office.com/mail/deeplink/compose';
+  var massSession=null;
 
   function texto(value){return String(value===null||value===undefined?'':value).trim();}
   function normal(value){return texto(value).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').replace(/\s+/g,' ').trim();}
@@ -86,23 +88,36 @@
     ].join('\n');
   }
 
-  function codificarCorreos(list){
-    return list.map(function(email){return encodeURIComponent(email);}).join(',');
-  }
-
-  function enlaceMailto(options){
+  function enlaceOutlook(options){
     options=options||{};
     var to=Array.isArray(options.to)?options.to:[];
     var bcc=Array.isArray(options.bcc)?options.bcc:[];
     var query=[];
-    if(bcc.length)query.push('bcc='+codificarCorreos(bcc));
+    if(to.length)query.push('to='+encodeURIComponent(to.join(';')));
+    if(bcc.length)query.push('bcc='+encodeURIComponent(bcc.join(';')));
     query.push('subject='+encodeURIComponent(texto(options.subject)));
-    query.push('body='+encodeURIComponent(String(options.body||'')));
-    return 'mailto:'+codificarCorreos(to)+'?'+query.join('&');
+    query.push('body='+encodeURIComponent(String(options.body||'')+'\n'));
+    return OUTLOOK_COMPOSE+'?'+query.join('&');
   }
 
   function abrirCorreo(options){
-    window.open(enlaceMailto(options),'_blank','noopener,noreferrer');
+    window.open(enlaceOutlook(options),'_blank','noopener,noreferrer');
+  }
+
+  function copiarTexto(value){
+    var area=document.createElement('textarea');
+    area.value=String(value||'');
+    area.setAttribute('readonly','');
+    area.style.position='fixed';
+    area.style.left='-9999px';
+    area.style.top='0';
+    document.body.appendChild(area);
+    area.focus();
+    area.select();
+    var copied=false;
+    try{copied=document.execCommand('copy');}catch(_error){copied=false;}
+    document.body.removeChild(area);
+    return copied;
   }
 
   function estudiantePorCedula(value){
@@ -153,16 +168,50 @@
     return groups;
   }
 
+  function firmaResumen(summary){
+    return [summary.periodo,summary.carrera,summary.correos.join('|')].join('||');
+  }
+
+  function prepararSesionMasiva(summary){
+    var signature=firmaResumen(summary);
+    if(!massSession||massSession.signature!==signature){
+      massSession={
+        signature:signature,
+        batches:dividir(summary.correos,MASS_BATCH_SIZE),
+        index:0,
+        subject:'Recordatorio de registro de propuestas de titulación – '+summary.periodo,
+        body:mensajeMasivo(summary.periodo,summary.carrera),
+        summary:summary
+      };
+    }
+    return massSession;
+  }
+
+  function estadoModal(text,kind){
+    var status=document.getElementById('ad-mail-mass-status');
+    if(!status)return;
+    status.textContent=text;
+    status.className='ad-result-box '+(kind||'ad-status-info');
+  }
+
+  function botonMasivo(){return document.getElementById('ad-mail-mass-open');}
+
+  function resetSesionMasiva(){
+    massSession=null;
+    var button=botonMasivo();
+    if(button)button.textContent='✉️ Abrir borrador 1';
+  }
+
   function cerrarModalMasivo(){
     var modal=document.getElementById('ad-correo-masivo-modal');
     if(modal)modal.hidden=true;
     document.body.classList.remove('ad-modal-open');
   }
 
-  function actualizarEstadoMasivo(summary){
+  function actualizarEstadoFinal(summary){
     var status=document.getElementById('ad-v2-title-status');
     if(!status)return;
-    status.textContent='Se prepararon '+summary.lotes+' correo(s) en Outlook para '+summary.conCorreo+' estudiantes faltantes. Los correos institucionales y personales aparecen en CCO. Revisa y presiona Enviar en Outlook.'+(summary.sinCorreo?' '+summary.sinCorreo+' estudiante(s) no tenían correo válido.':'');
+    status.textContent='Se abrieron '+summary.lotes+' borrador(es) en Outlook Web para '+summary.conCorreo+' estudiantes faltantes. Los correos institucionales y personales fueron enviados a CCO.'+(summary.sinCorreo?' '+summary.sinCorreo+' estudiante(s) no tenían correo válido.':'');
     status.className='ad-result-box ad-status-success';
   }
 
@@ -190,24 +239,57 @@
       window.alert('No se encontraron correos institucionales o personales válidos para preparar el mensaje.');
       return;
     }
-    var subject='Recordatorio de registro de propuestas de titulación – '+summary.periodo;
-    var body=mensajeMasivo(summary.periodo,summary.carrera);
-    dividir(summary.correos,MASS_BATCH_SIZE).forEach(function(batch){
-      abrirCorreo({bcc:batch,subject:subject,body:body});
-    });
+
+    var session=prepararSesionMasiva(summary);
+    var batch=session.batches[session.index];
+    if(!batch){
+      resetSesionMasiva();
+      return;
+    }
+
+    var current=session.index+1;
+    var total=session.batches.length;
+    var copied=copiarTexto(batch.join(';'));
+    abrirCorreo({bcc:batch,subject:session.subject,body:session.body});
+    session.index+=1;
+
+    if(session.index<total){
+      var button=botonMasivo();
+      if(button)button.textContent='✉️ Abrir borrador '+(session.index+1)+' de '+total;
+      estadoModal('Se abrió el borrador '+current+' de '+total+' en Outlook Web. Las direcciones de este lote '+(copied?'también quedaron copiadas.':'se enviaron en CCO.')+' Si Outlook no llena CCO, pega con Ctrl+V. Luego abre el siguiente borrador.','ad-status-success');
+      return;
+    }
+
     cerrarModalMasivo();
-    actualizarEstadoMasivo(summary);
+    actualizarEstadoFinal(summary);
+    resetSesionMasiva();
   }
 
   window.addEventListener('click',function(event){
     var button=event.target&&event.target.closest?event.target.closest('[data-action]'):null;
     if(!button)return;
     var action=button.getAttribute('data-action');
+
+    if(action==='correo-masivo-faltantes'){
+      window.setTimeout(function(){
+        resetSesionMasiva();
+        var summary=resumenMasivo();
+        var open=botonMasivo();
+        if(open)open.textContent='✉️ Abrir borrador 1 de '+Math.max(1,summary.lotes);
+        estadoModal('Se abrirá un borrador por cada grupo de hasta '+MASS_BATCH_SIZE+' direcciones. Outlook Web se abrirá en tu navegador.','ad-status-info');
+      },0);
+      return;
+    }
+
     if(action!=='correo-faltante'&&action!=='abrir-correo-masivo-outlook')return;
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
     if(action==='correo-faltante')abrirIndividual(button);else abrirMasivo();
+  },true);
+
+  document.addEventListener('change',function(event){
+    if(event.target&&['ad-v2-title-period','ad-v2-title-career'].indexOf(event.target.id)>=0)resetSesionMasiva();
   },true);
 
   update();
