@@ -1,15 +1,13 @@
-/* Mantiene visible la versión y crea borradores reales mediante Microsoft Graph. */
+/* Mantiene visible la versión y prepara correos masivos sin permisos de Microsoft 365. */
 (function(window,document){
   'use strict';
 
-  var VERSION='3.4.3';
+  var VERSION='3.4.4';
   var MASS_BATCH_SIZE=50;
   var OUTLOOK_COMPOSE='https://outlook.office.com/mail/deeplink/compose';
-  var TENANT_STORAGE='ad-msgraph-tenant-id';
-  var CLIENT_STORAGE='ad-msgraph-client-id';
   var massSession=null;
-  var graphBusy=false;
-  var graphBridge=window.AdminElectron&&window.AdminElectron.graph?window.AdminElectron.graph:null;
+  var busy=false;
+  var electronBridge=window.AdminElectron&&window.AdminElectron.isElectron?window.AdminElectron:null;
 
   function texto(value){return String(value===null||value===undefined?'':value).trim();}
   function normal(value){return texto(value).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').replace(/\s+/g,' ').trim();}
@@ -141,208 +139,27 @@
     return groups;
   }
 
-  function leerStorage(key){try{return texto(window.localStorage.getItem(key));}catch(_error){return'';}}
-  function guardarStorage(key,value){try{window.localStorage.setItem(key,texto(value));}catch(_error){}}
-
-  function configGraph(){
-    var tenant=document.getElementById('ad-graph-tenant-id');
-    var client=document.getElementById('ad-graph-client-id');
-    return{
-      tenantId:texto(tenant?tenant.value:leerStorage(TENANT_STORAGE)),
-      clientId:texto(client?client.value:leerStorage(CLIENT_STORAGE))
-    };
-  }
-
-  function guardarConfigGraph(){
-    var config=configGraph();
-    guardarStorage(TENANT_STORAGE,config.tenantId);
-    guardarStorage(CLIENT_STORAGE,config.clientId);
-    return config;
-  }
-
-  function configGraphCompleta(config){return Boolean(texto(config&&config.tenantId)&&texto(config&&config.clientId));}
-
-  function estilosGraph(){
-    if(document.getElementById('ad-graph-styles'))return;
-    var style=document.createElement('style');
-    style.id='ad-graph-styles';
-    style.textContent=''+
-      '.ad-graph-panel{margin:14px 0;padding:15px;border:1px solid #cfe0f5;border-radius:16px;background:#f7fbff}'+
-      '.ad-graph-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:10px}'+
-      '.ad-graph-head strong{display:block;font-size:1rem}'+
-      '.ad-graph-badge{display:inline-flex;padding:5px 9px;border-radius:999px;background:#e7eef8;color:#29486c;font-size:.78rem;font-weight:800}'+
-      '.ad-graph-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}'+
-      '.ad-graph-grid label{display:grid;gap:6px;font-weight:700}'+
-      '.ad-graph-grid input{width:100%;box-sizing:border-box}'+
-      '.ad-graph-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}'+
-      '.ad-graph-code{font-size:1.15rem;letter-spacing:.08em;font-weight:900}'+
-      '@media(max-width:760px){.ad-graph-grid{grid-template-columns:1fr}}';
-    document.head.appendChild(style);
-  }
-
-  function estadoGraph(text,kind){
-    var status=document.getElementById('ad-graph-status');
-    if(status){
-      status.textContent=text;
-      status.className='ad-result-box '+(kind||'ad-status-info');
-    }
-  }
-
-  function badgeGraph(text){var badge=document.getElementById('ad-graph-badge');if(badge)badge.textContent=text;}
-
-  function estadoModal(text,kind){
-    var status=document.getElementById('ad-mail-mass-status');
-    if(!status)return;
-    status.textContent=text;
-    status.className='ad-result-box '+(kind||'ad-status-info');
-  }
-
-  function botonMasivo(){return document.getElementById('ad-mail-mass-open');}
-
-  function asegurarPanelGraph(){
-    estilosGraph();
-    var card=document.querySelector('#ad-correo-masivo-modal .ad-mail-mass-card');
-    if(!card)return false;
-    var intro=card.querySelector('.ad-muted');
-    if(intro&&graphBridge)intro.textContent='La aplicación creará borradores reales en Outlook. Los correos institucionales y personales quedarán en CCO y ningún mensaje se enviará automáticamente.';
-    if(!document.getElementById('ad-graph-panel')){
-      var panel=document.createElement('section');
-      panel.id='ad-graph-panel';
-      panel.className='ad-graph-panel';
-      panel.innerHTML=''+
-        '<div class="ad-graph-head"><div><span class="ad-eyebrow">Conexión segura</span><strong>Microsoft 365 / Outlook</strong></div><span class="ad-graph-badge" id="ad-graph-badge">Sin configurar</span></div>'+
-        '<p class="ad-muted">Ingresa una sola vez los identificadores de la aplicación institucional. No se solicita contraseña ni Client Secret.</p>'+
-        '<div class="ad-graph-grid">'+
-          '<label><span>Tenant ID</span><input id="ad-graph-tenant-id" autocomplete="off" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"></label>'+
-          '<label><span>Client ID</span><input id="ad-graph-client-id" autocomplete="off" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"></label>'+
-        '</div>'+
-        '<div class="ad-graph-actions">'+
-          '<button class="ad-btn ad-btn-primary" type="button" data-action="graph-conectar">Conectar Microsoft 365</button>'+
-          '<button class="ad-btn ad-btn-secondary" type="button" data-action="graph-desconectar">Cerrar sesión</button>'+
-        '</div>'+
-        '<pre id="ad-graph-status" class="ad-result-box ad-status-info">Configuración pendiente.</pre>';
-      if(intro)intro.insertAdjacentElement('afterend',panel);else card.insertBefore(panel,card.firstChild);
-      document.getElementById('ad-graph-tenant-id').value=leerStorage(TENANT_STORAGE);
-      document.getElementById('ad-graph-client-id').value=leerStorage(CLIENT_STORAGE);
-    }
-    var button=botonMasivo();
-    if(button)button.textContent=graphBridge?'✉️ Crear borradores en Outlook':'✉️ Abrir borrador en Outlook Web';
-    return true;
-  }
-
-  function actualizarEstadoPrincipal(summary,result){
-    var status=document.getElementById('ad-v2-title-status');
-    if(!status)return;
-    status.textContent='Se crearon '+result.totalDrafts+' borrador(es) reales en Outlook para '+summary.conCorreo+' estudiantes faltantes y '+result.totalRecipients+' direcciones en CCO.'+(summary.sinCorreo?' '+summary.sinCorreo+' estudiante(s) no tenían correo válido.':'');
-    status.className='ad-result-box ad-status-success';
-  }
-
-  function refrescarEstadoGraph(){
-    asegurarPanelGraph();
-    if(!graphBridge){
-      badgeGraph('Solo Electron');
-      estadoGraph('La creación segura mediante Microsoft Graph está disponible al abrir el Administrador con npm start.','ad-status-info');
-      return Promise.resolve();
-    }
-    var config=guardarConfigGraph();
-    if(!configGraphCompleta(config)){
-      badgeGraph('Sin configurar');
-      estadoGraph('Ingresa el Tenant ID y el Client ID proporcionados por el administrador de Microsoft 365.','ad-status-info');
-      return Promise.resolve();
-    }
-    badgeGraph('Comprobando');
-    return graphBridge.status(config).then(function(result){
-      if(result&&result.connected){
-        badgeGraph('Conectado');
-        estadoGraph('Cuenta conectada: '+(texto(result.account&&result.account.username)||texto(result.account&&result.account.name)||'Microsoft 365')+'.','ad-status-success');
-      }else{
-        badgeGraph('Configurado');
-        estadoGraph('Configuración guardada. Pulsa “Conectar Microsoft 365” para autorizar Mail.ReadWrite.','ad-status-info');
-      }
-    }).catch(function(error){
-      badgeGraph('Revisar datos');
-      estadoGraph(errorTexto(error),'ad-status-error');
-    });
-  }
-
-  function conectarGraph(){
-    if(!graphBridge)return refrescarEstadoGraph();
-    var config=guardarConfigGraph();
-    if(!configGraphCompleta(config)){
-      badgeGraph('Sin configurar');
-      estadoGraph('Completa Tenant ID y Client ID antes de conectar.','ad-status-error');
-      return Promise.resolve();
-    }
-    badgeGraph('Conectando');
-    estadoGraph('Se abrirá la página oficial de Microsoft. Inicia sesión y autoriza el acceso al correo.','ad-status-info');
-    return graphBridge.connect(config).then(function(result){
-      badgeGraph('Conectado');
-      estadoGraph('Cuenta conectada: '+(texto(result.account&&result.account.username)||texto(result.account&&result.account.name)||'Microsoft 365')+'.','ad-status-success');
-    }).catch(function(error){
-      badgeGraph('Error');
-      estadoGraph(errorTexto(error),'ad-status-error');
-    });
-  }
-
-  function desconectarGraph(){
-    if(!graphBridge)return Promise.resolve();
-    var config=guardarConfigGraph();
-    if(!configGraphCompleta(config))return Promise.resolve();
-    badgeGraph('Desconectando');
-    return graphBridge.signOut(config).then(function(){
-      badgeGraph('Configurado');
-      estadoGraph('Sesión cerrada. Los identificadores permanecen guardados en este equipo.','ad-status-success');
-    }).catch(function(error){estadoGraph(errorTexto(error),'ad-status-error');});
-  }
-
-  function crearBorradoresGraph(){
-    var checkbox=document.getElementById('ad-mail-mass-confirm');
-    if(!checkbox||!checkbox.checked)return Promise.resolve();
-    var summary=resumenMasivo();
-    if(!summary.correos.length){
-      estadoModal('No se encontraron correos institucionales o personales válidos.','ad-status-error');
-      return Promise.resolve();
-    }
-    var config=guardarConfigGraph();
-    if(!configGraphCompleta(config)){
-      estadoGraph('Completa Tenant ID y Client ID para crear los borradores reales.','ad-status-error');
-      return Promise.resolve();
-    }
-    if(graphBusy)return Promise.resolve();
-    graphBusy=true;
-    var button=botonMasivo();
-    if(button){button.disabled=true;button.textContent='Creando borradores...';}
-    estadoModal('Conectando con Microsoft 365 y preparando '+summary.lotes+' borrador(es).','ad-status-info');
-    var subject='Recordatorio de registro de propuestas de titulación – '+summary.periodo;
-    var body=mensajeMasivo(summary.periodo,summary.carrera);
-    return graphBridge.createDrafts(config,{subject:subject,body:body,batches:dividir(summary.correos,MASS_BATCH_SIZE)}).then(function(result){
-      cerrarModalMasivo();
-      actualizarEstadoPrincipal(summary,result);
-      badgeGraph('Conectado');
-    }).catch(function(error){
-      estadoModal(errorTexto(error),'ad-status-error');
-      estadoGraph(errorTexto(error),'ad-status-error');
-    }).finally(function(){
-      graphBusy=false;
-      if(button){button.disabled=!(checkbox&&checkbox.checked);button.textContent='✉️ Crear borradores en Outlook';}
-    });
-  }
-
   function enlaceOutlook(options){
     options=options||{};
     var to=Array.isArray(options.to)?options.to:[];
-    var bcc=Array.isArray(options.bcc)?options.bcc:[];
     var query=[];
     if(to.length)query.push('to='+encodeURIComponent(to.join(';')));
-    if(bcc.length)query.push('bcc='+encodeURIComponent(bcc.join(';')));
     query.push('subject='+encodeURIComponent(texto(options.subject)));
     query.push('body='+encodeURIComponent(String(options.body||'')+'\n'));
     return OUTLOOK_COMPOSE+'?'+query.join('&');
   }
 
-  function abrirCorreo(options){window.open(enlaceOutlook(options),'_blank','noopener,noreferrer');}
+  function abrirCorreo(options){
+    var url=enlaceOutlook(options);
+    if(electronBridge&&electronBridge.outlook&&typeof electronBridge.outlook.openCompose==='function'){
+      return electronBridge.outlook.openCompose(url);
+    }
+    var opened=window.open(url,'_blank','noopener,noreferrer');
+    if(!opened)return Promise.reject(new Error('El navegador bloqueó la ventana de Outlook. Permite ventanas emergentes y vuelve a intentarlo.'));
+    return Promise.resolve({ok:true});
+  }
 
-  function copiarTexto(value){
+  function copiarConTextarea(value){
     var area=document.createElement('textarea');
     area.value=String(value||'');
     area.setAttribute('readonly','');
@@ -355,7 +172,61 @@
     var copied=false;
     try{copied=document.execCommand('copy');}catch(_error){copied=false;}
     document.body.removeChild(area);
-    return copied;
+    if(!copied)throw new Error('No se pudieron copiar los correos al portapapeles.');
+    return{ok:true};
+  }
+
+  function copiarDirecciones(list){
+    var value=list.join('; ');
+    if(electronBridge&&electronBridge.clipboard&&typeof electronBridge.clipboard.writeText==='function'){
+      return electronBridge.clipboard.writeText(value);
+    }
+    if(window.navigator&&window.navigator.clipboard&&typeof window.navigator.clipboard.writeText==='function'){
+      return window.navigator.clipboard.writeText(value).then(function(){return{ok:true};}).catch(function(){return copiarConTextarea(value);});
+    }
+    return Promise.resolve().then(function(){return copiarConTextarea(value);});
+  }
+
+  function estadoModal(text,kind){
+    var status=document.getElementById('ad-mail-mass-status');
+    if(!status)return;
+    status.textContent=text;
+    status.className='ad-result-box '+(kind||'ad-status-info');
+  }
+
+  function botonMasivo(){return document.getElementById('ad-mail-mass-open');}
+
+  function estilosManual(){
+    if(document.getElementById('ad-mail-manual-styles'))return;
+    var style=document.createElement('style');
+    style.id='ad-mail-manual-styles';
+    style.textContent=''+
+      '.ad-mail-manual-panel{margin:14px 0;padding:15px;border:1px solid #cfe0f5;border-radius:16px;background:#f7fbff}'+
+      '.ad-mail-manual-panel strong{display:block;margin-bottom:8px;font-size:1rem}'+
+      '.ad-mail-manual-panel ol{margin:8px 0 0 22px;padding:0;line-height:1.55}'+
+      '.ad-mail-manual-badge{display:inline-flex;margin-bottom:8px;padding:5px 9px;border-radius:999px;background:#e8f7ee;color:#17663a;font-size:.78rem;font-weight:800}';
+    document.head.appendChild(style);
+  }
+
+  function asegurarPanelManual(){
+    estilosManual();
+    var graph=document.getElementById('ad-graph-panel');
+    if(graph)graph.remove();
+    var card=document.querySelector('#ad-correo-masivo-modal .ad-mail-mass-card');
+    if(!card)return false;
+    var intro=card.querySelector('.ad-muted');
+    if(intro)intro.textContent='No requiere permisos de administrador ni conexión con Microsoft Graph. La aplicación copiará los correos y abrirá Outlook con el asunto y el mensaje preparados.';
+    if(!document.getElementById('ad-mail-manual-panel')){
+      var panel=document.createElement('section');
+      panel.id='ad-mail-manual-panel';
+      panel.className='ad-mail-manual-panel';
+      panel.innerHTML=''+
+        '<span class="ad-mail-manual-badge">Sin permisos especiales</span>'+
+        '<strong>En cada borrador realiza estos tres pasos:</strong>'+
+        '<ol><li>Pulsa <b>CCO</b> en Outlook.</li><li>Haz clic en el campo CCO y presiona <b>Ctrl + V</b>.</li><li>Revisa el mensaje y pulsa <b>Enviar</b>.</li></ol>';
+      if(intro)intro.insertAdjacentElement('afterend',panel);else card.insertBefore(panel,card.firstChild);
+    }
+    return true;
   }
 
   function firmaResumen(summary){return[summary.periodo,summary.carrera,summary.correos.join('|')].join('||');}
@@ -375,12 +246,23 @@
     return massSession;
   }
 
-  function resetSesionMasiva(){massSession=null;}
+  function resetSesionMasiva(){massSession=null;busy=false;}
 
-  function cerrarModalMasivo(){
-    var modal=document.getElementById('ad-correo-masivo-modal');
-    if(modal)modal.hidden=true;
-    document.body.classList.remove('ad-modal-open');
+  function actualizarBotonSesion(session){
+    var button=botonMasivo();
+    if(!button)return;
+    var checkbox=document.getElementById('ad-mail-mass-confirm');
+    var total=session&&session.batches?session.batches.length:0;
+    var current=session?session.index+1:1;
+    button.textContent='📋 Copiar correos y abrir borrador '+Math.min(current,Math.max(1,total))+' de '+Math.max(1,total);
+    button.disabled=busy||!checkbox||!checkbox.checked||!total||current>total;
+  }
+
+  function actualizarEstadoPrincipal(summary){
+    var status=document.getElementById('ad-v2-title-status');
+    if(!status)return;
+    status.textContent='Se prepararon '+summary.lotes+' borrador(es) para '+summary.conCorreo+' estudiantes y '+summary.correos.length+' direcciones. En cada borrador debes pegar las direcciones copiadas en CCO antes de enviarlo.'+(summary.sinCorreo?' '+summary.sinCorreo+' estudiante(s) no tenían correo válido.':'');
+    status.className='ad-result-box ad-status-success';
   }
 
   function abrirIndividual(button){
@@ -389,52 +271,53 @@
     var emails=correosDe(student);
     if(!emails.length){window.alert('El estudiante no tiene un correo institucional ni personal válido registrado en UTET.');return;}
     var period=periodoSeleccionado();
-    abrirCorreo({to:emails,subject:'Recordatorio de registro de propuestas de titulación – '+period,body:mensajeFormal(student,period)});
+    abrirCorreo({to:emails,subject:'Recordatorio de registro de propuestas de titulación – '+period,body:mensajeFormal(student,period)}).catch(function(error){window.alert(errorTexto(error));});
   }
 
-  function abrirMasivoWeb(){
+  function abrirMasivoSinPermisos(){
     var checkbox=document.getElementById('ad-mail-mass-confirm');
-    if(!checkbox||!checkbox.checked)return;
+    if(!checkbox||!checkbox.checked||busy)return;
     var summary=resumenMasivo();
-    if(!summary.correos.length)return;
+    if(!summary.correos.length){estadoModal('No se encontraron correos institucionales o personales válidos.','ad-status-error');return;}
     var session=prepararSesionMasiva(summary);
     var batch=session.batches[session.index];
-    if(!batch){resetSesionMasiva();return;}
-    copiarTexto(batch.join(';'));
-    abrirCorreo({bcc:batch,subject:session.subject,body:session.body});
-    session.index+=1;
-    if(session.index<session.batches.length){
+    if(!batch){estadoModal('Todos los grupos ya fueron preparados. Cierra esta ventana o vuelve a abrirla para comenzar de nuevo.','ad-status-success');return;}
+
+    busy=true;
+    actualizarBotonSesion(session);
+    estadoModal('Copiando '+batch.length+' direcciones y abriendo Outlook...','ad-status-info');
+    copiarDirecciones(batch).then(function(){
+      return abrirCorreo({subject:session.subject,body:session.body});
+    }).then(function(){
+      session.index+=1;
+      var current=session.index;
+      var total=session.batches.length;
+      if(session.index<total){
+        estadoModal('Grupo '+current+' de '+total+' listo: se copiaron '+batch.length+' direcciones. En Outlook pulsa CCO, presiona Ctrl + V, revisa y envía. Después vuelve aquí para preparar el siguiente grupo.','ad-status-success');
+      }else{
+        estadoModal('Último grupo listo: se copiaron '+batch.length+' direcciones. En Outlook pulsa CCO, presiona Ctrl + V, revisa y envía.','ad-status-success');
+        actualizarEstadoPrincipal(summary);
+      }
+    }).catch(function(error){
+      estadoModal(errorTexto(error),'ad-status-error');
+    }).finally(function(){
+      busy=false;
       var button=botonMasivo();
-      if(button)button.textContent='✉️ Abrir borrador '+(session.index+1)+' de '+session.batches.length;
-      estadoModal('Las direcciones del lote quedaron copiadas. Si Outlook no llena CCO, pega con Ctrl+V.','ad-status-info');
-    }else{
-      cerrarModalMasivo();
-      resetSesionMasiva();
-    }
+      if(session.index>=session.batches.length){
+        if(button){button.textContent='✓ Último borrador abierto';button.disabled=true;}
+      }else{
+        actualizarBotonSesion(session);
+      }
+    });
   }
 
   function prepararModal(){
     resetSesionMasiva();
-    asegurarPanelGraph();
+    asegurarPanelManual();
     var summary=resumenMasivo();
-    var open=botonMasivo();
-    if(open)open.textContent=graphBridge?'✉️ Crear '+Math.max(1,summary.lotes)+' borrador(es) en Outlook':'✉️ Abrir borrador 1 de '+Math.max(1,summary.lotes);
-    estadoModal(graphBridge?'Microsoft Graph guardará los borradores directamente en la carpeta Borradores de Outlook.':'Outlook Web se abrirá en tu navegador.','ad-status-info');
-    refrescarEstadoGraph();
-  }
-
-  if(graphBridge&&typeof graphBridge.onDeviceCode==='function'){
-    graphBridge.onDeviceCode(function(details){
-      var code=texto(details&&details.userCode);
-      if(code)copiarTexto(code);
-      badgeGraph('Autoriza en Microsoft');
-      estadoGraph((texto(details&&details.message)||'Completa el inicio de sesión en Microsoft.')+(code?' Código copiado: '+code:''),'ad-status-info');
-    });
-  }
-  if(graphBridge&&typeof graphBridge.onProgress==='function'){
-    graphBridge.onProgress(function(details){
-      estadoModal('Creando borrador '+Number(details&&details.current||0)+' de '+Number(details&&details.total||0)+' con '+Number(details&&details.recipients||0)+' direcciones en CCO.','ad-status-info');
-    });
+    var session=prepararSesionMasiva(summary);
+    actualizarBotonSesion(session);
+    estadoModal('Hay '+summary.correos.length+' direcciones en '+summary.lotes+' grupo(s). Al pulsar el botón se copiará el grupo actual y se abrirá Outlook. Después pega las direcciones en CCO con Ctrl + V.','ad-status-info');
   }
 
   window.addEventListener('click',function(event){
@@ -446,28 +329,15 @@
       window.setTimeout(prepararModal,0);
       return;
     }
-    if(action==='graph-conectar'||action==='graph-desconectar'){
-      event.preventDefault();event.stopPropagation();event.stopImmediatePropagation();
-      if(action==='graph-conectar')conectarGraph();else desconectarGraph();
-      return;
-    }
     if(action!=='correo-faltante'&&action!=='abrir-correo-masivo-outlook')return;
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
-    if(action==='correo-faltante')abrirIndividual(button);
-    else if(graphBridge)crearBorradoresGraph();
-    else abrirMasivoWeb();
-  },true);
-
-  document.addEventListener('input',function(event){
-    if(event.target&&['ad-graph-tenant-id','ad-graph-client-id'].indexOf(event.target.id)>=0){
-      guardarConfigGraph();
-      badgeGraph(configGraphCompleta(configGraph())?'Configurado':'Sin configurar');
-    }
+    if(action==='correo-faltante')abrirIndividual(button);else abrirMasivoSinPermisos();
   },true);
 
   document.addEventListener('change',function(event){
+    if(event.target&&event.target.id==='ad-mail-mass-confirm'&&massSession)actualizarBotonSesion(massSession);
     if(event.target&&['ad-v2-title-period','ad-v2-title-career'].indexOf(event.target.id)>=0)resetSesionMasiva();
   },true);
 

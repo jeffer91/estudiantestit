@@ -2,9 +2,8 @@
 
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
-const { app, BrowserWindow, dialog, ipcMain, screen, shell, session } = require('electron');
+const { app, BrowserWindow, clipboard, dialog, ipcMain, screen, shell, session } = require('electron');
 const { AdminCacheStore } = require('./cache.cjs');
-const { MicrosoftGraphDrafts } = require('./microsoft-graph.cjs');
 
 const APP_ID = 'ec.itsqmet.titulacion.administrador';
 const CACHE_PREFIX = 'admin-api:';
@@ -14,12 +13,11 @@ const ADMIN_FILE_URL = pathToFileURL(ADMIN_HTML).toString();
 const PARTITION = 'persist:administrador-titulacion';
 const MIN_WIDTH = 900;
 const MIN_HEIGHT = 600;
+const MAX_CLIPBOARD_TEXT = 200000;
 const SMOKE_TEST = process.argv.includes('--smoke-test');
-const OUTLOOK_DRAFTS_URL = 'https://outlook.office.com/mail/drafts';
 
 let mainWindow = null;
 let cacheStore = null;
-let graphService = null;
 
 function senderAllowed(event) {
   const senderUrl = String(
@@ -37,20 +35,20 @@ function validCacheKey(value, allowElectron = false) {
   throw new Error('Clave de caché no permitida.');
 }
 
-function sendToRenderer(event, channel, payload) {
-  try {
-    if (event && event.sender && !event.sender.isDestroyed()) event.sender.send(channel, payload || {});
-  } catch (_error) {}
+function validClipboardText(value) {
+  const text = String(value || '').trim();
+  if (!text) throw new Error('No hay correos para copiar.');
+  if (text.length > MAX_CLIPBOARD_TEXT) throw new Error('La lista de correos supera el tamaño permitido.');
+  return text;
 }
 
-function graphHandlers(event) {
-  return {
-    onDeviceCode: (details) => {
-      sendToRenderer(event, 'admin-graph:device-code', details);
-      openExternal(details && (details.verificationUriComplete || details.verificationUri));
-    },
-    onProgress: (details) => sendToRenderer(event, 'admin-graph:progress', details)
-  };
+function validOutlookComposeUrl(value) {
+  const url = new URL(String(value || ''));
+  const host = url.hostname.toLowerCase();
+  if (url.protocol !== 'https:' || host !== 'outlook.office.com' || !url.pathname.startsWith('/mail/deeplink/compose')) {
+    throw new Error('Enlace de Outlook no permitido.');
+  }
+  return url.toString();
 }
 
 function registerIpc() {
@@ -85,29 +83,18 @@ function registerIpc() {
     return cacheStore.stats();
   });
 
-  ipcMain.handle('admin-graph:status', async (event, payload) => {
+  ipcMain.handle('admin-clipboard:write', (event, payload) => {
     if (!senderAllowed(event)) throw new Error('Origen no permitido.');
-    return graphService.status(payload && payload.config);
+    const text = validClipboardText(payload && payload.text);
+    clipboard.writeText(text);
+    return { ok: true, length: text.length };
   });
-  ipcMain.handle('admin-graph:connect', async (event, payload) => {
+
+  ipcMain.handle('admin-outlook:open-compose', async (event, payload) => {
     if (!senderAllowed(event)) throw new Error('Origen no permitido.');
-    return graphService.connect(payload && payload.config, graphHandlers(event));
-  });
-  ipcMain.handle('admin-graph:sign-out', async (event, payload) => {
-    if (!senderAllowed(event)) throw new Error('Origen no permitido.');
-    return graphService.signOut(payload && payload.config);
-  });
-  ipcMain.handle('admin-graph:create-drafts', async (event, payload) => {
-    if (!senderAllowed(event)) throw new Error('Origen no permitido.');
-    const source = payload && typeof payload === 'object' ? payload : {};
-    const result = await graphService.createDrafts(
-      source.config,
-      { subject: source.subject, body: source.body, batches: source.batches },
-      graphHandlers(event)
-    );
-    const firstLink = result.drafts && result.drafts.find((draft) => draft && draft.webLink);
-    openExternal(firstLink && firstLink.webLink || OUTLOOK_DRAFTS_URL);
-    return result;
+    const url = validOutlookComposeUrl(payload && payload.url);
+    await shell.openExternal(url);
+    return { ok: true };
   });
 }
 
@@ -235,7 +222,6 @@ if (!hasLock) {
   app.whenReady().then(() => {
     app.setAppUserModelId(APP_ID);
     cacheStore = new AdminCacheStore(app.getPath('userData')).init();
-    graphService = new MicrosoftGraphDrafts(cacheStore);
     registerIpc();
     hardenSession(session.fromPartition(PARTITION));
 
