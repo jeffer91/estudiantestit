@@ -13,7 +13,7 @@ permissions:
 jobs:
   validar:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Descargar repositorio
         uses: actions/checkout@v4
@@ -21,10 +21,16 @@ jobs:
       - name: Configurar Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: Revisar sintaxis, arquitectura y acceso
         run: npm run check
+
+      - name: Instalar Electron
+        run: npm install --no-package-lock --no-audit --no-fund
+
+      - name: Probar npm start del Administrador
+        run: xvfb-run -a npm start -- --smoke-test
 
       - name: Construir Estudiantes
         run: npm run build:estudiantes
