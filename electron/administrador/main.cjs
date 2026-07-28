@@ -74,13 +74,18 @@ function openExternal(value) {
   } catch (_error) {}
 }
 
+function finiteOr(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 function normalizedBounds(raw) {
   const source = raw && typeof raw === 'object' ? raw : {};
   const candidate = {
-    x: Number.isFinite(Number(source.x)) ? Number(source.x) : 0,
-    y: Number.isFinite(Number(source.y)) ? Number(source.y) : 0,
-    width: Math.max(MIN_WIDTH, Number(source.width || 1480)),
-    height: Math.max(MIN_HEIGHT, Number(source.height || 920))
+    x: finiteOr(source.x, 0),
+    y: finiteOr(source.y, 0),
+    width: Math.max(MIN_WIDTH, finiteOr(source.width, 1480)),
+    height: Math.max(MIN_HEIGHT, finiteOr(source.height, 920))
   };
   const display = screen.getDisplayMatching(candidate);
   const area = display && display.workArea || { x: 0, y: 0, width: 1480, height: 920 };
