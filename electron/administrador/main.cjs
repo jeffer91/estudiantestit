@@ -4,6 +4,7 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { app, BrowserWindow, dialog, ipcMain, screen, shell, session } = require('electron');
 const { AdminCacheStore } = require('./cache.cjs');
+const { MicrosoftGraphDrafts } = require('./microsoft-graph.cjs');
 
 const APP_ID = 'ec.itsqmet.titulacion.administrador';
 const CACHE_PREFIX = 'admin-api:';
@@ -14,9 +15,11 @@ const PARTITION = 'persist:administrador-titulacion';
 const MIN_WIDTH = 900;
 const MIN_HEIGHT = 600;
 const SMOKE_TEST = process.argv.includes('--smoke-test');
+const OUTLOOK_DRAFTS_URL = 'https://outlook.office.com/mail/drafts';
 
 let mainWindow = null;
 let cacheStore = null;
+let graphService = null;
 
 function senderAllowed(event) {
   const senderUrl = String(
@@ -32,6 +35,22 @@ function validCacheKey(value, allowElectron = false) {
   if (key.startsWith(CACHE_PREFIX)) return key;
   if (allowElectron && key.startsWith('electron:')) return key;
   throw new Error('Clave de caché no permitida.');
+}
+
+function sendToRenderer(event, channel, payload) {
+  try {
+    if (event && event.sender && !event.sender.isDestroyed()) event.sender.send(channel, payload || {});
+  } catch (_error) {}
+}
+
+function graphHandlers(event) {
+  return {
+    onDeviceCode: (details) => {
+      sendToRenderer(event, 'admin-graph:device-code', details);
+      openExternal(details && (details.verificationUriComplete || details.verificationUri));
+    },
+    onProgress: (details) => sendToRenderer(event, 'admin-graph:progress', details)
+  };
 }
 
 function registerIpc() {
@@ -64,6 +83,31 @@ function registerIpc() {
   ipcMain.handle('admin-cache:stats', (event) => {
     if (!senderAllowed(event)) throw new Error('Origen no permitido.');
     return cacheStore.stats();
+  });
+
+  ipcMain.handle('admin-graph:status', async (event, payload) => {
+    if (!senderAllowed(event)) throw new Error('Origen no permitido.');
+    return graphService.status(payload && payload.config);
+  });
+  ipcMain.handle('admin-graph:connect', async (event, payload) => {
+    if (!senderAllowed(event)) throw new Error('Origen no permitido.');
+    return graphService.connect(payload && payload.config, graphHandlers(event));
+  });
+  ipcMain.handle('admin-graph:sign-out', async (event, payload) => {
+    if (!senderAllowed(event)) throw new Error('Origen no permitido.');
+    return graphService.signOut(payload && payload.config);
+  });
+  ipcMain.handle('admin-graph:create-drafts', async (event, payload) => {
+    if (!senderAllowed(event)) throw new Error('Origen no permitido.');
+    const source = payload && typeof payload === 'object' ? payload : {};
+    const result = await graphService.createDrafts(
+      source.config,
+      { subject: source.subject, body: source.body, batches: source.batches },
+      graphHandlers(event)
+    );
+    const firstLink = result.drafts && result.drafts.find((draft) => draft && draft.webLink);
+    openExternal(firstLink && firstLink.webLink || OUTLOOK_DRAFTS_URL);
+    return result;
   });
 }
 
@@ -191,6 +235,7 @@ if (!hasLock) {
   app.whenReady().then(() => {
     app.setAppUserModelId(APP_ID);
     cacheStore = new AdminCacheStore(app.getPath('userData')).init();
+    graphService = new MicrosoftGraphDrafts(cacheStore);
     registerIpc();
     hardenSession(session.fromPartition(PARTITION));
 
