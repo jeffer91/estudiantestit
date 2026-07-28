@@ -21,19 +21,26 @@ jobs:
         with:
           node-version: '24'
 
-      - name: Ejecutar validaciones y guardar salida
-        shell: bash
-        run: |
-          set +e
-          npm run check > diagnostico-electron.log 2>&1
-          echo $? > diagnostico-electron.status
-          exit 0
+      - name: Sintaxis
+        run: npm run check:syntax
 
-      - name: Publicar diagnóstico
-        uses: actions/upload-artifact@v4
-        with:
-          name: diagnostico-electron
-          path: |
-            diagnostico-electron.log
-            diagnostico-electron.status
-          retention-days: 1
+      - name: Aplicaciones
+        run: npm run check:apps
+
+      - name: Outlook
+        run: npm run check:outlook
+
+      - name: Arquitectura
+        run: npm run check:architecture
+
+      - name: Firebase Auth
+        run: npm run check:firebase-auth
+
+      - name: Acceso estudiante
+        run: npm run check:access
+
+      - name: Apps Script
+        run: npm run check:apps-script
+
+      - name: Electron Administrador
+        run: npm run check:electron
