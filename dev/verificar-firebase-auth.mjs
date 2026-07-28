@@ -36,7 +36,9 @@ assert(!/API_PUBLICA=['"]https:\/\/titulos\.pages\.dev/.test(adminApi), 'El admi
 assert(/wrangler pages dev \.pages-local/.test(packageJson), 'El entorno local no indica la carpeta estática a Wrangler.');
 assert(/deploy:administrador/.test(packageJson), 'No existe un despliegue independiente para Administrador.');
 assert(!/\bsetCached\s*\(/.test(access), 'La consulta inicial llama una función de caché inexistente.');
-assert(/\.then\(\(result\)\s*=>\s*setCache\(key, result, cedula\)\)/.test(access), 'La consulta inicial no guarda correctamente el resultado en caché.');
+assert(/function setCache\(key, value\)/.test(access), 'La consulta inicial no define la caché académica correctamente.');
+assert(/return setCache\(key, \{/.test(access), 'La consulta inicial no guarda sus resultados académicos en caché.');
+assert(/academicInflight\.set\(key, task\)/.test(access), 'La consulta inicial no evita solicitudes académicas duplicadas.');
 assert(/if \(requested\)[\s\S]*if \(!candidates\.length\) return null;/.test(titles), 'Una consulta de período podría devolver un envío perteneciente a otro período.');
 assert(/RESOLUTION_STATES/.test(titles), 'Las resoluciones no limitan los estados permitidos.');
 assert(/commitDocuments\('TITULOS'/.test(titles), 'Los envíos y resoluciones no usan escrituras atómicas.');

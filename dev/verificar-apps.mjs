@@ -18,6 +18,12 @@ function assert(condition, message) {
   if (!condition) errors.push(message);
 }
 
+function withoutComments(source) {
+  return String(source || '')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(^|[^:])\/\/.*$/gm, '$1');
+}
+
 function checkAssets(htmlPath) {
   const html = read(htmlPath);
   const directory = path.dirname(htmlPath);
@@ -63,6 +69,7 @@ const studentRequirements = read('estudiantes-mvp/js/requisitos.estudiantes.serv
 const studentSheets = read('estudiantes-mvp/js/sheets.service.js');
 const studentAccess = read('functions/api/acceso-estudiante.js');
 const studentFirebaseFast = read('functions/_lib/requisitos-firebase-fast.js');
+const studentFirebaseFastCode = withoutComments(studentFirebaseFast);
 const studentSheetsFallback = read('functions/_lib/requisitos-sheets-fallback.js');
 const appsScriptFast = read('google-apps-script/REQUISITOS_CONSULTA_RAPIDA.gs');
 const studentBuild = read('dev/preparar-pages-estudiantes.mjs');
@@ -91,8 +98,8 @@ assert(studentAccess.indexOf('lookupAcademic') < studentAccess.indexOf('queryTit
 assert(/CONSULTAR_ENVIO_CEDULA/.test(studentAccess) && /scope:\s*'period'/.test(studentAccess), 'Firebase Títulos no se consulta por cédula y período exactos.');
 assert(/GOOGLE_SHEETS_ESTUDIANTES/.test(studentAccess), 'La respuesta no identifica el respaldo institucional.');
 
-assert(/getDocument\('UTET', 'Estudiantes', canonical/.test(studentFirebaseFast), 'Firebase UTET no consulta el documento directo por cédula.');
-assert(!/queryEqual|EstudiantesPeriodo|listCollection\('TITULOS'/.test(studentFirebaseFast), 'La consulta rápida de UTET realiza lecturas adicionales.');
+assert(/getDocument\('UTET', 'Estudiantes', canonical/.test(studentFirebaseFastCode), 'Firebase UTET no consulta el documento directo por cédula.');
+assert(!/queryEqual|EstudiantesPeriodo|listCollection\('TITULOS'/.test(studentFirebaseFastCode), 'La consulta rápida de UTET realiza lecturas adicionales.');
 assert(/payloadJson/.test(studentFirebaseFast), 'La consulta rápida no aprovecha payloadJson.');
 assert(/consultar_estudiante_rapido/.test(studentSheetsFallback), 'El respaldo no usa la acción rápida de Apps Script.');
 assert(/sheetName:\s*'Estudiantes'/.test(studentSheetsFallback), 'El respaldo no está limitado a la hoja Estudiantes.');
