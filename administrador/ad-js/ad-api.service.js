@@ -5,7 +5,10 @@
   var CACHE_PREFIX='admin-api:v1:';
   var memoria=new Map();
   var enCurso=new Map();
+  var cacheGeneration=0;
   var forzarHasta=0;
+  var respaldoBloqueadoHasta=0;
+  var limpiezaEnCurso=Promise.resolve({ok:true});
   var TTL={
     ping:30*1000,
     configuracion:5*60*1000,
@@ -39,6 +42,23 @@
   function puente(){return window.AdminElectron&&window.AdminElectron.isElectron&&window.AdminElectron.cache?window.AdminElectron.cache:null;}
   function clonar(value){try{return JSON.parse(JSON.stringify(value));}catch(_error){return value;}}
 
+  function mostrarAvisoCache(item){
+    if(!window.document)return;
+    var el=window.document.getElementById('ad-cache-warning');
+    if(!el){
+      el=window.document.createElement('div');
+      el.id='ad-cache-warning';
+      el.setAttribute('role','status');
+      el.style.cssText='position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:12000;max-width:min(760px,calc(100vw - 32px));padding:11px 16px;border:1px solid #d6ac43;border-radius:12px;background:#fff8df;color:#624800;box-shadow:0 12px 30px rgba(20,35,55,.18);font:600 14px/1.35 system-ui,sans-serif;text-align:center;';
+      window.document.body.appendChild(el);
+    }
+    var saved=Number(item&&item.savedAt||0);
+    var when=saved?new Date(saved).toLocaleString('es-EC',{dateStyle:'medium',timeStyle:'short'}):'una consulta anterior';
+    el.textContent='Sin conexión con el servidor. Se muestran datos guardados desde '+when+'.';
+    el.hidden=false;
+  }
+  function ocultarAvisoCache(){var el=window.document&&window.document.getElementById('ad-cache-warning');if(el)el.hidden=true;}
+
   function leerMemoria(key){
     var item=memoria.get(key);
     if(!item)return null;
@@ -66,27 +86,48 @@
     if(!bridge)return Promise.resolve(value);
     return bridge.set(key,value,ttlMs).catch(function(){return null;}).then(function(){return value;});
   }
+  function forzarRed(options){
+    options=options||{};
+    cacheGeneration+=1;
+    memoria.clear();enCurso.clear();
+    forzarHasta=Date.now()+Math.max(0,Number(options.forzarMs===undefined?10000:options.forzarMs));
+    respaldoBloqueadoHasta=options.permitirRespaldo===false?forzarHasta:0;
+    return Promise.resolve({ok:true});
+  }
   function limpiarCache(options){
     options=options||{};
+    cacheGeneration+=1;
     memoria.clear();enCurso.clear();
     forzarHasta=Date.now()+Math.max(0,Number(options.forzarMs===undefined?8000:options.forzarMs));
+    respaldoBloqueadoHasta=0;
     var bridge=puente();
-    return bridge?bridge.clearPrefix(CACHE_PREFIX).catch(function(){return{ok:false};}):Promise.resolve({ok:true});
+    limpiezaEnCurso=limpiezaEnCurso.catch(function(){return{ok:false};}).then(function(){
+      return bridge?bridge.clearPrefix(CACHE_PREFIX).catch(function(){return{ok:false};}):{ok:true};
+    });
+    return limpiezaEnCurso;
   }
   function solicitarConCache(ruta,accion,datos,ttlMs,cargador){
     var key=claveCache(ruta,accion,datos);
     if(enCurso.has(key))return enCurso.get(key);
-    var task;
-    if(Date.now()<forzarHasta){
-      task=Promise.resolve().then(cargador).then(function(result){return guardarCache(key,result,ttlMs);});
-    }else{
-      task=leerCache(key).then(function(cached){
-        if(cached.hit&&!cached.stale)return cached.value;
-        return Promise.resolve().then(cargador).then(function(result){return guardarCache(key,result,ttlMs);}).catch(function(error){if(cached.hit)return cached.value;throw error;});
+    var generation=cacheGeneration;
+    var task=limpiezaEnCurso.catch(function(){return{ok:false};}).then(function(){
+      if(generation!==cacheGeneration)return solicitarConCache(ruta,accion,datos,ttlMs,cargador);
+      return leerCache(key).then(function(cached){
+        if(generation!==cacheGeneration)return solicitarConCache(ruta,accion,datos,ttlMs,cargador);
+        if(Date.now()>=forzarHasta&&cached.hit&&!cached.stale){ocultarAvisoCache();return cached.value;}
+        return Promise.resolve().then(cargador).then(function(result){
+          if(generation!==cacheGeneration)return solicitarConCache(ruta,accion,datos,ttlMs,cargador);
+          ocultarAvisoCache();
+          return guardarCache(key,result,ttlMs);
+        }).catch(function(error){
+          if(generation!==cacheGeneration)return solicitarConCache(ruta,accion,datos,ttlMs,cargador);
+          if(cached.hit&&Date.now()>=respaldoBloqueadoHasta){mostrarAvisoCache(cached);return cached.value;}
+          throw error;
+        });
       });
-    }
+    });
     enCurso.set(key,task);
-    return task.finally(function(){enCurso.delete(key);});
+    return task.finally(function(){if(enCurso.get(key)===task)enCurso.delete(key);});
   }
   function escritura(promesa){return Promise.resolve(promesa).then(function(result){return limpiarCache({forzarMs:5000}).then(function(){return result;});});}
   function titulosLectura(a,d,m,ttl){return solicitarConCache('/api/titulos',a,d||{},ttl,function(){return solicitar('/api/titulos',a,d,m);});}
@@ -97,10 +138,11 @@
   function lista(r,claves){if(Array.isArray(r))return r;r=r||{};for(var i=0;i<claves.length;i++)if(Array.isArray(r[claves[i]]))return r[claves[i]];if(r.data&&typeof r.data==='object')return lista(r.data,claves);if(r.resultado&&typeof r.resultado==='object')return lista(r.resultado,claves);return[];}
 
   var api={
-    version:'3.3.9-electron.1',
+    version:'3.3.9-electron.2',
     base:base,
     esElectron:function(){return Boolean(puente());},
     limpiarCache:limpiarCache,
+    forzarActualizacion:forzarRed,
     cacheEstado:function(){var bridge=puente();return bridge?bridge.stats():Promise.resolve({entries:memoria.size,persistent:false});},
     configTitulos:function(){return titulosLectura('CONFIGURACION_PUBLICA',{},'GET',TTL.configuracion);},
     configRequisitos:function(){return requisitosLectura('CONFIGURACION_PUBLICA',{},TTL.configuracion);},
@@ -143,7 +185,8 @@
       var button=event.target&&event.target.closest?event.target.closest('[data-action],[data-v2-action]'):null;
       if(!button)return;
       var action=button.getAttribute('data-action')||button.getAttribute('data-v2-action')||'';
-      if(['refrescar','diagnosticar','reload-periods','reload-careers','load-stats','actualizar-datos'].indexOf(action)>=0)limpiarCache({forzarMs:10000});
+      if(action==='diagnosticar')forzarRed({forzarMs:10000,permitirRespaldo:false});
+      else if(['refrescar','reload-periods','reload-careers','load-stats','actualizar-datos'].indexOf(action)>=0)forzarRed({forzarMs:10000,permitirRespaldo:true});
     },true);
   }
 
