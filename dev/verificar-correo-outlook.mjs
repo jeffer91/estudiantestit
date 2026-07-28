@@ -31,10 +31,18 @@ assert(/Coordinación de Titulación/.test(mailCode) && /Reciba un cordial salud
 assert(/_blank/.test(mailCode), 'Outlook no se abre en una pestaña nueva.');
 assert(/ad-correo-outlook\.js/.test(build), 'El build del Administrador no valida el módulo de Outlook.');
 
+assert(/correo-masivo-faltantes/.test(outlook), 'No existe el botón de correo masivo para faltantes.');
+assert(/NO_ENVIADO/.test(outlook), 'El correo masivo no limita los destinatarios a estudiantes que no han enviado.');
+assert(/\bbcc\s*:/.test(outlook), 'El correo masivo no protege los destinatarios mediante CCO.');
+assert(/MASS_BATCH_SIZE\s*=\s*50/.test(outlook), 'El correo masivo no divide los destinatarios en lotes controlados.');
+assert(/ad-mail-mass-confirm/.test(outlook), 'El correo masivo no solicita confirmación antes de abrir Outlook.');
+assert(/ningún correo se enviará automáticamente/.test(outlook), 'La interfaz no aclara que el envío debe confirmarse en Outlook.');
+assert(/periodoIdTitulos/.test(outlook), 'El correo masivo no comprueba que la lista corresponda al período seleccionado.');
+
 if (errors.length) {
   console.error('\n[Outlook] Se encontraron errores:\n');
   errors.forEach((error, index) => console.error((index + 1) + '. ' + error));
   console.error('');
   process.exit(1);
 }
-console.log('[Outlook] Correcto: lista global, ambos correos y mensaje formal.');
+console.log('[Outlook] Correcto: correos individuales y correo masivo en CCO para estudiantes faltantes.');
