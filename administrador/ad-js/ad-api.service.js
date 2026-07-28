@@ -7,7 +7,7 @@
   var enCurso=new Map();
   var cacheGeneration=0;
   var forzarHasta=0;
-  var respaldoBloqueadoHasta=0;
+  var respaldoBloqueadoGeneracion=-1;
   var limpiezaEnCurso=Promise.resolve({ok:true});
   var TTL={
     ping:30*1000,
@@ -91,7 +91,7 @@
     cacheGeneration+=1;
     memoria.clear();enCurso.clear();
     forzarHasta=Date.now()+Math.max(0,Number(options.forzarMs===undefined?10000:options.forzarMs));
-    respaldoBloqueadoHasta=options.permitirRespaldo===false?forzarHasta:0;
+    respaldoBloqueadoGeneracion=options.permitirRespaldo===false?cacheGeneration:-1;
     return Promise.resolve({ok:true});
   }
   function limpiarCache(options){
@@ -99,7 +99,7 @@
     cacheGeneration+=1;
     memoria.clear();enCurso.clear();
     forzarHasta=Date.now()+Math.max(0,Number(options.forzarMs===undefined?8000:options.forzarMs));
-    respaldoBloqueadoHasta=0;
+    respaldoBloqueadoGeneracion=-1;
     var bridge=puente();
     limpiezaEnCurso=limpiezaEnCurso.catch(function(){return{ok:false};}).then(function(){
       return bridge?bridge.clearPrefix(CACHE_PREFIX).catch(function(){return{ok:false};}):{ok:true};
@@ -121,7 +121,7 @@
           return guardarCache(key,result,ttlMs);
         }).catch(function(error){
           if(generation!==cacheGeneration)return solicitarConCache(ruta,accion,datos,ttlMs,cargador);
-          if(cached.hit&&Date.now()>=respaldoBloqueadoHasta){mostrarAvisoCache(cached);return cached.value;}
+          if(cached.hit&&respaldoBloqueadoGeneracion!==generation){mostrarAvisoCache(cached);return cached.value;}
           throw error;
         });
       });
