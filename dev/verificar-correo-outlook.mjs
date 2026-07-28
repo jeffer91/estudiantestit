@@ -28,7 +28,7 @@ assert(/ADAdminStatisticsLast/.test(api), 'El Administrador no conserva los falt
 assert(/ad-correo-outlook\.js/.test(api), 'El módulo de Outlook no se carga en el Administrador.');
 assert(/correoInstitucional/.test(mailCode) && /correoPersonal/.test(mailCode), 'Outlook no utiliza ambos correos del estudiante.');
 assert(/Coordinación de Titulación/.test(mailCode) && /Reciba un cordial saludo/.test(mailCode), 'El correo no contiene el mensaje formal definido.');
-assert(/_blank/.test(mailCode), 'Outlook no se abre mediante el cliente configurado.');
+assert(/_blank/.test(mailCode), 'Outlook no se abre mediante el navegador configurado.');
 assert(/ad-correo-outlook\.js/.test(build), 'El build del Administrador no valida el módulo de Outlook.');
 
 assert(/correo-masivo-faltantes/.test(outlook), 'No existe el botón de correo masivo para faltantes.');
@@ -37,13 +37,16 @@ assert(/MASS_BATCH_SIZE\s*=\s*50/.test(outlookFix), 'El correo masivo no divide 
 assert(/ad-mail-mass-confirm/.test(mailCode), 'El correo masivo no solicita confirmación antes de abrir Outlook.');
 assert(/periodoIdSeleccionado/.test(outlookFix), 'El correo masivo no comprueba que la lista corresponda al período seleccionado.');
 
-assert(/return 'mailto:'/.test(outlookFix), 'La corrección no utiliza el manejador de correo del sistema.');
-assert(/bcc='\+codificarCorreos/.test(outlookFix), 'Los destinatarios masivos no se colocan en CCO.');
+assert(/outlook\.office\.com\/mail\/deeplink\/compose/.test(outlookFix), 'La corrección no abre Outlook Web directamente.');
+assert(/to='\+encodeURIComponent\(to\.join\(';\'\)\)/.test(outlookFix), 'Los destinatarios individuales no se incluyen en Outlook Web.');
+assert(/bcc='\+encodeURIComponent\(bcc\.join\(';\'\)\)/.test(outlookFix), 'Los destinatarios masivos no se colocan en CCO.');
 assert(/encodeURIComponent\(texto\(options\.subject\)\)/.test(outlookFix), 'El asunto no codifica correctamente los espacios.');
-assert(/encodeURIComponent\(String\(options\.body\|\|''\)\)/.test(outlookFix), 'El cuerpo no codifica correctamente los espacios y saltos de línea.');
-assert(/codificarCorreos\(to\)/.test(outlookFix), 'Los correos institucionales y personales no aparecen en los destinatarios individuales.');
-assert(/stopImmediatePropagation/.test(outlookFix), 'La corrección no bloquea la apertura antigua con signos +.');
+assert(/encodeURIComponent\(String\(options\.body\|\|''\)\+'\\n'\)/.test(outlookFix), 'El cuerpo no codifica correctamente los espacios y saltos de línea.');
+assert(/document\.execCommand\('copy'\)/.test(outlookFix), 'No existe respaldo para copiar las direcciones CCO.');
+assert(/Abrir borrador/.test(outlookFix) && /session\.index/.test(outlookFix), 'Los borradores no se abren de uno en uno.');
+assert(/stopImmediatePropagation/.test(outlookFix), 'La corrección no bloquea la apertura antigua.');
 assert(/window\.addEventListener\('click',[\s\S]*?,true\)/.test(outlookFix), 'La corrección no intercepta Outlook antes del módulo antiguo.');
+assert(!/return 'mailto:'/.test(outlookFix), 'La corrección todavía depende de un cliente de correo configurado en Windows.');
 
 if (errors.length) {
   console.error('\n[Outlook] Se encontraron errores:\n');
@@ -51,4 +54,4 @@ if (errors.length) {
   console.error('');
   process.exit(1);
 }
-console.log('[Outlook] Correcto: espacios legibles y correos institucionales/personales en Para o CCO.');
+console.log('[Outlook] Correcto: Outlook Web abre cada borrador, conserva CCO y evita signos +.');
