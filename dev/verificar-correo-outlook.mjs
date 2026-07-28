@@ -38,8 +38,15 @@ assert(/NO_ENVIADO/.test(outlookUi), 'El correo no limita los destinatarios a es
 assert(/MASS_BATCH_SIZE\s*=\s*50/.test(outlookUi), 'El correo masivo no divide los destinatarios en lotes controlados.');
 assert(/ad-mail-mass-confirm/.test(mailCode), 'El correo masivo no solicita confirmación antes de preparar borradores.');
 assert(/periodoIdSeleccionado/.test(outlookUi), 'El correo masivo no comprueba que la lista corresponda al período seleccionado.');
-assert(/copiarDirecciones/.test(outlookUi) && /join\('; '\)/.test(outlookUi), 'La interfaz no copia todas las direcciones del grupo.');
-assert(/Ctrl \+ V/.test(outlookUi) && /CCO/.test(outlookUi), 'La interfaz no explica cómo pegar las direcciones en CCO.');
+assert(/institucionales:\s*institucionales/.test(outlookUi) && /personales:\s*personales/.test(outlookUi), 'La interfaz no separa correos institucionales y personales.');
+assert(/copiar-correos-institucionales/.test(outlookUi), 'No existe el botón para copiar correos institucionales.');
+assert(/copiar-correos-personales/.test(outlookUi), 'No existe el botón para copiar correos personales.');
+assert(/copiar-todos-correos/.test(outlookUi), 'No existe el botón para copiar todos los correos.');
+assert(/ad-mail-address-list/.test(outlookUi), 'No existe una vista previa visible de las direcciones.');
+assert(/abrirCorreo\(\{to:batch,subject:session\.subject,body:session\.body\}\)/.test(outlookUi), 'El correo masivo no coloca los destinatarios en Para.');
+assert(/to='\+encodeURIComponent\(to\.join\(';'\)\)/.test(outlookUi), 'El enlace de Outlook no incluye los destinatarios en Para.');
+assert(/destinatarios podrán ver las demás direcciones/.test(outlookUi), 'La interfaz no advierte que los destinatarios verán las direcciones en Para.');
+assert(/Ctrl \+ V/.test(outlookUi) && /campo Para/.test(outlookUi), 'La interfaz no ofrece el pegado manual en Para como respaldo.');
 assert(/Sin permisos especiales/.test(outlookUi), 'La interfaz no deja claro que no requiere permisos administrativos.');
 assert(/admin-clipboard:write/.test(main) && /clipboard\.writeText/.test(main), 'Electron no copia los correos mediante un canal seguro.');
 assert(/admin-outlook:open-compose/.test(main), 'Electron no abre Outlook mediante un canal seguro.');
@@ -57,4 +64,4 @@ if (errors.length) {
   console.error('');
   process.exit(1);
 }
-console.log('[Outlook] Correcto: copia correos institucionales y personales, abre Outlook y guía el pegado en CCO sin permisos administrativos.');
+console.log('[Outlook] Correcto: muestra y copia correos institucionales y personales, y los coloca en Para en Outlook.');
