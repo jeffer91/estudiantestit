@@ -39,16 +39,22 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Descargar repositorio
-        uses: actions/checkout@v4
-
-      - name: Configurar Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '24'
+      - name: Obtener revisión actual
+        shell: bash
+        run: |
+          git init -q .
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git fetch -q --depth=1 origin "${GITHUB_REF}"
+          git checkout -q --detach FETCH_HEAD
 
       - name: Instalar Electron
         run: npm install --no-package-lock --no-audit --no-fund --silent
 
       - name: Probar npm start del Administrador
-        run: xvfb-run -a npm start -- --smoke-test
+        shell: bash
+        run: |
+          set +e
+          xvfb-run -a npm start -- --smoke-test > electron-smoke.log 2>&1
+          status=$?
+          cat electron-smoke.log
+          exit "$status"
