@@ -16,37 +16,43 @@ function assert(condition, message) {
 const globalService = read('functions/_lib/admin-global.js');
 const api = read('administrador/ad-js/ad-api.service.js');
 const outlook = read('administrador/ad-js/ad-correo-outlook.js');
-const outlookFix = read('administrador/ad-js/ad-version.js');
+const outlookUi = read('administrador/ad-js/ad-version.js');
+const graph = read('electron/administrador/microsoft-graph.cjs');
+const main = read('electron/administrador/main.cjs');
+const preload = read('electron/administrador/preload.cjs');
 const globalApp = read('administrador/ad-js/ad-administracion-global.js');
 const build = read('dev/preparar-pages-administrador.mjs');
-const mailCode = outlook + globalApp + outlookFix;
+const mailCode = outlook + globalApp + outlookUi;
 
 assert(/CorreoInstitucional/.test(globalService), 'La lista global no recupera el correo institucional.');
 assert(/CorreoPersonal/.test(globalService), 'La lista global no recupera el correo personal.');
 assert(/correoInstitucional/.test(globalService) && /correoPersonal/.test(globalService), 'Los correos no se entregan al Administrador.');
 assert(/ADAdminStatisticsLast/.test(api), 'El Administrador no conserva los faltantes para preparar recordatorios.');
 assert(/ad-correo-outlook\.js/.test(api), 'El módulo de Outlook no se carga en el Administrador.');
-assert(/correoInstitucional/.test(mailCode) && /correoPersonal/.test(mailCode), 'Outlook no utiliza ambos correos del estudiante.');
+assert(/correoInstitucional/.test(mailCode) && /correoPersonal/.test(mailCode), 'El Administrador no utiliza ambos correos del estudiante.');
 assert(/Coordinación de Titulación/.test(mailCode) && /Reciba un cordial saludo/.test(mailCode), 'El correo no contiene el mensaje formal definido.');
-assert(/_blank/.test(mailCode), 'Outlook no se abre mediante el navegador configurado.');
 assert(/ad-correo-outlook\.js/.test(build), 'El build del Administrador no valida el módulo de Outlook.');
 
 assert(/correo-masivo-faltantes/.test(outlook), 'No existe el botón de correo masivo para faltantes.');
-assert(/NO_ENVIADO/.test(outlookFix), 'El correo corregido no limita los destinatarios a estudiantes que no han enviado.');
-assert(/MASS_BATCH_SIZE\s*=\s*50/.test(outlookFix), 'El correo masivo no divide los destinatarios en lotes controlados.');
-assert(/ad-mail-mass-confirm/.test(mailCode), 'El correo masivo no solicita confirmación antes de abrir Outlook.');
-assert(/periodoIdSeleccionado/.test(outlookFix), 'El correo masivo no comprueba que la lista corresponda al período seleccionado.');
+assert(/NO_ENVIADO/.test(outlookUi), 'El correo no limita los destinatarios a estudiantes que no han enviado.');
+assert(/MASS_BATCH_SIZE\s*=\s*50/.test(outlookUi), 'El correo masivo no divide los destinatarios en lotes controlados.');
+assert(/ad-mail-mass-confirm/.test(mailCode), 'El correo masivo no solicita confirmación antes de crear borradores.');
+assert(/periodoIdSeleccionado/.test(outlookUi), 'El correo masivo no comprueba que la lista corresponda al período seleccionado.');
 
-assert(/outlook\.office\.com\/mail\/deeplink\/compose/.test(outlookFix), 'La corrección no abre Outlook Web directamente.');
-assert(/to='\+encodeURIComponent\(to\.join\(';\'\)\)/.test(outlookFix), 'Los destinatarios individuales no se incluyen en Outlook Web.');
-assert(/bcc='\+encodeURIComponent\(bcc\.join\(';\'\)\)/.test(outlookFix), 'Los destinatarios masivos no se colocan en CCO.');
-assert(/encodeURIComponent\(texto\(options\.subject\)\)/.test(outlookFix), 'El asunto no codifica correctamente los espacios.');
-assert(/encodeURIComponent\(String\(options\.body\|\|''\)\+'\\n'\)/.test(outlookFix), 'El cuerpo no codifica correctamente los espacios y saltos de línea.');
-assert(/document\.execCommand\('copy'\)/.test(outlookFix), 'No existe respaldo para copiar las direcciones CCO.');
-assert(/Abrir borrador/.test(outlookFix) && /session\.index/.test(outlookFix), 'Los borradores no se abren de uno en uno.');
-assert(/stopImmediatePropagation/.test(outlookFix), 'La corrección no bloquea la apertura antigua.');
-assert(/window\.addEventListener\('click',[\s\S]*?,true\)/.test(outlookFix), 'La corrección no intercepta Outlook antes del módulo antiguo.');
-assert(!/return 'mailto:'/.test(outlookFix), 'La corrección todavía depende de un cliente de correo configurado en Windows.');
+assert(/@azure\/msal-node/.test(graph), 'La integración no utiliza MSAL oficial de Microsoft.');
+assert(/Mail\.ReadWrite/.test(graph), 'La integración no solicita el permiso delegado Mail.ReadWrite.');
+assert(/acquireTokenByDeviceCode/.test(graph), 'La integración no usa inicio de sesión seguro mediante código de dispositivo.');
+assert(/graph\.microsoft\.com\/v1\.0/.test(graph), 'La integración no llama a Microsoft Graph v1.0.');
+assert(/\/me\/messages/.test(graph), 'La integración no crea mensajes en la carpeta Borradores.');
+assert(/bccRecipients/.test(graph), 'Los correos institucionales y personales no se colocan como destinatarios CCO reales.');
+assert(!/\/send\b/.test(graph), 'La integración no debe enviar correos automáticamente.');
+assert(/admin-graph:create-drafts/.test(main), 'Electron no registra la creación segura de borradores.');
+assert(/admin-graph:device-code/.test(main), 'Electron no informa el código de autorización de Microsoft.');
+assert(/graph:\s*Object\.freeze/.test(preload), 'El preload no expone el puente seguro de Microsoft Graph.');
+assert(/graphBridge\.createDrafts/.test(outlookUi), 'La interfaz no solicita la creación real de borradores.');
+assert(/ad-graph-tenant-id/.test(outlookUi) && /ad-graph-client-id/.test(outlookUi), 'La interfaz no permite configurar Tenant ID y Client ID.');
+assert(/Crear borradores en Outlook/.test(outlookUi), 'El botón no indica que crea borradores reales en Outlook.');
+assert(/stopImmediatePropagation/.test(outlookUi), 'La integración no bloquea la apertura antigua del borrador defectuoso.');
 
 if (errors.length) {
   console.error('\n[Outlook] Se encontraron errores:\n');
@@ -54,4 +60,4 @@ if (errors.length) {
   console.error('');
   process.exit(1);
 }
-console.log('[Outlook] Correcto: Outlook Web abre cada borrador, conserva CCO y evita signos +.');
+console.log('[Outlook] Correcto: Microsoft Graph crea borradores reales con correos institucionales y personales en CCO.');

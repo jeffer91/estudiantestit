@@ -22,11 +22,13 @@ const packageJson = JSON.parse(read('package.json') || '{}');
 const main = read('electron/administrador/main.cjs');
 const preload = read('electron/administrador/preload.cjs');
 const cache = read('electron/administrador/cache.cjs');
+const graph = read('electron/administrador/microsoft-graph.cjs');
 const adminApi = read('administrador/ad-js/ad-api.service.js');
 
 assert(packageJson.main === 'electron/administrador/main.cjs', 'package.json no apunta al Electron del Administrador.');
 assert(packageJson.scripts && packageJson.scripts.start === 'electron .', 'npm start no abre Electron.');
 assert(packageJson.devDependencies && /^\d+\.\d+\.\d+$/.test(packageJson.devDependencies.electron || ''), 'Electron no está fijado a una versión exacta.');
+assert(packageJson.dependencies && /^\d+\.\d+\.\d+$/.test(packageJson.dependencies['@azure/msal-node'] || ''), 'MSAL Node no está fijado a una versión exacta.');
 assert(/administrador['"],\s*['"]ad-index\.html/.test(main), 'Electron no abre administrador/ad-index.html.');
 assert(!/estudiantes-mvp|coordinadores-mvp/.test(main), 'Electron incluye una aplicación distinta de Administrador.');
 assert(/contextIsolation:\s*true/.test(main), 'Electron debe activar contextIsolation.');
@@ -50,6 +52,21 @@ assert(/enCurso\.get\(key\)===task/.test(adminApi), 'Una consulta antigua podrí
 assert(/ad-cache-warning/.test(adminApi), 'La interfaz no avisa cuando muestra datos desactualizados.');
 assert(/permitirRespaldo:false/.test(adminApi), 'El diagnóstico podría aceptar datos antiguos de la caché.');
 
+assert(/MicrosoftGraphDrafts/.test(main), 'Electron no inicializa el servicio de Microsoft Graph.');
+assert(/admin-graph:status/.test(main) && /admin-graph:connect/.test(main), 'Electron no registra la conexión con Microsoft 365.');
+assert(/admin-graph:create-drafts/.test(main), 'Electron no registra la creación de borradores.');
+assert(/admin-graph:sign-out/.test(main), 'Electron no permite cerrar la sesión de Microsoft.');
+assert(/graph:\s*Object\.freeze/.test(preload), 'El preload no expone Microsoft Graph de forma aislada.');
+assert(/onDeviceCode/.test(preload) && /onProgress/.test(preload), 'El preload no expone eventos controlados de autenticación y progreso.');
+assert(/PublicClientApplication/.test(graph), 'Microsoft Graph no usa una aplicación cliente pública de MSAL.');
+assert(/acquireTokenSilent/.test(graph) && /acquireTokenByDeviceCode/.test(graph), 'La autenticación no reutiliza sesión ni ofrece código de dispositivo.');
+assert(/TOKEN_CACHE_TTL_MS/.test(graph) && /tokenCache\.serialize/.test(graph), 'El token de Microsoft no se conserva mediante la caché cifrada.');
+assert(/piiLoggingEnabled:\s*false/.test(graph), 'MSAL no desactiva el registro de información personal.');
+assert(/MAX_RECIPIENTS_PER_DRAFT\s*=\s*50/.test(graph), 'Microsoft Graph no limita los destinatarios por borrador.');
+assert(/bccRecipients/.test(graph), 'Microsoft Graph no coloca los destinatarios en CCO.');
+assert(!/clientSecret/i.test(graph), 'Una aplicación de escritorio no debe almacenar Client Secret.');
+assert(!/\/send\b/.test(graph), 'La aplicación no debe enviar automáticamente los borradores.');
+
 if (errors.length) {
   console.error('\n[Electron Administrador] Se encontraron errores:\n');
   errors.forEach((error, index) => console.error(`${index + 1}. ${error}`));
@@ -57,4 +74,4 @@ if (errors.length) {
   process.exit(1);
 }
 
-console.log('[Electron Administrador] Correcto: npm start abre solo Administrador con caché segura, invalidación y permisos bloqueados.');
+console.log('[Electron Administrador] Correcto: Administrador seguro con caché y borradores reales de Microsoft Graph.');
