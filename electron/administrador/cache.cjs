@@ -7,9 +7,20 @@ const { safeStorage } = require('electron');
 const FILE_VERSION = 1;
 const DEFAULT_TTL_MS = 5 * 60 * 1000;
 const MAX_STALE_MS = 7 * 24 * 60 * 60 * 1000;
+const MAX_VALUE_BYTES = 8 * 1024 * 1024;
 
 function cloneJson(value) {
-  return JSON.parse(JSON.stringify(value));
+  const serialized = JSON.stringify(value);
+  if (serialized === undefined) throw new Error('El valor no puede guardarse en caché.');
+  if (Buffer.byteLength(serialized, 'utf8') > MAX_VALUE_BYTES) {
+    throw new Error('El valor supera el tamaño máximo permitido para la caché.');
+  }
+  return JSON.parse(serialized);
+}
+
+function validTtl(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.max(1000, parsed) : DEFAULT_TTL_MS;
 }
 
 class AdminCacheStore {
@@ -19,10 +30,16 @@ class AdminCacheStore {
     this.entries = new Map();
     this.saveTimer = null;
     this.persistent = false;
+    this.backend = 'memory';
   }
 
   init() {
-    this.persistent = Boolean(safeStorage && safeStorage.isEncryptionAvailable());
+    const encryptionAvailable = Boolean(safeStorage && safeStorage.isEncryptionAvailable());
+    const selectedBackend = process.platform === 'linux' && safeStorage.getSelectedStorageBackend
+      ? safeStorage.getSelectedStorageBackend()
+      : 'os';
+    this.persistent = encryptionAvailable && selectedBackend !== 'basic_text';
+    this.backend = this.persistent ? selectedBackend : 'memory';
     this.load();
     return this;
   }
@@ -37,12 +54,18 @@ class AdminCacheStore {
       const now = Date.now();
       Object.entries(payload.entries || {}).forEach(([key, entry]) => {
         if (!entry || typeof entry !== 'object') return;
-        if (Number(entry.savedAt || 0) + MAX_STALE_MS < now) return;
-        this.entries.set(key, entry);
+        if (!Number.isFinite(Number(entry.savedAt)) || !Number.isFinite(Number(entry.expiresAt))) return;
+        if (Number(entry.savedAt) + MAX_STALE_MS < now) return;
+        this.entries.set(key, {
+          value: cloneJson(entry.value),
+          savedAt: Number(entry.savedAt),
+          expiresAt: Number(entry.expiresAt)
+        });
       });
       this.prune();
     } catch (_error) {
       this.entries.clear();
+      try { fs.rmSync(this.filePath, { force: true }); } catch (_removeError) {}
     }
   }
 
@@ -66,7 +89,7 @@ class AdminCacheStore {
     this.entries.set(normalizedKey, {
       value: cloneJson(value),
       savedAt: now,
-      expiresAt: now + Math.max(1000, Number(ttlMs || DEFAULT_TTL_MS))
+      expiresAt: now + validTtl(ttlMs)
     });
     this.prune();
     this.scheduleSave();
@@ -103,7 +126,7 @@ class AdminCacheStore {
     return {
       entries: this.entries.size,
       persistent: this.persistent,
-      filePath: this.persistent ? this.filePath : ''
+      backend: this.backend
     };
   }
 
@@ -134,6 +157,7 @@ class AdminCacheStore {
   flush() {
     if (!this.persistent) return false;
     try {
+      this.prune();
       fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
       const entries = Object.fromEntries(this.entries.entries());
       const encrypted = safeStorage.encryptString(JSON.stringify({ entries }));
