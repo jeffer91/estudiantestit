@@ -21,7 +21,7 @@ jobs:
       - name: Configurar Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: Revisar sintaxis, arquitectura y acceso
         run: npm run check
@@ -34,3 +34,36 @@ jobs:
 
       - name: Construir Administrador
         run: npm run build:administrador
+
+  electron-administrador:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Obtener revisión actual
+        shell: bash
+        run: |
+          git init -q .
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git fetch -q --depth=1 origin "${GITHUB_REF}"
+          git checkout -q --detach FETCH_HEAD
+
+      - name: Instalar Electron
+        run: npm install --no-package-lock --no-audit --no-fund --silent
+
+      - name: Descargar binario de Electron
+        run: node node_modules/electron/install.js
+
+      - name: Configurar sandbox de Chromium
+        run: |
+          test -f node_modules/electron/dist/chrome-sandbox
+          sudo chown root:root node_modules/electron/dist/chrome-sandbox
+          sudo chmod 4755 node_modules/electron/dist/chrome-sandbox
+
+      - name: Probar npm start del Administrador
+        shell: bash
+        run: |
+          set +e
+          xvfb-run -a npm start -- --smoke-test > electron-smoke.log 2>&1
+          status=$?
+          cat electron-smoke.log
+          exit "$status"
