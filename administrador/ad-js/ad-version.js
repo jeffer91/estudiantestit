@@ -2,12 +2,14 @@
 (function(window,document){
   'use strict';
 
-  var VERSION='3.4.5';
+  var VERSION='3.4.6';
   var MASS_BATCH_SIZE=50;
+  var MAX_OUTLOOK_URL_LENGTH=7000;
   var OUTLOOK_COMPOSE='https://outlook.office.com/mail/deeplink/compose';
   var massSession=null;
   var busy=false;
   var electronBridge=window.AdminElectron&&window.AdminElectron.isElectron?window.AdminElectron:null;
+  window.ADMailMassV2=true;
 
   function texto(value){return String(value===null||value===undefined?'':value).trim();}
   function normal(value){return texto(value).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').replace(/\s+/g,' ').trim();}
@@ -104,13 +106,56 @@
   function faltantesMasivos(){
     var data=window.ADAdminGlobalLast||{};
     var selectedPeriod=periodoIdSeleccionado();
-    if(selectedPeriod&&texto(data.periodoId)&&texto(data.periodoId)!==selectedPeriod)return[];
+    if(selectedPeriod&&texto(data.periodoId)!==selectedPeriod)return[];
     var career=carreraSeleccionada();
     return (data.registros||[]).filter(function(item){
       if(texto(item&&item.estado).toUpperCase()!=='NO_ENVIADO')return false;
       if(career&&normal(item&&item.carrera)!==normal(career))return false;
       return true;
     });
+  }
+
+  function enlaceOutlook(options){
+    options=options||{};
+    var to=Array.isArray(options.to)?options.to:[];
+    var query=[];
+    if(to.length)query.push('to='+encodeURIComponent(to.join(';')));
+    query.push('subject='+encodeURIComponent(texto(options.subject)));
+    query.push('body='+encodeURIComponent(String(options.body||'')+'\n'));
+    return OUTLOOK_COMPOSE+'?'+query.join('&');
+  }
+
+  function gruposUnicosPorEstudiante(students){
+    var seen={};
+    var groups=[];
+    students.forEach(function(student){
+      var group=[];
+      correosDe(student).forEach(function(email){
+        if(seen[email])return;
+        seen[email]=true;
+        group.push(email);
+      });
+      if(group.length)groups.push(group);
+    });
+    return groups;
+  }
+
+  function crearLotesSeguros(groups,subject,body){
+    var batches=[];
+    var current=[];
+    groups.forEach(function(group){
+      var candidate=current.concat(group);
+      var tooMany=candidate.length>MASS_BATCH_SIZE;
+      var tooLong=enlaceOutlook({to:candidate,subject:subject,body:body}).length>MAX_OUTLOOK_URL_LENGTH;
+      if(current.length&&(tooMany||tooLong)){
+        batches.push(current);
+        current=group.slice();
+      }else{
+        current=candidate;
+      }
+    });
+    if(current.length)batches.push(current);
+    return batches;
   }
 
   function resumenMasivo(){
@@ -136,6 +181,12 @@
       }
       if(tieneCorreo)conCorreo+=1;else sinCorreo+=1;
     });
+    var periodo=periodoSeleccionado();
+    var carrera=carreraSeleccionada();
+    var subject='Recordatorio de registro de propuestas de titulación – '+periodo;
+    var body=mensajeMasivo(periodo,carrera);
+    var groups=gruposUnicosPorEstudiante(students);
+    var batches=crearLotesSeguros(groups,subject,body);
     return{
       estudiantes:students,
       institucionales:institucionales,
@@ -143,26 +194,13 @@
       correos:emails,
       conCorreo:conCorreo,
       sinCorreo:sinCorreo,
-      periodo:periodoSeleccionado(),
-      carrera:carreraSeleccionada(),
-      lotes:Math.ceil(emails.length/MASS_BATCH_SIZE)
+      periodo:periodo,
+      carrera:carrera,
+      subject:subject,
+      body:body,
+      batches:batches,
+      lotes:batches.length
     };
-  }
-
-  function dividir(list,size){
-    var groups=[];
-    for(var index=0;index<list.length;index+=size)groups.push(list.slice(index,index+size));
-    return groups;
-  }
-
-  function enlaceOutlook(options){
-    options=options||{};
-    var to=Array.isArray(options.to)?options.to:[];
-    var query=[];
-    if(to.length)query.push('to='+encodeURIComponent(to.join(';')));
-    query.push('subject='+encodeURIComponent(texto(options.subject)));
-    query.push('body='+encodeURIComponent(String(options.body||'')+'\n'));
-    return OUTLOOK_COMPOSE+'?'+query.join('&');
   }
 
   function abrirCorreo(options){
@@ -245,15 +283,15 @@
       panel.id='ad-mail-manual-panel';
       panel.className='ad-mail-manual-panel';
       panel.innerHTML=''+
-        '<span class="ad-mail-manual-badge">Sin permisos especiales</span>'+
-        '<strong>Correos disponibles para copiar</strong>'+
-        '<p class="ad-mail-privacy-warning">Importante: al utilizar el campo Para, los destinatarios podrán ver las demás direcciones incluidas en el mismo borrador.</p>'+
-        '<div class="ad-mail-copy-grid">'+
-          '<div class="ad-mail-copy-card"><span id="ad-mail-count-institutional">Institucionales: 0</span><button class="ad-btn ad-btn-secondary" type="button" data-action="copiar-correos-institucionales">Copiar institucionales</button></div>'+
-          '<div class="ad-mail-copy-card"><span id="ad-mail-count-personal">Personales: 0</span><button class="ad-btn ad-btn-secondary" type="button" data-action="copiar-correos-personales">Copiar personales</button></div>'+
-          '<div class="ad-mail-copy-card"><span id="ad-mail-count-all">Todos: 0</span><button class="ad-btn ad-btn-primary" type="button" data-action="copiar-todos-correos">Copiar todos</button></div>'+
-        '</div>'+
-        '<label class="ad-mail-address-field"><span>Vista previa de todos los correos institucionales y personales</span><textarea id="ad-mail-address-list" readonly></textarea></label>'+
+        '<span class="ad-mail-manual-badge">Sin permisos especiales</span>'+ 
+        '<strong>Correos disponibles para copiar</strong>'+ 
+        '<p class="ad-mail-privacy-warning">Importante: al utilizar el campo Para, los destinatarios podrán ver las demás direcciones incluidas en el mismo borrador.</p>'+ 
+        '<div class="ad-mail-copy-grid">'+ 
+          '<div class="ad-mail-copy-card"><span id="ad-mail-count-institutional">Institucionales: 0</span><button class="ad-btn ad-btn-secondary" type="button" data-action="copiar-correos-institucionales">Copiar institucionales</button></div>'+ 
+          '<div class="ad-mail-copy-card"><span id="ad-mail-count-personal">Personales: 0</span><button class="ad-btn ad-btn-secondary" type="button" data-action="copiar-correos-personales">Copiar personales</button></div>'+ 
+          '<div class="ad-mail-copy-card"><span id="ad-mail-count-all">Todos: 0</span><button class="ad-btn ad-btn-primary" type="button" data-action="copiar-todos-correos">Copiar todos</button></div>'+ 
+        '</div>'+ 
+        '<label class="ad-mail-address-field"><span>Vista previa de todos los correos institucionales y personales</span><textarea id="ad-mail-address-list" readonly></textarea></label>'+ 
         '<p class="ad-mail-manual-help">Al abrir cada borrador, Outlook intentará colocar automáticamente las direcciones del grupo en <b>Para</b>. Como respaldo, el grupo también quedará copiado; si Outlook lo omite, haz clic en Para y presiona <b>Ctrl + V</b>.</p>';
       if(intro)intro.insertAdjacentElement('afterend',panel);else card.insertBefore(panel,card.firstChild);
     }
@@ -297,10 +335,10 @@
     if(!massSession||massSession.signature!==signature){
       massSession={
         signature:signature,
-        batches:dividir(summary.correos,MASS_BATCH_SIZE),
+        batches:summary.batches.map(function(batch){return batch.slice();}),
         index:0,
-        subject:'Recordatorio de registro de propuestas de titulación – '+summary.periodo,
-        body:mensajeMasivo(summary.periodo,summary.carrera),
+        subject:summary.subject,
+        body:summary.body,
         summary:summary
       };
     }
@@ -372,10 +410,27 @@
     });
   }
 
+  function actualizarResumenModal(summary){
+    var fields={
+      'ad-mail-mass-period':summary.periodo,
+      'ad-mail-mass-career':summary.carrera||'Todas',
+      'ad-mail-mass-students':summary.estudiantes.length,
+      'ad-mail-mass-valid':summary.conCorreo+' estudiantes · '+summary.correos.length+' direcciones únicas',
+      'ad-mail-mass-invalid':summary.sinCorreo,
+      'ad-mail-mass-batches':summary.lotes
+    };
+    Object.keys(fields).forEach(function(id){var element=document.getElementById(id);if(element)element.textContent=fields[id];});
+    var subject=document.getElementById('ad-mail-mass-subject');
+    var body=document.getElementById('ad-mail-mass-body');
+    if(subject)subject.value=summary.subject;
+    if(body)body.value=summary.body;
+  }
+
   function prepararModal(){
     resetSesionMasiva();
     asegurarPanelManual();
     var summary=resumenMasivo();
+    actualizarResumenModal(summary);
     actualizarPanelCorreos(summary);
     var session=prepararSesionMasiva(summary);
     actualizarBotonSesion(session);
@@ -388,6 +443,14 @@
     var action=button.getAttribute('data-action');
 
     if(action==='correo-masivo-faltantes'){
+      var summary=resumenMasivo();
+      if(!summary.estudiantes.length||!summary.correos.length){
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        window.alert(!summary.estudiantes.length?'No hay estudiantes con estado No enviado para el período y la carrera seleccionados.':'Los estudiantes faltantes no tienen correos válidos registrados.');
+        return;
+      }
       window.setTimeout(prepararModal,0);
       return;
     }
@@ -413,7 +476,5 @@
   update();
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',update,{once:true});
   window.addEventListener('load',update,{once:true});
-  window.setTimeout(update,500);
-  window.setTimeout(update,1500);
-  window.setTimeout(update,3500);
+  [100,250,500,1500,3500].forEach(function(delay){window.setTimeout(update,delay);});
 })(window,document);
