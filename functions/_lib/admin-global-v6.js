@@ -11,11 +11,11 @@ import {
   listCollection,
   normalizeCedula,
   periodSignature,
-  samePeriod,
   text
 } from './firestore-fixed.js';
 import {
   TIPO_TRABAJO_TITULACION,
+  coincidePeriodoTrabajo,
   esTrabajoTitulacion,
   migrarTrabajosTitulacionLegados
 } from './trabajo-titulacion-unificado.js';
@@ -53,6 +53,11 @@ function envioPeriod(row) {
   ));
 }
 
+function envioPeriodId(row, requestedPeriod) {
+  return text(row && (row.periodoId || row.periodId || row.periodoCanonicoId)) ||
+    periodSignature(envioPeriod(row) || requestedPeriod);
+}
+
 function envioCedula(row) {
   const direct = normalizeCedula(row && (row.cedula || row.numeroIdentificacion));
   if (direct) return direct;
@@ -74,7 +79,7 @@ function normalizeEnvio(row, requestedPeriod) {
     nombres: text(row.nombres || row.estudiante || row.Nombres),
     carrera: text(row.carreraNombre || row.nombreCarrera || row.carrera),
     codigoCarrera: text(row.carreraCodigo || row.codigoCarrera || row.carreraId),
-    periodoId: periodSignature(envioPeriod(row) || requestedPeriod),
+    periodoId: envioPeriodId(row, requestedPeriod),
     periodo: envioPeriod(row) || requestedPeriod,
     estado: status(row.estado || row.estadoFinal),
     enviado: true,
@@ -95,14 +100,17 @@ function normalizeEnvio(row, requestedPeriod) {
 
 export async function buildAdminGlobalList(payload = {}, env) {
   await migrarTrabajosTitulacionLegados(env);
-  const requestedPeriod = text(payload.periodoId || payload.periodoLabel || payload.periodo);
+  const requestedPeriods = [payload.periodoId, payload.periodoLabel, payload.periodo].map(text).filter(Boolean);
+  const requestedPeriod = requestedPeriods[0] || '';
   const requestedCareer = text(payload.carrera || payload.nombreCarrera);
   const base = await buildPreviousGlobal(payload, env);
   const allEnvios = await listCollection('TITULOS', 'envios', { maxDocuments: 10000 }, env);
 
+  const periodEnvios = requestedPeriods.length
+    ? allEnvios.filter((row) => coincidePeriodoTrabajo(row, requestedPeriods))
+    : allEnvios;
   const enviosByCedula = new Map();
-  for (const row of allEnvios) {
-    if (requestedPeriod && !samePeriod(envioPeriod(row), requestedPeriod)) continue;
+  for (const row of periodEnvios) {
     const cedula = envioCedula(row);
     if (!cedula) continue;
     if (!enviosByCedula.has(cedula)) enviosByCedula.set(cedula, []);
@@ -145,7 +153,7 @@ export async function buildAdminGlobalList(payload = {}, env) {
     normalized(left.nombres).localeCompare(normalized(right.nombres), 'es'));
 
   const missing = records.filter((item) => !item.fueraPoblacion && item.estado === 'NO_ENVIADO');
-  const workCount = allEnvios.filter(esTrabajoTitulacion).length;
+  const workCount = periodEnvios.filter(esTrabajoTitulacion).length;
   return {
     ...base,
     registros: records,
