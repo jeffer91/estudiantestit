@@ -2,11 +2,12 @@
 (function(window){
 'use strict';
 
-var VERSION='2.9.3';
+var VERSION='2.9.5';
 var CACHE_CONFIG_MS=5*60*1000;
 var CACHE_COORDINADORES_MS=5*60*1000;
 var memoria={};
 var enCurso={};
+var diagnosticoEnvios={articulos:{ok:false,recibidos:0,error:''},trabajos:{ok:false,recibidos:0,error:''},totalRecibidos:0,totalNormalizados:0,fecha:''};
 
 function config(){return window.CoordinadorMVPConfig||null;}
 function utils(){return window.CoordinadorMVPUtils||null;}
@@ -20,6 +21,7 @@ function cacheValido(clave){var item=memoria[clave];return item&&item.expira>aho
 function guardarCache(clave,valor,ttl){memoria[clave]={valor:valor,expira:ahora()+ttl};return valor;}
 function resolverUnaVez(clave,ttl,forzar,cargador){if(!forzar){var guardado=cacheValido(clave);if(guardado)return Promise.resolve(guardado);if(enCurso[clave])return enCurso[clave];}enCurso[clave]=Promise.resolve().then(cargador).then(function(valor){return guardarCache(clave,valor,ttl);}).finally(function(){delete enCurso[clave];});return enCurso[clave];}
 function limpiarCache(clave){if(clave){delete memoria[clave];delete enCurso[clave];return;}memoria={};enCurso={};}
+function clonar(valor){try{return JSON.parse(JSON.stringify(valor));}catch(error){return valor;}}
 function solicitarEn(endpoint,a,p,m){return fetch(endpoint,{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json','X-Titulos-App':'coordinadores'},body:JSON.stringify({accion:a,metodo:m||'POST',datos:p||{}})}).then(function(resp){return resp.text().then(function(body){var j={};try{j=body?JSON.parse(body):{};}catch(e){throw new Error('Firebase Títulos respondió en formato no válido.');}if(!resp.ok||j.ok===false)throw new Error(j.mensaje||j.error||('Error HTTP '+resp.status));return j;});});}
 function solicitar(a,p,m){return solicitarEn(url(),a,p,m);}
 function solicitarTrabajo(a,p){return solicitarEn(urlTrabajo(),a,p,'POST');}
@@ -36,12 +38,16 @@ function tipoTrabajo(f){return texto(f&&f.tipoTrabajo).toUpperCase()==='TRABAJO_
 function normalizarCoordinador(f,i){var c=config().data.columnas.coordinadores,n=utils().limpiarTexto(campo(f,c.nombre,'')),cs=utils().normalizarCarreras(campo(f,c.carreras,'')),activo=utils().parseBoolean(campo(f,c.activo,'ACTIVO'),true);return{id:utils().normalizarClave(f.id||f.idRegistro||n||('coordinador_'+i)),nombre:n,carreras:cs,carrerasTexto:utils().carrerasComoTexto(cs),activo:activo,fuente:'FIREBASE_TITULOS',raw:f||{}};}
 function normalizarEnvio(f,i){
   var c=config().data.columnas.envios;f=f||{};
-  var t=[utils().limpiarTitulo(campo(f,c.titulo1,'')),utils().limpiarTitulo(campo(f,c.titulo2,'')),utils().limpiarTitulo(campo(f,c.titulo3,''))];
-  var pr=utils().limpiarTexto(campo(f,c.preferido,'')),pn=favorito(pr,t);
-  var e=utils().normalizarEstado(utils().limpiarTexto(campo(f,c.estado,''))||utils().limpiarTexto(campo(f,c.estadoFirebase,''))||config().obtenerEstado('pendiente'));
+  var t=[
+    utils().limpiarTitulo(campo(f,c.titulo1,'')||f.titulo1),
+    utils().limpiarTitulo(campo(f,c.titulo2,'')||f.titulo2),
+    utils().limpiarTitulo(campo(f,c.titulo3,'')||f.titulo3)
+  ];
+  var pr=utils().limpiarTexto(campo(f,c.preferido,'')||f.tituloPreferidoNumero||f.preferido),pn=favorito(pr,t);
+  var e=utils().normalizarEstado(utils().limpiarTexto(campo(f,c.estado,'')||f.estado)||utils().limpiarTexto(campo(f,c.estadoFirebase,'')||f.estadoFinal)||config().obtenerEstado('pendiente'));
   if(e==='ENVIADO'||e==='PENDIENTE_SYNC')e=config().obtenerEstado('pendiente');
-  var p=utils().limpiarTexto(campo(f,c.periodo,''));
-  var id=utils().limpiarTexto(campo(f,c.idRegistro,''))||utils().limpiarTexto(f.envioId||f.id||f.ID||f._id||'');
+  var p=utils().limpiarTexto(campo(f,c.periodo,'')||f.periodoNombre||f.periodoLabel||f.periodoId);
+  var id=utils().limpiarTexto(campo(f,c.idRegistro,''))||utils().limpiarTexto(f.envioId||f.id||f.ID||f._id||f._docId||'');
   var tipo=tipoTrabajo(f);
   return{
     id:id||[f.periodoId||p,f.cedula||f.numeroIdentificacion||'',tipo,i].join('__'),_clave:id||[f.periodoId||p,f.cedula||f.numeroIdentificacion||'',tipo,i].join('__'),
@@ -59,10 +65,25 @@ function normalizarEnvio(f,i){
 }
 function listarCoordinadores(forzar){return resolverUnaVez('coordinadores',CACHE_COORDINADORES_MS,forzar===true,function(){return tget('LISTAR_COORDINADORES',{}).then(function(r){var l=lista(r,'coordinadores').map(normalizarCoordinador).filter(function(x){return x&&x.activo!==false&&x.nombre;});if(!l.length)throw new Error('Firebase Títulos no devolvió coordinadores activos.');return l;});});}
 function listarEnvios(){
-  return Promise.all([
-    tget('LISTAR_ENVIOS_POR_CARRERA',{estado:'',todas:'true',incluirTodos:'true'}).then(function(r){return lista(r,'envios');}),
-    solicitarTrabajo('LISTAR_ENVIOS_TRABAJO_TITULACION',{estado:'',todas:true,incluirTodos:true}).then(function(r){return lista(r,'envios');})
-  ]).then(function(resultados){return resultados[0].concat(resultados[1]).map(normalizarEnvio).filter(function(x){return x&&x.cedula&&x.tieneTitulos;});});
+  var articulosPromise=tget('LISTAR_ENVIOS_POR_CARRERA',{estado:'',todas:'true',incluirTodos:'true'});
+  var trabajosPromise=solicitarTrabajo('LISTAR_ENVIOS_TRABAJO_TITULACION',{estado:'',todas:true,incluirTodos:true});
+  return Promise.allSettled([articulosPromise,trabajosPromise]).then(function(resultados){
+    var articulosOk=resultados[0].status==='fulfilled';
+    var trabajosOk=resultados[1].status==='fulfilled';
+    var articulos=articulosOk?lista(resultados[0].value,'envios'):[];
+    var trabajos=trabajosOk?lista(resultados[1].value,'envios'):[];
+    diagnosticoEnvios={
+      articulos:{ok:articulosOk,recibidos:articulos.length,error:articulosOk?'':mensajeError(resultados[0].reason)},
+      trabajos:{ok:trabajosOk,recibidos:trabajos.length,error:trabajosOk?'':mensajeError(resultados[1].reason)},
+      totalRecibidos:articulos.length+trabajos.length,
+      totalNormalizados:0,
+      fecha:new Date().toISOString()
+    };
+    if(!articulosOk&&!trabajosOk)throw new Error('No se pudieron consultar los artículos ni los Trabajos de Titulación. Artículos: '+diagnosticoEnvios.articulos.error+'; Trabajos: '+diagnosticoEnvios.trabajos.error);
+    var normalizados=articulos.concat(trabajos).map(normalizarEnvio).filter(function(x){return x&&x.cedula&&x.tieneTitulos;});
+    diagnosticoEnvios.totalNormalizados=normalizados.length;
+    return normalizados;
+  });
 }
 function listarPeriodos(){return listarEnvios().then(function(envios){var mapa={},periodos=[];envios.forEach(function(item){var id=texto(item.periodoId||item.periodo),label=texto(item.periodoLabel||item.periodo||id);if(!id||mapa[id])return;mapa[id]=true;periodos.push({id:id,label:label,activo:true});});return{periodos:periodos,principal:periodos[0]||null,envios:envios};});}
 function consultarEnvioPorCedula(c,p,tipo,id){c=utils().limpiarCedula(c);if(!c)return Promise.reject(new Error('No se recibió una cédula válida.'));if(texto(tipo).toUpperCase()==='TRABAJO_TITULACION'){return solicitarTrabajo('CONSULTAR_ENVIO_TRABAJO_TITULACION',{cedula:c,numeroIdentificacion:c,periodo:texto(p),envioId:texto(id)}).then(function(r){var e=r.envio||r.registro;if(!e)throw new Error('No se devolvió el Trabajo de Titulación.');return normalizarEnvio(e,0);});}return tget('VERIFICAR_ENVIO',{cedula:c,numeroIdentificacion:c,periodo:texto(p)}).then(function(r){var e=r.envio||r.registro||r.data&&(r.data.envio||r.data.registro);if(!e){var l=lista(r,'envios');e=l[l.length-1];}if(!e)throw new Error('Firebase Títulos no devolvió el envío.');return normalizarEnvio(e,0);});}
@@ -70,7 +91,8 @@ function nc(v){return typeof v==='string'?v:texto(v&&(v.nombre||v.coordinador||v
 function resolverEndpoint(e,p){if(e.tipoTrabajo==='TRABAJO_TITULACION')return solicitarTrabajo('GUARDAR_RESOLUCION_TRABAJO_TITULACION',p);return tpost('GUARDAR_RESOLUCION',p);}
 function aprobarEnvio(e,res){e=e||{};res=res||{};var f=utils().limpiarTitulo(res.tituloFinal),o=utils().limpiarTitulo(res.tituloOriginal);if(!f)return Promise.reject(new Error(config().obtener('textos.seleccionaTitulo')));var st=f===o?config().obtenerEstado('aprobado'):config().obtenerEstado('reemplazado'),p={envioId:e.id||e._clave,tipoTrabajo:e.tipoTrabajo,cedula:e.cedula,numeroIdentificacion:e.cedula,periodo:e.periodoLabel||e.periodo,periodoId:e.periodoId,estudiante:e.nombres,nombres:e.nombres,carrera:e.carrera,coordinador:nc(res.coordinador),estadoFinal:st,estado:st,tituloElegido:o||f,preferido:o||f,tituloFinal:f,tituloCorregido:f!==o?f:'',observacion:utils().limpiarTextoMultilinea(res.comentarioCoordinador),comentario:utils().limpiarTextoMultilinea(res.comentarioCoordinador),fechaResolucion:utils().fechaIso(),permitirReenvio:false};return resolverEndpoint(e,p).then(function(r){limpiarCache();return{ok:true,estado:st,mensaje:r.mensaje||config().obtener('textos.aprobarOk'),respuesta:r,payload:p};});}
 function devolverEnvio(e,res){e=e||{};res=res||{};var c=utils().limpiarTextoMultilinea(res.comentarioCoordinador);if(c.length<4)return Promise.reject(new Error(config().obtener('textos.comentarioDevolucion')));var st=config().obtenerEstado('devuelto'),el=e.tituloPreferidoTexto||e.tituloPreferido||e.titulo1||'',p={envioId:e.id||e._clave,tipoTrabajo:e.tipoTrabajo,cedula:e.cedula,numeroIdentificacion:e.cedula,periodo:e.periodoLabel||e.periodo,periodoId:e.periodoId,estudiante:e.nombres,nombres:e.nombres,carrera:e.carrera,coordinador:nc(res.coordinador),estadoFinal:st,estado:st,tituloElegido:el,preferido:el,tituloCorregido:'',observacion:c,comentario:c,fechaResolucion:utils().fechaIso(),permitirReenvio:true};return resolverEndpoint(e,p).then(function(r){limpiarCache();return{ok:true,estado:st,mensaje:r.mensaje||config().obtener('textos.devolverOk'),respuesta:r,payload:p};});}
-function diagnostico(){return Promise.allSettled([leerConfiguracion(),tget('PING',{}),solicitarTrabajo('PING',{})]).then(function(p){return{ok:true,version:VERSION,soportaTrabajoTitulacion:true,fuentePrincipal:'FIREBASE_TITULOS',titulos:p[1].status==='fulfilled'?p[1].value:{error:mensajeError(p[1].reason)},trabajoTitulacion:p[2].status==='fulfilled'?p[2].value:{error:mensajeError(p[2].reason)},configuracion:p[0].status==='fulfilled'?p[0].value:{error:mensajeError(p[0].reason)},fecha:new Date().toISOString()};});}
+function obtenerDiagnosticoConsulta(){return clonar(diagnosticoEnvios);}
+function diagnostico(){return Promise.allSettled([leerConfiguracion(),tget('PING',{}),solicitarTrabajo('PING',{})]).then(function(p){return{ok:true,version:VERSION,soportaTrabajoTitulacion:true,fuentePrincipal:'FIREBASE_TITULOS',titulos:p[1].status==='fulfilled'?p[1].value:{error:mensajeError(p[1].reason)},trabajoTitulacion:p[2].status==='fulfilled'?p[2].value:{error:mensajeError(p[2].reason)},consultaEnvios:obtenerDiagnosticoConsulta(),configuracion:p[0].status==='fulfilled'?p[0].value:{error:mensajeError(p[0].reason)},fecha:new Date().toISOString()};});}
 
-window.CoordinadorMVPSheetsPrimary=Object.freeze({version:VERSION,soportaTrabajoTitulacion:true,leerConfiguracion:leerConfiguracion,enviarAccion:enviarAccion,enviarGet:tget,enviarPost:tpost,listarCoordinadores:listarCoordinadores,listarPeriodos:listarPeriodos,listarEnvios:listarEnvios,consultarEnvioPorCedula:consultarEnvioPorCedula,aprobarEnvio:aprobarEnvio,devolverEnvio:devolverEnvio,diagnostico:diagnostico,normalizarCoordinador:normalizarCoordinador,normalizarEnvio:normalizarEnvio,mensajeError:mensajeError,extraerLista:lista,limpiarCache:limpiarCache});
+window.CoordinadorMVPSheetsPrimary=Object.freeze({version:VERSION,soportaTrabajoTitulacion:true,leerConfiguracion:leerConfiguracion,enviarAccion:enviarAccion,enviarGet:tget,enviarPost:tpost,listarCoordinadores:listarCoordinadores,listarPeriodos:listarPeriodos,listarEnvios:listarEnvios,consultarEnvioPorCedula:consultarEnvioPorCedula,aprobarEnvio:aprobarEnvio,devolverEnvio:devolverEnvio,diagnostico:diagnostico,normalizarCoordinador:normalizarCoordinador,normalizarEnvio:normalizarEnvio,mensajeError:mensajeError,extraerLista:lista,limpiarCache:limpiarCache,invalidarCacheEnvios:limpiarCache,obtenerDiagnosticoConsulta:obtenerDiagnosticoConsulta});
 })(window);
