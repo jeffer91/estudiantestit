@@ -1,10 +1,10 @@
 import {
-  commitDocuments,
   listCollection,
   normalizeCedula,
   nowIso,
   periodSignature,
   queryEqual,
+  setDocument,
   text
 } from '../_lib/firestore.js';
 import { getStudentBasic } from '../_lib/requisitos-firebase.js';
@@ -230,6 +230,16 @@ async function consultar(payload, env) {
   };
 }
 
+async function guardarHistorialSeguro(collection, id, data, env) {
+  try {
+    await setDocument('TITULOS', collection, id, data, { merge: false }, env);
+    return true;
+  } catch (error) {
+    console.warn('[Trabajo de Titulación] No se pudo guardar el historial:', error);
+    return false;
+  }
+}
+
 async function guardarEnvio(payload, env) {
   const cedula = normalizeCedula(payload.cedula || payload.numeroIdentificacion);
   if (!cedula) throw new Error('No se recibió una cédula válida.');
@@ -272,8 +282,12 @@ async function guardarEnvio(payload, env) {
   const preferido = Number(payload.tituloPreferidoNumero || payload.preferido || 1);
   const favorito = [1, 2, 3].includes(preferido) ? preferido : 1;
   const fecha = nowIso();
-  const nombres = text(student.nombres || payload.nombres || payload.estudiante);
-  const carrera = text(student.carrera || payload.carrera || payload.nombreCarrera);
+  const nombres = text(
+    student.nombres || student.Nombres || payload.nombres || payload.estudiante
+  );
+  const carrera = text(
+    student.carrera || student.NombreCarrera || payload.carrera || payload.nombreCarrera
+  );
 
   const envioData = {
     tipoTrabajo: TIPO,
@@ -282,7 +296,9 @@ async function guardarEnvio(payload, env) {
     numeroIdentificacion: cedula,
     nombres,
     carreraNombre: carrera,
-    carreraCodigo: text(student.codigoCarrera || payload.codigoCarrera),
+    carreraCodigo: text(
+      student.codigoCarrera || student.CodigoCarrera || payload.codigoCarrera
+    ),
     periodoId,
     periodoNombre: periodoNombre || periodoId,
     telegram: text(payload.telegram || payload.telegramUser),
@@ -304,36 +320,26 @@ async function guardarEnvio(payload, env) {
     actualizadoEn: fecha
   };
 
-  await commitDocuments('TITULOS', [
-    {
-      collection: VERSIONES,
-      id: versionId,
-      data: {
-        envioId: id,
-        tipoTrabajo: TIPO,
-        numeroVersion,
-        titulo1: propuestas[0].tituloFinal,
-        titulo2: propuestas[1].tituloFinal,
-        titulo3: propuestas[2].tituloFinal,
-        propuestasDetalle: propuestas,
-        tituloPreferidoNumero: favorito,
-        estado: 'PENDIENTE_REVISION',
-        observacion: '',
-        fechaEnvio: fecha
-      },
-      merge: false,
-      exists: false
-    },
-    {
-      collection: ENVIOS,
-      id,
-      data: envioData,
-      merge: true,
-      ...(previous && previous._updateTime
-        ? { updateTime: previous._updateTime }
-        : { exists: false })
-    }
-  ], env);
+  /*
+    En Cloudflare Pages este proyecto puede operar con la configuración web
+    de Firebase y sus reglas. El endpoint REST documents:commit devuelve 400
+    sin OAuth; por eso el documento principal se guarda mediante PATCH.
+  */
+  await setDocument('TITULOS', ENVIOS, id, envioData, { merge: false }, env);
+
+  await guardarHistorialSeguro(VERSIONES, versionId, {
+    envioId: id,
+    tipoTrabajo: TIPO,
+    numeroVersion,
+    titulo1: propuestas[0].tituloFinal,
+    titulo2: propuestas[1].tituloFinal,
+    titulo3: propuestas[2].tituloFinal,
+    propuestasDetalle: propuestas,
+    tituloPreferidoNumero: favorito,
+    estado: 'PENDIENTE_REVISION',
+    observacion: '',
+    fechaEnvio: fecha
+  }, env);
 
   return {
     ok: true,
@@ -412,41 +418,28 @@ async function guardarResolucion(payload, env) {
   const coordinador = text(payload.coordinador || payload.nombreCoordinador);
   const fecha = text(payload.fechaResolucion) || nowIso();
 
-  await commitDocuments('TITULOS', [
-    {
-      collection: RESOLUCIONES,
-      id: resolucionId,
-      data: {
-        envioId: envio.id,
-        tipoTrabajo: TIPO,
-        numeroResolucion,
-        coordinador,
-        estado: status,
-        tituloElegido: selected,
-        tituloCorregido: corrected,
-        observacion: observation,
-        fechaResolucion: fecha
-      },
-      merge: false,
-      exists: false
-    },
-    {
-      collection: ENVIOS,
-      id: envio.id,
-      data: {
-        estado: status,
-        tituloFinal: status === 'DEVUELTO' ? null : finalTitle,
-        observacion: observation,
-        coordinador,
-        fechaResolucion: fecha,
-        resolucionActualId: resolucionId,
-        requiereRevision: status === 'DEVUELTO',
-        actualizadoEn: fecha
-      },
-      merge: true,
-      ...(envio._updateTime ? { updateTime: envio._updateTime } : {})
-    }
-  ], env);
+  await setDocument('TITULOS', ENVIOS, envio.id, {
+    estado: status,
+    tituloFinal: status === 'DEVUELTO' ? null : finalTitle,
+    observacion: observation,
+    coordinador,
+    fechaResolucion: fecha,
+    resolucionActualId: resolucionId,
+    requiereRevision: status === 'DEVUELTO',
+    actualizadoEn: fecha
+  }, { merge: true }, env);
+
+  await guardarHistorialSeguro(RESOLUCIONES, resolucionId, {
+    envioId: envio.id,
+    tipoTrabajo: TIPO,
+    numeroResolucion,
+    coordinador,
+    estado: status,
+    tituloElegido: selected,
+    tituloCorregido: corrected,
+    observacion: observation,
+    fechaResolucion: fecha
+  }, env);
 
   return {
     ok: true,
