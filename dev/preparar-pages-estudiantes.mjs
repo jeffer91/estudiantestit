@@ -4,8 +4,10 @@ import process from 'node:process';
 
 const root = process.cwd();
 const source = path.join(root, 'estudiantes-mvp');
+const workSource = path.join(root, 'trabajo-titulacion-mvp');
 const output = path.join(root, '.pages-estudiantes');
 const publicStudent = path.join(output, 'estudiantes');
+const publicWork = path.join(output, 'trabajo-titulacion');
 const VERSION = '2.4.4';
 const LEGACY_SCRIPTS = [
   'estudiante.consulta.optimizada.js',
@@ -16,15 +18,23 @@ const LEGACY_SCRIPTS = [
 if (!fs.existsSync(source) || !fs.statSync(source).isDirectory()) {
   throw new Error('No se encontró la carpeta estudiantes-mvp.');
 }
+if (!fs.existsSync(workSource) || !fs.statSync(workSource).isDirectory()) {
+  throw new Error('No se encontró la carpeta trabajo-titulacion-mvp.');
+}
 
 const studentEntry = path.join(source, 'estudiante.html');
+const workEntry = path.join(workSource, 'index.html');
 if (!fs.existsSync(studentEntry)) {
   throw new Error('No se encontró estudiantes-mvp/estudiante.html.');
+}
+if (!fs.existsSync(workEntry)) {
+  throw new Error('No se encontró trabajo-titulacion-mvp/index.html.');
 }
 
 fs.rmSync(output, { recursive: true, force: true });
 fs.mkdirSync(output, { recursive: true });
 fs.cpSync(source, publicStudent, { recursive: true, force: true });
+fs.cpSync(workSource, publicWork, { recursive: true, force: true });
 
 const copiedEntry = path.join(publicStudent, 'estudiante.html');
 let studentHtml = fs.readFileSync(copiedEntry, 'utf8');
@@ -47,13 +57,12 @@ const indexHtml = `<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta http-equiv="refresh" content="0;url=/estudiantes/estudiante">
-  <title>Registro de Títulos Académicos</title>
-  <link rel="canonical" href="/estudiantes/estudiante">
+  <title>Registro de Titulación</title>
 </head>
 <body>
-  <p>Abriendo el registro de títulos académicos…</p>
-  <p><a href="/estudiantes/estudiante">Continuar al formulario</a></p>
+  <h1>Registro de Titulación</h1>
+  <p><a href="/estudiantes/estudiante">Registrar títulos de artículo académico</a></p>
+  <p><a href="/trabajo-titulacion/">Registrar títulos de Trabajo de Titulación</a></p>
 </body>
 </html>`;
 
@@ -66,7 +75,7 @@ const notFoundHtml = `<!doctype html>
 </head>
 <body>
   <h1>Página no encontrada</h1>
-  <p><a href="/estudiantes/estudiante">Ir al registro de títulos académicos</a></p>
+  <p><a href="/">Ir al registro de titulación</a></p>
 </body>
 </html>`;
 
@@ -78,11 +87,26 @@ const headers = `/*
 
 /estudiantes/*
   Cache-Control: no-cache, no-store, must-revalidate
+
+/trabajo-titulacion/*
+  Cache-Control: no-cache, no-store, must-revalidate
 `;
 
 fs.writeFileSync(path.join(output, 'index.html'), indexHtml, 'utf8');
 fs.writeFileSync(path.join(output, '404.html'), notFoundHtml, 'utf8');
 fs.writeFileSync(path.join(output, '_headers'), headers, 'utf8');
+
+const required = [
+  path.join(publicStudent, 'estudiante.html'),
+  path.join(publicWork, 'index.html'),
+  path.join(publicWork, 'css', 'trabajo-titulacion.css'),
+  path.join(publicWork, 'js', 'trabajo-titulacion.js')
+];
+for (const file of required) {
+  if (!fs.existsSync(file)) {
+    throw new Error('Falta un archivo obligatorio: ' + file);
+  }
+}
 
 for (const directory of ['coordinadores-mvp', 'administrador']) {
   const forbidden = path.join(output, directory);
@@ -92,9 +116,9 @@ for (const directory of ['coordinadores-mvp', 'administrador']) {
 }
 
 console.log('[Pages estudiantes] Carpeta preparada en .pages-estudiantes.');
-console.log('[Pages estudiantes] Ruta pública: /estudiantes/estudiante');
+console.log('[Pages estudiantes] Artículos: /estudiantes/estudiante');
+console.log('[Pages estudiantes] Trabajo de Titulación: /trabajo-titulacion/');
 console.log(`[Pages estudiantes] Consulta secuencial activa (${VERSION}).`);
 console.log('[Pages estudiantes] Firebase UTET → Google Sheets Estudiantes → Firebase Títulos.');
-console.log('[Pages estudiantes] Sin controladores duplicados ni parches de runtime.');
 console.log('[Pages estudiantes] Coordinadores y administrador no fueron copiados.');
 console.log('[Pages estudiantes] La carpeta functions permanece en la raíz para habilitar /api/*.');
