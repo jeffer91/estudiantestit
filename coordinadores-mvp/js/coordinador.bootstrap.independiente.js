@@ -2,7 +2,7 @@
 (function(window,document){
   'use strict';
 
-  var VERSION='2.9.4';
+  var VERSION='2.9.2.4';
 
   function texto(valor){return String(valor===null||valor===undefined?'':valor).trim();}
   function esLocal(){var host=texto(window.location&&window.location.hostname).toLowerCase();return ['localhost','127.0.0.1','0.0.0.0','::1','[::1]'].indexOf(host)>=0;}
