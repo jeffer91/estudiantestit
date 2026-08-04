@@ -5,7 +5,7 @@
 
   function $(id){return document.getElementById(id);}
   function text(value){return String(value===null||value===undefined?'':value).replace(/\s+/g,' ').trim();}
-  function cedula(value){var digits=String(value||'').replace(/\D/g,'');return digits.length===9?'0'+digits:digits.length===10?digits:'';}
+  function cedula(value){var digits=String(value||'').replace(/\D/g,'');return digits.length===10?digits:'';}
   function normal(value){return text(value).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();}
   function apiBase(){var origin=text(window.location&&window.location.origin);if(['http://localhost:5500','http://127.0.0.1:5500'].indexOf(origin)>=0)return'http://127.0.0.1:8788';return origin&&origin!=='null'?origin:'https://titulos.pages.dev';}
   function request(path,action,data){
