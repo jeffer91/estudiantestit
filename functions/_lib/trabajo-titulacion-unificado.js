@@ -24,6 +24,30 @@ function fechaValor(row) {
   ) || 0;
 }
 
+function normalizarComparacion(value) {
+  return text(value).toLowerCase().normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function valoresPeriodo(value) {
+  if (Array.isArray(value)) return value.flatMap(valoresPeriodo).filter(Boolean);
+  if (value && typeof value === 'object') {
+    return [
+      value.periodoId,
+      value.periodId,
+      value.periodoNombre,
+      value.periodoLabel,
+      value.periodoCanonicoId,
+      value.periodoCanonicoLabel,
+      value.periodo
+    ].map(text).filter(Boolean);
+  }
+  const direct = text(value);
+  return direct ? [direct] : [];
+}
+
 export function cedulaEstricta(value) {
   const digits = text(value).replace(/\D/g, '');
   return digits.length === 10 ? digits : '';
@@ -38,6 +62,19 @@ export function esTrabajoTitulacion(row) {
 export function periodoTrabajo(value) {
   const raw = text(value);
   return text(periodSignature(raw) || raw).replace(/\//g, '-');
+}
+
+export function coincidePeriodoTrabajo(rowOrValue, requested) {
+  const left = valoresPeriodo(rowOrValue);
+  const right = valoresPeriodo(requested);
+  if (!left.length || !right.length) return false;
+
+  return left.some((a) => right.some((b) => {
+    if (normalizarComparacion(a) === normalizarComparacion(b)) return true;
+    const signatureA = periodSignature(a);
+    const signatureB = periodSignature(b);
+    return Boolean(signatureA && signatureB && signatureA === signatureB);
+  }));
 }
 
 export function idTrabajoTitulacion(periodo, cedula) {
@@ -58,8 +95,18 @@ function limpiarInternos(row) {
   return output;
 }
 
+async function listarColeccionSegura(nombre, env) {
+  try {
+    return await listCollection('TITULOS', nombre, { maxDocuments: 10000 }, env);
+  } catch (error) {
+    const message = text(error && error.message).toLowerCase();
+    if (message.includes('not found') || message.includes('404')) return [];
+    throw error;
+  }
+}
+
 async function copiarColeccion(origen, destino, transform, env) {
-  const rows = await listCollection('TITULOS', origen, { maxDocuments: 10000 }, env);
+  const rows = await listarColeccionSegura(origen, env);
   let copiados = 0;
   let omitidos = 0;
 
