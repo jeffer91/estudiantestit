@@ -6,7 +6,8 @@
   <meta name="description" content="Registro de propuestas de títulos para Trabajo de Titulación del ITSQMET.">
   <title>Trabajo de Titulación | ITSQMET</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="css/trabajo-titulacion.css?v=1.1.0">
+  <link rel="stylesheet" href="css/trabajo-titulacion.css?v=1.1.1">
+  <style>.brand-logo{transform:scale(1.85)}</style>
 </head>
 <body>
   <header class="app-header">
@@ -34,7 +35,7 @@
       <h2>Consulta tus datos</h2>
       <p class="muted">Ingresa tu número de cédula. Este registro es exclusivo para <strong>Trabajo de Titulación</strong>.</p>
       <form id="consultaForm" class="grid">
-        <label class="full"><span>Número de cédula</span><input id="cedulaInput" inputmode="numeric" autocomplete="off" maxlength="10" placeholder="Ejemplo: 1712345678" required></label>
+        <label class="full"><span>Número de cédula</span><input id="cedulaInput" inputmode="numeric" autocomplete="off" minlength="10" maxlength="10" pattern="[0-9]{10}" title="La cédula debe contener exactamente 10 dígitos" placeholder="Ejemplo: 1712345678" required></label>
         <div class="actions full"><button class="btn btn-primary" type="submit">Consultar</button></div>
       </form>
       <div id="consultaEstado" class="status info"></div>
@@ -112,6 +113,6 @@
     </article>
   </template>
 
-  <script src="js/trabajo-titulacion.js?v=1.1.0"></script>
+  <script src="js/trabajo-titulacion.js?v=1.1.1"></script>
 </body>
 </html>
