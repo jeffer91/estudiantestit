@@ -14,6 +14,11 @@ import {
   samePeriod,
   text
 } from './firestore-fixed.js';
+import {
+  TIPO_TRABAJO_TITULACION,
+  esTrabajoTitulacion,
+  migrarTrabajosTitulacionLegados
+} from './trabajo-titulacion-unificado.js';
 
 function normalizeStatus(value, fallback = 'PENDIENTE_REVISION') {
   const normalized = text(value).toUpperCase().replace(/[^A-Z0-9]+/g, '_');
@@ -51,6 +56,10 @@ function periodId(row) {
   return periodSignature(periodLabel(row)) || periodSignature(row && (row.periodoId || row.periodId));
 }
 
+function tipoTrabajo(row) {
+  return esTrabajoTitulacion(row) ? TIPO_TRABAJO_TITULACION : 'ARTICULO_ACADEMICO';
+}
+
 function normalizeEnvio(row) {
   row = row || {};
   const id = text(row.id || row._docId || row._id || row.envioId);
@@ -62,11 +71,10 @@ function normalizeEnvio(row) {
   const titles = [cleanTitle(row.titulo1), cleanTitle(row.titulo2), cleanTitle(row.titulo3)];
   const hasTitles = titles.some(Boolean);
   const preferred = Number(row.tituloPreferidoNumero || row.preferido || 0);
-  const status = hasTitles
-    ? normalizeStatus(row.estado || row.estadoFinal)
-    : 'NO_ENVIADO';
+  const status = hasTitles ? normalizeStatus(row.estado || row.estadoFinal) : 'NO_ENVIADO';
   const finalTitle = cleanTitle(row.tituloFinal || row.tituloCorregido || row.tituloElegido);
   const observation = text(row.observacion || row.comentarioCoordinador || row.comentario);
+  const type = tipoTrabajo(row);
 
   return {
     ...row,
@@ -75,6 +83,8 @@ function normalizeEnvio(row) {
     _clave: id || `${canonicalPeriod || 'sin_periodo'}__${cedula}`,
     idRegistro: id,
     envioId: id,
+    tipoTrabajo: type,
+    tipoTrabajoLabel: type === TIPO_TRABAJO_TITULACION ? 'Trabajo de Titulación' : 'Artículo académico',
     cedula,
     numeroIdentificacion: cedula,
     nombres: names,
@@ -116,16 +126,19 @@ function careerMatches(row, filters) {
 }
 
 async function listEnvios(payload = {}, env) {
+  await migrarTrabajosTitulacionLegados(env);
   let rows = await listCollection('TITULOS', 'envios', { maxDocuments: 10000 }, env);
   const filters = splitList(payload.carreras || payload.carrera || payload.nombreCarrera)
     .map((item) => item.toLowerCase());
   const requestedPeriod = text(payload.periodoId || payload.periodoLabel || payload.periodo);
   const requestedStatus = text(payload.estado) ? normalizeStatus(payload.estado, '') : '';
+  const requestedType = text(payload.tipoTrabajo).toUpperCase();
 
   rows = rows.filter((row) => {
     if (!careerMatches(row, filters)) return false;
     if (requestedPeriod && !samePeriod(periodLabel(row), requestedPeriod)) return false;
     if (requestedStatus && normalizeStatus(row.estado || row.estadoFinal) !== requestedStatus) return false;
+    if (requestedType && tipoTrabajo(row) !== requestedType) return false;
     return true;
   });
 
@@ -138,6 +151,7 @@ async function listEnvios(payload = {}, env) {
 }
 
 async function listCoordinatorPopulation(payload = {}, env) {
+  await migrarTrabajosTitulacionLegados(env);
   const global = await buildAdminGlobalList({
     periodoId: text(payload.periodoId || payload.periodoLabel || payload.periodo),
     periodo: text(payload.periodo || payload.periodoLabel || payload.periodoId),
@@ -166,7 +180,8 @@ async function queryUnique(field, values, env) {
   return [...map.values()];
 }
 
-async function findEnvio(payload = {}, env) {
+async function findEnvio(payload = {}, env, defaultType = '') {
+  await migrarTrabajosTitulacionLegados(env);
   const cedula = normalizeCedula(payload.cedula || payload.numeroIdentificacion || payload.identificacion);
   if (!cedula) return null;
   const variants = cedula.startsWith('0') ? [cedula, cedula.slice(1)] : [cedula];
@@ -175,15 +190,18 @@ async function findEnvio(payload = {}, env) {
     queryUnique('numeroIdentificacion', variants, env)
   ]);
   const requestedPeriod = text(payload.periodoId || payload.periodoLabel || payload.periodo);
+  const requestedType = text(payload.tipoTrabajo || defaultType).toUpperCase();
   const rows = [...new Map([...byCedula, ...byIdentification].map((row) => [row.id, row])).values()]
-    .filter((row) => !requestedPeriod || samePeriod(periodLabel(row), requestedPeriod));
+    .filter((row) => !requestedPeriod || samePeriod(periodLabel(row), requestedPeriod))
+    .filter((row) => !requestedType || tipoTrabajo(row) === requestedType);
   return latestBy(rows, ['versionActual'], [
     'fechaResolucion', 'fechaEnvio', 'actualizadoEn', '_updateTime'
   ]);
 }
 
-async function consultEnvio(payload, env) {
-  const row = await findEnvio(payload, env);
+async function consultEnvio(payload, env, userRole) {
+  const defaultType = userRole === 'student' ? 'ARTICULO_ACADEMICO' : '';
+  const row = await findEnvio(payload, env, defaultType);
   const cedula = normalizeCedula(payload.cedula || payload.numeroIdentificacion || payload.identificacion);
   if (!row) return { ok: true, existe: false, encontrado: false, tieneEnvio: false, cedula };
   const envio = normalizeEnvio(row);
@@ -210,11 +228,16 @@ async function summary(env) {
     output[item.estado] = (output[item.estado] || 0) + 1;
     return output;
   }, {});
+  const tipos = envios.reduce((output, item) => {
+    output[item.tipoTrabajo] = (output[item.tipoTrabajo] || 0) + 1;
+    return output;
+  }, {});
   return {
     ok: true,
     total: envios.length,
     envios,
     estados,
+    tipos,
     pendientes: estados.PENDIENTE_REVISION || 0,
     aprobados: estados.APROBADO || 0,
     reemplazados: estados.REEMPLAZADO || 0,
@@ -241,7 +264,7 @@ export async function executeTitulosAction(action, payload = {}, userRole = 'stu
     };
   }
   if (['CONSULTAR_ENVIO_BASE_CEDULA', 'CONSULTAR_ENVIO_CEDULA', 'VERIFICAR_ENVIO'].includes(normalized)) {
-    return consultEnvio(payload, env);
+    return consultEnvio(payload, env, userRole);
   }
   if (normalized === 'RESUMEN_ADMINISTRADOR') return summary(env);
   return executePrevious(action, payload, userRole, env);
