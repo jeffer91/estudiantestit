@@ -36,9 +36,7 @@ function cleanTitle(value) {
     output.length >= 2 &&
     ((output.startsWith('"') && output.endsWith('"')) ||
       (output.startsWith("'") && output.endsWith("'")))
-  ) {
-    output = output.slice(1, -1).trim();
-  }
+  ) output = output.slice(1, -1).trim();
   return output;
 }
 
@@ -62,7 +60,8 @@ async function currentEnvio(payload, env) {
     numeroIdentificacion: cedula,
     periodoId: payload.periodoId,
     periodoLabel: payload.periodoLabel,
-    periodo: payload.periodo
+    periodo: payload.periodo,
+    tipoTrabajo: payload.tipoTrabajo
   }, 'coordinator', env);
   return result && (result.envio || result.registro) || null;
 }
@@ -72,15 +71,11 @@ async function saveResolution(payload = {}, env) {
   if (!cedula) throw new Error('No se recibió una cédula válida.');
 
   const envio = await currentEnvio(payload, env);
-  if (!envio || !text(envio.id || envio.envioId)) {
-    throw new Error('No se encontró el envío del estudiante.');
-  }
+  if (!envio || !text(envio.id || envio.envioId)) throw new Error('No se encontró el envío del estudiante.');
 
   const envioId = text(envio.id || envio.envioId);
   const status = normalizeStatus(payload.estadoFinal || payload.estado, 'APROBADO');
-  if (!RESOLUTION_STATES.has(status)) {
-    throw new Error('La resolución debe ser APROBADO, REEMPLAZADO o DEVUELTO.');
-  }
+  if (!RESOLUTION_STATES.has(status)) throw new Error('La resolución debe ser APROBADO, REEMPLAZADO o DEVUELTO.');
 
   const selected = cleanTitle(payload.tituloElegido || payload.preferido || envio.titulo1);
   const corrected = cleanTitle(payload.tituloCorregido);
@@ -89,18 +84,11 @@ async function saveResolution(payload = {}, env) {
   const coordinador = coordinatorName(payload.coordinador, payload.nombreCoordinador);
 
   if (!coordinador) throw new Error('No se recibió el nombre del coordinador.');
-  if (status === 'DEVUELTO' && observation.length < 4) {
-    throw new Error('La devolución necesita un comentario de al menos 4 caracteres.');
-  }
-  if (status !== 'DEVUELTO' && !finalTitle) {
-    throw new Error('La aprobación necesita un título final.');
-  }
+  if (status === 'DEVUELTO' && observation.length < 4) throw new Error('La devolución necesita un comentario de al menos 4 caracteres.');
+  if (status !== 'DEVUELTO' && !finalTitle) throw new Error('La aprobación necesita un título final.');
 
   const resolutions = await queryEqual('TITULOS', 'resoluciones', 'envioId', envioId, 1000, env);
-  const number = resolutions.reduce(
-    (max, item) => Math.max(max, Number(item.numeroResolucion || 0)),
-    0
-  ) + 1;
+  const number = resolutions.reduce((max, item) => Math.max(max, Number(item.numeroResolucion || 0)), 0) + 1;
   const resolutionId = uniqueEventId(`${envioId}__r${String(number).padStart(3, '0')}`);
   const date = text(payload.fechaResolucion) || nowIso();
 
@@ -110,6 +98,7 @@ async function saveResolution(payload = {}, env) {
       id: resolutionId,
       data: {
         envioId,
+        tipoTrabajo: text(payload.tipoTrabajo || envio.tipoTrabajo),
         numeroResolucion: number,
         coordinador,
         estado: status,
