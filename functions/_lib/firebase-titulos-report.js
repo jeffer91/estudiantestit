@@ -1,5 +1,6 @@
 /* Datos sanitizados para el reporte PDF de Firebase Títulos. */
 import { listCollection, nowIso, text } from './firestore-fixed.js';
+import { migrarTrabajosTitulacionLegados } from './trabajo-titulacion-unificado.js';
 
 const COLLECTIONS = Object.freeze([
   ['periodos', 1000],
@@ -39,6 +40,7 @@ function sanitize(value, key = '', depth = 0) {
 }
 
 export async function buildFirebaseTitlesReport(env) {
+  await migrarTrabajosTitulacionLegados(env);
   const results = await Promise.all(COLLECTIONS.map(async ([name, maxDocuments]) => {
     const rows = await listCollection('TITULOS', name, { maxDocuments }, env);
     return [name, rows.map((row) => sanitize(row))];
