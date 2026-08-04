@@ -11,11 +11,11 @@ import {
   periodSignature,
   pingProject,
   queryEqual,
-  samePeriod,
   text
 } from './firestore-fixed.js';
 import {
   TIPO_TRABAJO_TITULACION,
+  coincidePeriodoTrabajo,
   esTrabajoTitulacion,
   migrarTrabajosTitulacionLegados
 } from './trabajo-titulacion-unificado.js';
@@ -53,7 +53,8 @@ function periodLabel(row) {
 }
 
 function periodId(row) {
-  return periodSignature(periodLabel(row)) || periodSignature(row && (row.periodoId || row.periodId));
+  const direct = text(row && (row.periodoId || row.periodId || row.periodoCanonicoId));
+  return direct || periodSignature(periodLabel(row));
 }
 
 function tipoTrabajo(row) {
@@ -67,7 +68,7 @@ function normalizeEnvio(row) {
   const names = text(row.nombres || row.estudiante || row.Nombres);
   const career = text(row.carreraNombre || row.nombreCarrera || row.carrera);
   const label = periodLabel(row);
-  const canonicalPeriod = periodId(row) || text(row.periodoId || row.periodId || label);
+  const canonicalPeriod = periodId(row) || label;
   const titles = [cleanTitle(row.titulo1), cleanTitle(row.titulo2), cleanTitle(row.titulo3)];
   const hasTitles = titles.some(Boolean);
   const preferred = Number(row.tituloPreferidoNumero || row.preferido || 0);
@@ -130,13 +131,13 @@ async function listEnvios(payload = {}, env) {
   let rows = await listCollection('TITULOS', 'envios', { maxDocuments: 10000 }, env);
   const filters = splitList(payload.carreras || payload.carrera || payload.nombreCarrera)
     .map((item) => item.toLowerCase());
-  const requestedPeriod = text(payload.periodoId || payload.periodoLabel || payload.periodo);
+  const requestedPeriods = [payload.periodoId, payload.periodoLabel, payload.periodo].map(text).filter(Boolean);
   const requestedStatus = text(payload.estado) ? normalizeStatus(payload.estado, '') : '';
   const requestedType = text(payload.tipoTrabajo).toUpperCase();
 
   rows = rows.filter((row) => {
     if (!careerMatches(row, filters)) return false;
-    if (requestedPeriod && !samePeriod(periodLabel(row), requestedPeriod)) return false;
+    if (requestedPeriods.length && !coincidePeriodoTrabajo(row, requestedPeriods)) return false;
     if (requestedStatus && normalizeStatus(row.estado || row.estadoFinal) !== requestedStatus) return false;
     if (requestedType && tipoTrabajo(row) !== requestedType) return false;
     return true;
@@ -189,10 +190,10 @@ async function findEnvio(payload = {}, env, defaultType = '') {
     queryUnique('cedula', variants, env),
     queryUnique('numeroIdentificacion', variants, env)
   ]);
-  const requestedPeriod = text(payload.periodoId || payload.periodoLabel || payload.periodo);
+  const requestedPeriods = [payload.periodoId, payload.periodoLabel, payload.periodo].map(text).filter(Boolean);
   const requestedType = text(payload.tipoTrabajo || defaultType).toUpperCase();
   const rows = [...new Map([...byCedula, ...byIdentification].map((row) => [row.id, row])).values()]
-    .filter((row) => !requestedPeriod || samePeriod(periodLabel(row), requestedPeriod))
+    .filter((row) => !requestedPeriods.length || coincidePeriodoTrabajo(row, requestedPeriods))
     .filter((row) => !requestedType || tipoTrabajo(row) === requestedType);
   return latestBy(rows, ['versionActual'], [
     'fechaResolucion', 'fechaEnvio', 'actualizadoEn', '_updateTime'
