@@ -2,7 +2,6 @@ import {
   getDocument,
   nowIso,
   queryEqual,
-  samePeriod,
   setDocument,
   text
 } from '../_lib/firestore-fixed.js';
@@ -13,6 +12,7 @@ import {
   COLECCION_VERSIONES,
   TIPO_TRABAJO_TITULACION,
   cedulaEstricta,
+  coincidePeriodoTrabajo,
   esTrabajoTitulacion,
   idTrabajoTitulacion,
   listarTrabajosTitulacionUnificados,
@@ -143,9 +143,9 @@ async function buscarPorCedula(cedulaValue, periodoValue, env) {
   ]);
   const rows = [...new Map([...porCedula, ...porNumero].map((row) => [row.id, row])).values()]
     .filter(esTrabajoTitulacion);
-  const periodo = text(periodoValue);
-  const candidatos = periodo
-    ? rows.filter((row) => samePeriod(row.periodoNombre || row.periodoLabel || row.periodoId, periodo))
+  const periodos = Array.isArray(periodoValue) ? periodoValue.filter(text) : [periodoValue].filter(text);
+  const candidatos = periodos.length
+    ? rows.filter((row) => coincidePeriodoTrabajo(row, periodos))
     : rows;
   candidatos.sort((a, b) => {
     const dateA = Date.parse(a.fechaResolucion || a.fechaEnvio || a.actualizadoEn || a._updateTime || '') || 0;
@@ -167,7 +167,7 @@ async function consultar(payload, env) {
   if (!cedula) throw new Error('La cédula debe contener exactamente 10 dígitos.');
   const row = payload.envioId
     ? await buscarPorId(payload.envioId, env)
-    : await buscarPorCedula(cedula, payload.periodoId || payload.periodoLabel || payload.periodo, env);
+    : await buscarPorCedula(cedula, [payload.periodoId, payload.periodoLabel, payload.periodo], env);
   if (!row) return { ok: true, encontrado: false, existe: false, tieneEnvio: false, tipoTrabajo: TIPO };
   const envio = publico(row);
   return {
@@ -213,7 +213,13 @@ async function guardarEnvio(payload, env) {
   const periodoNombre = text(student.periodoLabel || payload.periodoLabel || payload.periodo || periodoId);
   if (!periodoId) throw new Error('No se pudo determinar el período del estudiante.');
 
-  const previous = await buscarPorCedula(cedula, periodoId, env);
+  const previous = await buscarPorCedula(cedula, [
+    periodoId,
+    periodoNombre,
+    payload.periodoId,
+    payload.periodoLabel,
+    payload.periodo
+  ], env);
   if (previous && estado(previous.estado) !== 'DEVUELTO') {
     const error = new Error('Tus títulos de Trabajo de Titulación ya fueron enviados y están siendo revisados.');
     error.duplicado = true;
@@ -303,7 +309,7 @@ async function guardarResolucion(payload, env) {
   if (!cedula && !payload.envioId) throw new Error('La cédula debe contener exactamente 10 dígitos.');
   const envio = payload.envioId
     ? await buscarPorId(payload.envioId, env)
-    : await buscarPorCedula(cedula, payload.periodoId || payload.periodoLabel || payload.periodo, env);
+    : await buscarPorCedula(cedula, [payload.periodoId, payload.periodoLabel, payload.periodo], env);
   if (!envio) throw new Error('No se encontró el Trabajo de Titulación indicado.');
 
   const status = estado(payload.estadoFinal || payload.estado, 'APROBADO');
