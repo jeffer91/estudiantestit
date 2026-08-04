@@ -31,7 +31,7 @@ function checkAssets(htmlPath) {
   let match;
   while ((match = regex.exec(html))) {
     const raw = String(match[1] || '').trim();
-    if (!raw || /^(?:https?:|data:|#|\/\/)/i.test(raw)) continue;
+    if (!raw || /^(?:https?:|data:|#|\/\/|\/)/i.test(raw)) continue;
     const clean = raw.split(/[?#]/)[0];
     const asset = path.normalize(path.join(directory, clean));
     assert(fs.existsSync(path.join(root, asset)), `${htmlPath} referencia un archivo inexistente: ${asset}`);
@@ -47,10 +47,12 @@ function requireIds(html, ids, appName) {
 }
 
 const studentHtml = checkAssets('estudiantes-mvp/estudiante.html');
+const workHtml = checkAssets('trabajo-titulacion-mvp/index.html');
 const coordinatorHtml = checkAssets('coordinadores-mvp/coordinador.html');
 const adminHtml = checkAssets('administrador/ad-index.html');
 
 requireIds(studentHtml, ['formConsulta', 'cedulaInput', 'formEnvio'], 'Estudiantes');
+requireIds(workHtml, ['consultaForm', 'registroExistente', 'existenteTitulos', 'propuestasForm', 'enviarBtn'], 'Trabajo de Titulación');
 requireIds(coordinatorHtml, [
   'coordinadorSelect', 'estadoPrincipal', 'tablaEstudiantesBody', 'detalleModal',
   'tituloFinalInput', 'comentarioCoordinadorInput', 'btnAprobarEnvio', 'btnDevolverEnvio'
@@ -63,6 +65,7 @@ const coordinatorCatalog = read('coordinadores-mvp/js/coordinador.envios.carrera
 const coordinatorState = read('coordinadores-mvp/js/coordinador.state.js');
 const coordinatorUi = read('coordinadores-mvp/js/coordinador.ui.js');
 const coordinatorApp = read('coordinadores-mvp/js/coordinador.app.js');
+const workScript = read('trabajo-titulacion-mvp/js/trabajo-titulacion.js');
 const adminApi = read('administrador/ad-js/ad-api.service.js');
 const adminPdf = read('administrador/ad-js/ad-pdf-firebase.js');
 const studentRequirements = read('estudiantes-mvp/js/requisitos.estudiantes.service.js');
@@ -77,18 +80,23 @@ const localBuild = read('dev/preparar-pages-local.mjs');
 const coordinatorBuild = read('dev/preparar-pages-coordinadores.mjs');
 const adminBuild = read('dev/preparar-pages-administrador.mjs');
 
-assert(/2\.9\.2/.test(coordinatorHtml) && /2\.9\.2/.test(coordinatorBootstrap), 'Coordinadores no usa la versión 2.9.2.');
+assert(/v2\.9\.5/.test(coordinatorHtml) && /VERSION=['"]2\.9\.5['"]/.test(coordinatorBootstrap) && /VERSION=['"]2\.9\.5['"]/.test(coordinatorSource), 'Coordinadores no usa de forma uniforme la versión 2.9.5.');
 assert(!/id=["']periodoSelect["']/.test(coordinatorHtml), 'Coordinadores todavía muestra selector de período.');
 assert(/<th>Período<\/th>/.test(coordinatorHtml), 'La tabla no informa el período de cada envío.');
 assert(!/data-vista=["']faltantes["']/.test(coordinatorHtml), 'Coordinadores todavía muestra estudiantes sin envío.');
 
 const coordinatorRuntime = [coordinatorSource, coordinatorCatalog, coordinatorState, coordinatorUi, coordinatorApp, coordinatorBootstrap].join('\n');
 assert(/\/api\/titulos/.test(coordinatorSource), 'Coordinadores no consulta /api/titulos.');
+assert(/\/api\/trabajo-titulacion/.test(coordinatorSource), 'Coordinadores no consulta /api/trabajo-titulacion.');
+assert(/Promise\.allSettled/.test(coordinatorSource) && /obtenerDiagnosticoConsulta/.test(coordinatorSource), 'Coordinadores no separa el diagnóstico de artículos y Trabajos de Titulación.');
 assert(!/\/api\/requisitos/.test(coordinatorRuntime), 'Coordinadores todavía consulta /api/requisitos.');
 assert(!/EstudiantesPeriodo|UTET_MAS_FIREBASE_TITULOS|FIREBASE_UTET/.test(coordinatorRuntime), 'Coordinadores todavía contiene integración activa con Firebase UTET.');
 assert(/incluirTodos/.test(coordinatorSource) && /incluirTodos/.test(coordinatorCatalog), 'Coordinadores no solicita todos los envíos de Firebase Títulos.');
 assert(!/coincidePeriodo|delPeriodo/.test(coordinatorState), 'El estado todavía filtra los envíos por período.');
 assert(/deCarreras/.test(coordinatorState) && /delEstado/.test(coordinatorState), 'Coordinadores no filtra por carreras y estado.');
+
+assert(/registroExistente/.test(workHtml) && /renderExisting/.test(workScript), 'Trabajo de Titulación no muestra los títulos ya registrados.');
+assert(/logo-itsqmet\.png/.test(workHtml), 'Trabajo de Titulación no usa el logo institucional.');
 
 assert(/\/api\/acceso-estudiante/.test(read('estudiantes-mvp/js/estudiante.consulta.revision.js')), 'Estudiantes no usa la consulta unificada.');
 assert(/getStudentBasicFast/.test(studentAccess), 'La consulta unificada no usa la lectura rápida de Firebase UTET.');
@@ -125,5 +133,6 @@ if (errors.length) {
 }
 
 console.log('[Apps] Estudiantes: Firebase UTET directo, Google Sheets Estudiantes como respaldo y Firebase Títulos al final.');
-console.log('[Apps] Coordinadores: consulta exclusivamente Firebase Títulos y muestra todos los envíos.');
+console.log('[Apps] Trabajo de Titulación: muestra registros existentes y usa el logo institucional.');
+console.log('[Apps] Coordinadores: consulta artículos y Trabajos de Titulación con diagnóstico separado.');
 console.log('[Apps] Administrador: mantiene estadísticas y PDF de Firebase Títulos.');
