@@ -1,4 +1,4 @@
-/* Detalle académico adicional para registros de Trabajo de Titulación. */
+/* Detalle académico adicional para registros antiguos de Trabajo de Titulación. */
 (function(window,document){
   'use strict';
 
@@ -6,6 +6,12 @@
   function escapeHtml(value){return text(value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');}
   function typeOf(envio){return text(envio&&envio.tipoTrabajo||envio&&envio.raw&&envio.raw.tipoTrabajo).toUpperCase();}
   function detailsOf(envio){var raw=envio&&envio.raw&&typeof envio.raw==='object'?envio.raw:{};var list=envio&&Array.isArray(envio.propuestasDetalle)?envio.propuestasDetalle:raw.propuestasDetalle;return Array.isArray(list)?list:[];}
+  function hasStructure(proposal){return Boolean(proposal&&[
+    proposal.accionPrincipal,proposal.accion,proposal.productoFinal,proposal.producto,
+    proposal.problemaNecesidad,proposal.problema,proposal.proposito,proposal.finalidad,
+    proposal.unidadEstudio,proposal.grupoEstudio,proposal.lugarContexto,proposal.contexto,
+    proposal.anioPeriodo,proposal.periodo,proposal.objetivoGeneral,proposal.objetivo
+  ].some(function(value){return text(value);}));}
   function item(label,value,full){return'<div class="work-detail__item'+(full?' work-detail__item--full':'')+'"><span>'+escapeHtml(label)+'</span><strong>'+escapeHtml(value||'-')+'</strong></div>';}
   function render(envio){
     var section=document.getElementById('detalleTrabajoTitulacion');
@@ -13,11 +19,12 @@
     var badge=document.getElementById('detalleTipoTrabajo');
     if(!section||!content)return;
     var isWork=typeOf(envio)==='TRABAJO_TITULACION';
-    section.hidden=!isWork;
-    if(badge)badge.textContent=isWork?'Trabajo de Titulación':'Artículo académico';
-    if(!isWork){content.innerHTML='';return;}
     var list=detailsOf(envio);
-    content.innerHTML=list.length?list.map(function(proposal,index){return'<article class="work-detail__proposal"><h4>Propuesta '+(index+1)+'</h4><div class="work-detail__grid">'+
+    var structured=list.filter(hasStructure);
+    if(badge)badge.textContent=isWork?'Trabajo de Titulación':'Artículo académico';
+    section.hidden=!isWork||!structured.length;
+    if(!isWork||!structured.length){content.innerHTML='';return;}
+    content.innerHTML=structured.map(function(proposal,index){return'<article class="work-detail__proposal"><h4>Propuesta '+(index+1)+'</h4><div class="work-detail__grid">'+
       item('Acción principal',proposal.accionPrincipal||proposal.accion)+
       item('Producto final',proposal.productoFinal||proposal.producto)+
       item('Problema o necesidad',proposal.problemaNecesidad||proposal.problema,true)+
@@ -26,7 +33,7 @@
       item('Lugar o contexto',proposal.lugarContexto||proposal.contexto)+
       item('Año o período',proposal.anioPeriodo||proposal.periodo)+
       item('Objetivo general',proposal.objetivoGeneral||proposal.objetivo,true)+
-      '</div></article>';}).join(''):'<p>No se encontró el detalle estructurado de las propuestas.</p>';
+      '</div></article>';}).join('');
   }
 
   function install(){
