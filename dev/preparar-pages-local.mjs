@@ -14,6 +14,7 @@ const LEGACY_SCRIPTS = [
 
 const staticDirectories = [
   'estudiantes-mvp',
+  'trabajo-titulacion-mvp',
   'coordinadores-mvp',
   'administrador',
   'shared',
@@ -79,7 +80,7 @@ fs.mkdirSync(output, { recursive: true });
 const copiedDirectories = staticDirectories.filter(copyDirectory);
 const copiedFiles = staticFiles.filter(copyFile);
 
-for (const required of ['estudiantes-mvp', 'coordinadores-mvp', 'administrador']) {
+for (const required of ['estudiantes-mvp', 'trabajo-titulacion-mvp', 'coordinadores-mvp', 'administrador']) {
   if (!copiedDirectories.includes(required)) {
     throw new Error('No se encontró ' + required + ' para preparar Pages local.');
   }
@@ -98,7 +99,8 @@ if (!copiedFiles.includes('index.html')) {
 </head>
 <body>
   <h1>Titulación local</h1>
-  <p><a href="/estudiantes-mvp/estudiante.html">Estudiantes</a></p>
+  <p><a href="/estudiantes-mvp/estudiante.html">Artículos académicos</a></p>
+  <p><a href="/trabajo-titulacion-mvp/">Trabajo de Titulación</a></p>
   <p><a href="/coordinadores-mvp/coordinador.html">Coordinadores</a></p>
   <p><a href="/administrador/ad-index.html">Administrador</a></p>
 </body>
@@ -108,5 +110,6 @@ if (!copiedFiles.includes('index.html')) {
 
 console.log('[Pages local] Entorno preparado en .pages-local.');
 console.log(`[Pages local] Estudiantes ${VERSION_ESTUDIANTES}: UTET → Sheets → Títulos.`);
-console.log('[Pages local] Coordinadores: Firebase Títulos únicamente.');
+console.log('[Pages local] Trabajo de Titulación disponible en /trabajo-titulacion-mvp/.');
+console.log('[Pages local] Coordinadores: artículos y Trabajos de Titulación.');
 console.log('[Pages local] Administrador: dos Firebase y reporte PDF.');
