@@ -18,7 +18,7 @@
   window.TITULOS_API_BASE=apiBase();
 
   function cargarScript(ruta){return new Promise(function(resolve,reject){var script=document.createElement('script');script.src=ruta+'?v='+encodeURIComponent(VERSION);script.async=false;script.onload=function(){resolve(ruta);};script.onerror=function(){reject(new Error('No se pudo cargar '+ruta));};document.body.appendChild(script);});}
-  function cargarAplicacion(){var archivos=['js/coordinador.sheets.primary.js','js/coordinador.catalogo.local.js','js/coordinador.envios.carreras.js','js/coordinador.ui.js','js/coordinador.modal.js','js/coordinador.app.js'];return archivos.reduce(function(promesa,ruta){return promesa.then(function(){return cargarScript(ruta);});},Promise.resolve());}
+  function cargarAplicacion(){var archivos=['js/coordinador.sheets.primary.js','js/coordinador.catalogo.local.js','js/coordinador.envios.carreras.js','js/coordinador.ui.js','js/coordinador.modal.js','js/coordinador.trabajo-titulacion.js','js/coordinador.app.js'];return archivos.reduce(function(promesa,ruta){return promesa.then(function(){return cargarScript(ruta);});},Promise.resolve());}
   function mostrarError(error){var estado=document.getElementById('estadoPrincipal'),coordinador=document.getElementById('coordinadorSelect');if(coordinador){coordinador.innerHTML='<option value="">No disponible</option>';coordinador.disabled=true;}if(estado){estado.className='status-message is-error';estado.textContent=error&&error.message?error.message:'No se pudo iniciar Coordinadores.';}console.error('[Coordinadores] Error de inicio:',error);}
 
   cargarAplicacion().catch(mostrarError);
