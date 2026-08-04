@@ -14,7 +14,7 @@
     "deploy:estudiantes": "npm run build:estudiantes && npx wrangler pages deploy .pages-estudiantes --project-name titulos",
     "deploy:estudiantes:preview": "npm run build:estudiantes && npx wrangler pages deploy .pages-estudiantes --project-name titulos --branch preview-estudiantes",
     "build:coordinadores": "node dev/preparar-pages-coordinadores.mjs",
-    "deploy:coordinadores": "npm run build:coordinadores && npx wrangler pages deploy .pages-coordinadores --project-name titulos-coordinadores",
+    "deploy:coordinadores": "npm run build:coordinadores && npx wrangler pages deploy .pages-coordinadores --project-name titulos-coordinadores --branch main",
     "deploy:coordinadores:preview": "npm run build:coordinadores && npx wrangler pages deploy .pages-coordinadores --project-name titulos-coordinadores --branch preview-coordinadores",
     "build:administrador": "node dev/preparar-pages-administrador.mjs",
     "deploy:administrador": "npm run build:administrador && npx wrangler pages deploy .pages-administrador --project-name titulos-administrador",
