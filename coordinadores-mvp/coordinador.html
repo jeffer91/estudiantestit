@@ -7,6 +7,7 @@
   <title>Coordinadores de Titulación</title>
   <link rel="icon" href="data:," />
   <link rel="stylesheet" href="css/coordinador.css?v=2.9.2" />
+  <link rel="stylesheet" href="css/coordinador.trabajo-titulacion.css?v=1.0.0" />
 </head>
 <body>
   <header class="app-header">
@@ -15,7 +16,7 @@
       <div>
         <p class="app-badge">Coordinadores</p>
         <h1>Coordinadores de titulación</h1>
-        <p>Revisión de todos los títulos registrados en Firebase Títulos.</p>
+        <p>Revisión de artículos académicos y Trabajos de Titulación.</p>
       </div>
       <span class="version-badge">v2.9.2</span>
     </div>
@@ -25,6 +26,7 @@
     <section class="card control-card" aria-label="Selección de coordinador">
       <div class="control-grid">
         <label class="field"><span>Coordinador</span><select id="coordinadorSelect" disabled><option value="">Cargando coordinadores...</option></select></label>
+        <label class="field type-filter"><span>Tipo de trabajo</span><select id="tipoTrabajoSelect"><option value="TODOS">Todos</option><option value="ARTICULO_ACADEMICO">Artículo académico</option><option value="TRABAJO_TITULACION">Trabajo de Titulación</option></select></label>
         <button type="button" class="btn btn--secondary refresh-btn" data-accion="actualizar-datos">Actualizar</button>
       </div>
       <div class="coordinator-summary" id="coordinadorResumen" hidden><strong id="coordinadorNombre">-</strong><span id="coordinadorCarreras">Sin carreras asignadas</span></div>
@@ -46,8 +48,8 @@
       </div>
       <div class="table-wrap">
         <table class="data-table">
-          <thead><tr><th>Cédula</th><th>Nombre</th><th>Carrera</th><th>Período</th><th>Estado</th><th>Acción</th></tr></thead>
-          <tbody id="tablaEstudiantesBody"><tr><td colspan="6" class="empty-cell">Selecciona un coordinador.</td></tr></tbody>
+          <thead><tr><th>Cédula</th><th>Nombre</th><th>Carrera</th><th>Tipo</th><th>Período</th><th>Estado</th><th>Acción</th></tr></thead>
+          <tbody id="tablaEstudiantesBody"><tr><td colspan="7" class="empty-cell">Selecciona un coordinador.</td></tr></tbody>
         </table>
       </div>
     </section>
@@ -70,6 +72,7 @@
       </header>
       <div class="modal__body">
         <div class="student-info-grid">
+          <div><span>Tipo</span><strong id="detalleTipoTrabajo">Artículo académico</strong></div>
           <div><span>Período</span><strong id="detallePeriodo">-</strong></div>
           <div><span>Fecha de envío</span><strong id="detalleFechaEnvio">-</strong></div>
           <div><span>Estado</span><strong id="detalleEstado">-</strong></div>
@@ -79,6 +82,10 @@
           <article class="proposal-card" data-propuesta="2" role="button" tabindex="0" aria-pressed="false"><div class="proposal-card__head"><div class="proposal-card__title"><h3>Título 2</h3><span class="favorite-badge" data-favorito="2" hidden>★ Favorito del estudiante</span></div><button type="button" class="proposal-select-btn" data-seleccionar-propuesta="2" aria-pressed="false">Seleccionar este título</button><input type="radio" class="proposal-radio" name="tituloSeleccionado" value="2" hidden /></div><p id="detalleTitulo2">-</p></article>
           <article class="proposal-card" data-propuesta="3" role="button" tabindex="0" aria-pressed="false"><div class="proposal-card__head"><div class="proposal-card__title"><h3>Título 3</h3><span class="favorite-badge" data-favorito="3" hidden>★ Favorito del estudiante</span></div><button type="button" class="proposal-select-btn" data-seleccionar-propuesta="3" aria-pressed="false">Seleccionar este título</button><input type="radio" class="proposal-radio" name="tituloSeleccionado" value="3" hidden /></div><p id="detalleTitulo3">-</p></article>
         </div>
+        <section class="work-detail" id="detalleTrabajoTitulacion" hidden>
+          <div class="work-detail__head"><div><p class="section-kicker">Estructura académica</p><h3>Detalle del Trabajo de Titulación</h3></div></div>
+          <div id="detalleTrabajoContenido"></div>
+        </section>
         <div class="resolution-box">
           <label class="field"><span>Título final aprobado o corregido</span><textarea id="tituloFinalInput" rows="3" placeholder="Selecciona una propuesta o escribe el título final"></textarea></label>
           <label class="field"><span>Comentario del coordinador</span><textarea id="comentarioCoordinadorInput" rows="3" placeholder="Opcional al aprobar y obligatorio para devolver"></textarea></label>
