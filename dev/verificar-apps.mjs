@@ -1,6 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import {
+  cedulaEstricta,
+  coincidePeriodoTrabajo
+} from '../functions/_lib/trabajo-titulacion-unificado.js';
 
 const root = process.cwd();
 const errors = [];
@@ -102,9 +106,17 @@ assert(/deCarreras/.test(coordinatorState) && /delEstado/.test(coordinatorState)
 
 assert(/registroExistente/.test(workHtml) && /renderExisting/.test(workScript), 'Trabajo de Titulación no muestra los títulos ya registrados.');
 assert(/pattern="\[0-9\]\{10\}"/.test(workHtml), 'Trabajo de Titulación no exige una cédula de exactamente 10 dígitos.');
+assert(/digits\.length===10\?digits:''/.test(workScript), 'El JavaScript de Trabajo de Titulación todavía completa cédulas de 9 dígitos.');
+assert(cedulaEstricta('1752222404') === '1752222404', 'La validación estricta rechazó una cédula de 10 dígitos.');
+assert(cedulaEstricta('175222240') === '', 'La validación estricta aceptó una cédula de 9 dígitos.');
+const periodoPrueba = { periodoId: '2026-10', periodoNombre: 'Octubre 2025 a Marzo 2026' };
+assert(coincidePeriodoTrabajo(periodoPrueba, ['2026-10']), 'No coincide el código institucional del período.');
+assert(coincidePeriodoTrabajo(periodoPrueba, ['Octubre 2025 a Marzo 2026']), 'No coincide el nombre institucional del período.');
+assert(!coincidePeriodoTrabajo(periodoPrueba, ['Abril 2026 a Septiembre 2026']), 'Se confundieron dos períodos diferentes.');
 assert(/logo-itsqmet\.png/.test(workHtml), 'Trabajo de Titulación no usa el logo institucional.');
 assert(/COLECCION_ENVIOS/.test(workApi) && /'envios'/.test(unifiedWork), 'Trabajo de Titulación no guarda en la colección envios.');
 assert(/envios_trabajo_titulacion/.test(unifiedWork) && /migrarTrabajosTitulacionLegados/.test(unifiedWork), 'No existe migración de los registros históricos de Trabajo de Titulación.');
+assert(/coincidePeriodoTrabajo/.test(workApi) && /coincidePeriodoTrabajo/.test(titlesV6) && /coincidePeriodoTrabajo/.test(adminGlobal), 'La coincidencia de períodos no está aplicada en Estudiantes, Coordinadores y Administrador.');
 assert(/migrarTrabajosTitulacionLegados/.test(titlesV6), 'Firebase Títulos no migra los Trabajos de Titulación antes de listarlos.');
 assert(/migrarTrabajosTitulacionLegados/.test(adminGlobal), 'Administrador no incluye la migración de Trabajos de Titulación.');
 
@@ -143,6 +155,6 @@ if (errors.length) {
 }
 
 console.log('[Apps] Estudiantes: Firebase UTET directo, Google Sheets Estudiantes como respaldo y Firebase Títulos al final.');
-console.log('[Apps] Trabajo de Titulación: envíos unificados, migración histórica, cédula de 10 dígitos y logo institucional.');
+console.log('[Apps] Trabajo de Titulación: envíos unificados, migración histórica, cédula y períodos validados.');
 console.log('[Apps] Coordinadores: una sola fuente envios con filtro por tipo de trabajo.');
 console.log('[Apps] Administrador: incluye los Trabajos de Titulación unificados.');
