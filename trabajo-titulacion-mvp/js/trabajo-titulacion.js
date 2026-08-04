@@ -16,6 +16,8 @@
   function status(id,message,type){var el=$(id);if(!el)return;el.className='status '+(type||'info');el.textContent=message||'';}
   function busy(value){state.busy=value===true;document.querySelectorAll('button').forEach(function(button){button.disabled=state.busy;});}
   function escapeHtml(value){return text(value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');}
+  function estadoNormal(value){return text(value).toUpperCase().replace(/[^A-Z0-9]+/g,'_');}
+  function estadoLabel(value){var current=estadoNormal(value);var labels={PENDIENTE_REVISION:'Pendiente de revisión',PENDIENTE:'Pendiente de revisión',ENVIADO:'Pendiente de revisión',APROBADO:'Aprobado',REEMPLAZADO:'Aprobado con corrección',DEVUELTO:'Devuelto para corrección'};return labels[current]||text(value)||'Sin estado';}
 
   function buildPanels(){
     var template=$('proposalTemplate').innerHTML;
@@ -77,6 +79,37 @@
       modalidad:text(raw.Modalidad||raw.modalidad)
     };
   }
+  function hideExisting(){
+    var section=$('registroExistente');
+    if(section)section.hidden=true;
+  }
+  function existingProposals(envio){
+    var details=Array.isArray(envio&&envio.propuestasDetalle)?envio.propuestasDetalle:[];
+    return[1,2,3].map(function(number,index){var item=details[index]||{};return{text:text(envio&&envio['titulo'+number]||item.tituloFinal||item.titulo),number:number};});
+  }
+  function renderExisting(envio,statusValue){
+    envio=envio||{};
+    var section=$('registroExistente');
+    if(!section)return;
+    var favorite=Number(envio.tituloPreferidoNumero||envio.preferido||0);
+    var currentStatus=estadoNormal(statusValue||envio.estado||envio.estadoFinal);
+    $('existenteEstado').textContent=estadoLabel(currentStatus);
+    $('existenteEstado').className='state-badge state-badge--'+currentStatus.toLowerCase();
+    $('existenteNombres').textContent=text(envio.nombres||envio.estudiante||state.student&&state.student.nombres)||'-';
+    $('existenteCarrera').textContent=text(envio.carrera||envio.carreraNombre||envio.nombreCarrera||state.student&&state.student.carrera)||'-';
+    $('existentePeriodo').textContent=text(envio.periodoLabel||envio.periodoNombre||envio.periodoId||state.student&&state.student.periodoLabel)||'-';
+    $('existenteTitulos').innerHTML=existingProposals(envio).map(function(item){
+      var favoriteLabel=favorite===item.number?'<span class="favorite-chip">★ Favorito</span>':'';
+      return'<article class="existing-title'+(favorite===item.number?' is-favorite':'')+'"><div><span>Título '+item.number+'</span>'+favoriteLabel+'</div><strong>'+escapeHtml(item.text||'-')+'</strong></article>';
+    }).join('');
+    var finalTitle=text(envio.tituloFinal||envio.tituloAprobado||envio.tituloCorregido);
+    var observation=text(envio.observacion||envio.comentarioCoordinador||envio.comentario);
+    var resolution=$('existenteResolucion');
+    resolution.hidden=!finalTitle&&!observation;
+    $('existenteTituloFinal').textContent=finalTitle||'-';
+    $('existenteObservacion').textContent=observation||'-';
+    section.hidden=false;
+  }
   function preload(envio){
     if(!envio)return;
     state.previous=envio;
@@ -90,6 +123,7 @@
     event.preventDefault();
     var id=cedula($('cedulaInput').value);
     if(!id){status('consultaEstado','Ingresa una cédula válida de 10 dígitos.','error');return;}
+    hideExisting();
     busy(true);
     status('consultaEstado','Consultando tus datos académicos...','info');
     request('/api/requisitos','CONSULTAR_ESTUDIANTE_TITULACION',{cedula:id,numeroIdentificacion:id}).then(function(result){
@@ -97,17 +131,28 @@
       if(!result.encontrado||!raw)throw new Error(result.mensaje||'No se encontró un estudiante habilitado.');
       state.student=normalizeStudent(raw,id);
       if(!state.student.nombres||!state.student.carrera)throw new Error('El registro académico no contiene nombre y carrera completos.');
+      renderStudent(state.student);
       return request('/api/trabajo-titulacion','CONSULTAR_ENVIO_TRABAJO_TITULACION',{cedula:id,periodoId:state.student.periodoId,periodoLabel:state.student.periodoLabel});
     }).then(function(existing){
-      if(existing.encontrado&&existing.estado!=='DEVUELTO')throw new Error('Ya registraste tus títulos de Trabajo de Titulación. Estado: '+text(existing.estado)+'.');
-      renderStudent(state.student);
-      if(existing.encontrado&&existing.envio){
-        preload(existing.envio);
-        status('datosEstado','El registro fue devuelto. Corrige los títulos según las observaciones del coordinador.','info');
+      var envio=existing.envio||existing.registro||null;
+      var currentStatus=estadoNormal(existing.estado||envio&&envio.estado);
+      if(existing.encontrado&&envio){
+        renderExisting(envio,currentStatus);
+        preload(envio);
+        if(currentStatus==='DEVUELTO'){
+          status('consultaEstado','Tu registro fue devuelto. Revisa la observación y corrige los títulos.','info');
+          status('datosEstado','Corrige los títulos según las observaciones del coordinador.','info');
+          showStep(2);
+          return;
+        }
+        status('consultaEstado','Tus títulos ya están registrados. Estado: '+estadoLabel(currentStatus)+'.','success');
+        showStep(1);
+        return;
       }
-      status('consultaEstado','Datos encontrados correctamente.','success');
+      hideExisting();
+      status('consultaEstado','Datos encontrados correctamente. Continúa con el registro.','success');
       showStep(2);
-    }).catch(function(error){status('consultaEstado',error.message||'No se pudo realizar la consulta.','error');}).finally(function(){busy(false);});
+    }).catch(function(error){hideExisting();status('consultaEstado',error.message||'No se pudo realizar la consulta.','error');}).finally(function(){busy(false);});
   }
 
   function continueToProposals(){
