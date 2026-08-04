@@ -14,6 +14,11 @@ import {
   samePeriod,
   text
 } from './firestore-fixed.js';
+import {
+  TIPO_TRABAJO_TITULACION,
+  esTrabajoTitulacion,
+  migrarTrabajosTitulacionLegados
+} from './trabajo-titulacion-unificado.js';
 
 export { assignCareerCoordinator, listAdminCareers, listAdminPeriodsCatalog, saveAdminPeriod };
 
@@ -55,9 +60,14 @@ function envioCedula(row) {
   return match ? normalizeCedula(match[0]) : '';
 }
 
+function envioTipo(row) {
+  return esTrabajoTitulacion(row) ? TIPO_TRABAJO_TITULACION : 'ARTICULO_ACADEMICO';
+}
+
 function normalizeEnvio(row, requestedPeriod) {
   const preferred = Number(row.tituloPreferidoNumero || row.preferido || 0);
   const titles = [cleanTitle(row.titulo1), cleanTitle(row.titulo2), cleanTitle(row.titulo3)];
+  const type = envioTipo(row);
   return {
     envioId: text(row.id || row._id || row._docId),
     cedula: envioCedula(row),
@@ -68,6 +78,8 @@ function normalizeEnvio(row, requestedPeriod) {
     periodo: envioPeriod(row) || requestedPeriod,
     estado: status(row.estado || row.estadoFinal),
     enviado: true,
+    tipoTrabajo: type,
+    tipoTrabajoLabel: type === TIPO_TRABAJO_TITULACION ? 'Trabajo de Titulación' : 'Artículo académico',
     titulo1: titles[0],
     titulo2: titles[1],
     titulo3: titles[2],
@@ -82,6 +94,7 @@ function normalizeEnvio(row, requestedPeriod) {
 }
 
 export async function buildAdminGlobalList(payload = {}, env) {
+  await migrarTrabajosTitulacionLegados(env);
   const requestedPeriod = text(payload.periodoId || payload.periodoLabel || payload.periodo);
   const requestedCareer = text(payload.carrera || payload.nombreCarrera);
   const base = await buildPreviousGlobal(payload, env);
@@ -132,6 +145,7 @@ export async function buildAdminGlobalList(payload = {}, env) {
     normalized(left.nombres).localeCompare(normalized(right.nombres), 'es'));
 
   const missing = records.filter((item) => !item.fueraPoblacion && item.estado === 'NO_ENVIADO');
+  const workCount = allEnvios.filter(esTrabajoTitulacion).length;
   return {
     ...base,
     registros: records,
@@ -141,7 +155,8 @@ export async function buildAdminGlobalList(payload = {}, env) {
     total: records.length,
     totalEsperados: records.filter((item) => !item.fueraPoblacion).length,
     totalEnviosPeriodo: enviosByCedula.size,
-    mensaje: `Lista global cargada: ${records.filter((item) => !item.fueraPoblacion).length} estudiantes UTET y ${enviosByCedula.size} envíos de Firebase Títulos.`
+    totalTrabajosTitulacion: workCount,
+    mensaje: `Lista global cargada: ${records.filter((item) => !item.fueraPoblacion).length} estudiantes UTET, ${enviosByCedula.size} estudiantes con envío y ${workCount} Trabajo(s) de Titulación en Firebase Títulos.`
   };
 }
 
@@ -188,12 +203,13 @@ export async function buildAdminStatistics(payload = {}, env) {
   }, { esperados: 0, enviados: 0, faltan: 0, pendientes: 0, aprobados: 0, reemplazados: 0, devueltos: 0 });
   resumen.avance = resumen.esperados ? Number(((resumen.enviados / resumen.esperados) * 100).toFixed(1)) : 0;
   resumen.enviosFirebase = global.totalEnviosPeriodo || 0;
+  resumen.trabajosTitulacion = global.totalTrabajosTitulacion || 0;
   resumen.fueraPoblacion = global.fueraPoblacion.length;
 
   return {
     ...global,
     resumen,
     carreras,
-    mensaje: `Estadísticas calculadas con ${resumen.esperados} estudiantes UTET y ${resumen.enviosFirebase} envíos detectados en Firebase Títulos.`
+    mensaje: `Estadísticas calculadas con ${resumen.esperados} estudiantes UTET, ${resumen.enviosFirebase} estudiantes con envío y ${resumen.trabajosTitulacion} Trabajo(s) de Titulación.`
   };
 }
