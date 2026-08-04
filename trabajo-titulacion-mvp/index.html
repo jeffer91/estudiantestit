@@ -6,7 +6,7 @@
   <meta name="description" content="Registro de propuestas de títulos para Trabajo de Titulación del ITSQMET.">
   <title>Trabajo de Titulación | ITSQMET</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="css/trabajo-titulacion.css?v=1.0.0">
+  <link rel="stylesheet" href="css/trabajo-titulacion.css?v=1.0.1">
 </head>
 <body>
   <header class="app-header">
@@ -14,7 +14,7 @@
       <div class="brand-mark">ITSQMET</div>
       <div>
         <h1>Registro de Trabajo de Titulación</h1>
-        <p>Formula tres propuestas claras, viables y coherentes con el producto final que entregarás.</p>
+        <p>Registra tres títulos propuestos para revisión de coordinación.</p>
       </div>
     </div>
   </header>
@@ -23,14 +23,14 @@
     <nav class="stepper" aria-label="Pasos del registro">
       <div class="step active" data-step-indicator="1">1. Consulta</div>
       <div class="step" data-step-indicator="2">2. Datos</div>
-      <div class="step" data-step-indicator="3">3. Propuestas</div>
+      <div class="step" data-step-indicator="3">3. Títulos</div>
       <div class="step" data-step-indicator="4">4. Envío</div>
     </nav>
 
     <section class="card" data-step="1">
       <p class="kicker">Paso 1</p>
       <h2>Consulta tus datos</h2>
-      <p class="muted">Ingresa tu número de cédula. Este registro es exclusivo para la modalidad institucional <strong>Trabajo de Titulación</strong>.</p>
+      <p class="muted">Ingresa tu número de cédula. Este registro es exclusivo para <strong>Trabajo de Titulación</strong>.</p>
       <form id="consultaForm" class="grid">
         <label class="full"><span>Número de cédula</span><input id="cedulaInput" inputmode="numeric" autocomplete="off" maxlength="10" placeholder="Ejemplo: 1712345678" required></label>
         <div class="actions full"><button class="btn btn-primary" type="submit">Consultar</button></div>
@@ -47,7 +47,7 @@
         <div><span>Carrera</span><strong id="datoCarrera">-</strong></div>
         <div><span>Período</span><strong id="datoPeriodo">-</strong></div>
       </div>
-      <div class="notice"><strong>Denominación institucional:</strong> en este proceso se utiliza “Trabajo de Titulación”; no se emplea “tesis” como nombre del producto académico.</div>
+      <div class="notice"><strong>Denominación institucional:</strong> este proceso se denomina “Trabajo de Titulación”.</div>
       <div class="grid">
         <label class="full"><span>Usuario de Telegram</span><input id="telegramInput" placeholder="@usuario" autocomplete="off" required></label>
       </div>
@@ -57,16 +57,16 @@
 
     <section class="card" data-step="3" hidden>
       <p class="kicker">Paso 3</p>
-      <h2>Registra tres propuestas</h2>
-      <div class="notice"><div class="formula">Fórmula: Acción principal + producto o tema específico + propósito + unidad de estudio + lugar + período.</div><div class="muted">Las tres propuestas deben corresponder a productos y alcances que realmente puedas desarrollar durante el período académico.</div></div>
+      <h2>Registra tres títulos propuestos</h2>
+      <p class="muted">Escribe únicamente el título completo de cada propuesta. Los tres títulos deben ser diferentes.</p>
       <div class="proposal-tabs">
-        <button class="proposal-tab active" type="button" data-proposal-tab="1">Propuesta 1</button>
-        <button class="proposal-tab" type="button" data-proposal-tab="2">Propuesta 2</button>
-        <button class="proposal-tab" type="button" data-proposal-tab="3">Propuesta 3</button>
+        <button class="proposal-tab active" type="button" data-proposal-tab="1">Título 1</button>
+        <button class="proposal-tab" type="button" data-proposal-tab="2">Título 2</button>
+        <button class="proposal-tab" type="button" data-proposal-tab="3">Título 3</button>
       </div>
       <form id="propuestasForm" novalidate>
         <div id="proposalPanels"></div>
-        <div class="actions"><button class="btn btn-secondary" type="button" data-go="2">Volver</button><button class="btn btn-primary" type="submit">Revisar propuestas</button></div>
+        <div class="actions"><button class="btn btn-secondary" type="button" data-go="2">Volver</button><button class="btn btn-primary" type="submit">Revisar títulos</button></div>
       </form>
       <div id="propuestasEstado" class="status"></div>
     </section>
@@ -74,9 +74,9 @@
     <section class="card" data-step="4" hidden>
       <p class="kicker">Paso 4</p>
       <h2>Resumen y envío</h2>
-      <p class="muted">Selecciona tu propuesta favorita. El coordinador podrá aprobarla, corregirla o devolver el registro con observaciones.</p>
+      <p class="muted">Selecciona tu título favorito. El coordinador podrá aprobarlo, corregirlo o devolver el registro con observaciones.</p>
       <div id="resumenPropuestas"></div>
-      <label class="check"><input id="confirmacionEnvio" type="checkbox"><span>Confirmo que las tres propuestas son propias, están delimitadas y el producto final indicado podrá presentarse en los resultados del Trabajo de Titulación.</span></label>
+      <label class="check"><input id="confirmacionEnvio" type="checkbox"><span>Confirmo que revisé los tres títulos propuestos y deseo enviarlos a coordinación.</span></label>
       <div class="actions"><button class="btn btn-secondary" type="button" data-go="3">Corregir</button><button class="btn btn-primary" type="button" id="enviarBtn">Enviar a coordinación</button></div>
       <div id="envioEstado" class="status"></div>
     </section>
@@ -85,21 +85,11 @@
   <template id="proposalTemplate">
     <article class="proposal-panel" data-proposal-panel="__N__">
       <div class="grid">
-        <label class="full"><span>Título propuesto</span><textarea data-field="tituloFinal" rows="2" placeholder="Escribe el título completo" required></textarea></label>
-        <label><span>Acción principal</span><select data-field="accionPrincipal" required><option value="">Selecciona</option><option>Diagnóstico</option><option>Evaluación</option><option>Diseño</option><option>Desarrollo</option><option>Elaboración</option><option>Propuesta</option><option>Plan de mejora</option><option>Implementación</option><option>Validación</option><option>Intervención</option><option>Análisis</option></select></label>
-        <label><span>Producto final</span><input data-field="productoFinal" placeholder="Guía, plan, protocolo, sistema, aplicación..." required></label>
-        <label class="full"><span>Problema o necesidad específica</span><textarea data-field="problemaNecesidad" required></textarea></label>
-        <label class="full"><span>Propósito</span><input data-field="proposito" placeholder="Para fortalecer, mejorar, reducir, organizar..." required></label>
-        <label><span>Unidad de estudio o intervención</span><input data-field="unidadEstudio" placeholder="Pacientes, clientes, vehículos, red, proceso..." required></label>
-        <label><span>Lugar o contexto</span><input data-field="lugarContexto" placeholder="Institución, empresa, taller, emprendimiento..." required></label>
-        <label><span>Año o período</span><input data-field="anioPeriodo" placeholder="2026" required></label>
-        <label class="full"><span>Objetivo general</span><textarea data-field="objetivoGeneral" required></textarea></label>
+        <label class="full"><span>Título propuesto __N__</span><textarea data-field="tituloFinal" rows="4" placeholder="Escribe el título completo" required></textarea></label>
       </div>
-      <div class="actions"><button class="btn btn-helper" type="button" data-build-title="__N__">Construir título con la fórmula</button></div>
-      <div class="risk-box" data-risk="__N__"></div>
     </article>
   </template>
 
-  <script src="js/trabajo-titulacion.js?v=1.0.0"></script>
+  <script src="js/trabajo-titulacion.js?v=1.0.1"></script>
 </body>
 </html>
