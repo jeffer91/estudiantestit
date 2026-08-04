@@ -29,11 +29,30 @@ function textoError(error){
 function esErrorConexion(error){var firma=texto(error&&error.message?error.message:error).toLowerCase();return firma.indexOf('failed to fetch')>=0||firma.indexOf('networkerror')>=0||firma.indexOf('load failed')>=0||firma.indexOf('network request failed')>=0||firma.indexOf('aborted')>=0||firma.indexOf('timeout')>=0;}
 function validar(){var faltantes=[];if(!state())faltantes.push('CoordinadorMVPState');if(!ui())faltantes.push('CoordinadorMVPUI');if(!modal())faltantes.push('CoordinadorMVPModal');if(!sheets())faltantes.push('CoordinadorMVPSheetsPrimary');if(faltantes.length)throw new Error('Faltan módulos: '+faltantes.join(', '));}
 function estado(mensaje,tipo){ui().mostrarEstado('estadoPrincipal',mensaje,tipo||'info');}
-function resumen(){var diagnostico=state().obtenerDiagnosticoFiltros?state().obtenerDiagnosticoFiltros():{};estado(diagnostico.mostrados?'Mostrando '+diagnostico.mostrados+' título(s), sin filtro de período.':'No hay coincidencias para el coordinador, tipo y estado seleccionados.',diagnostico.mostrados?'success':'warning');}
+function resumen(){
+  var filtros=state().obtenerDiagnosticoFiltros?state().obtenerDiagnosticoFiltros():{};
+  var consulta=sheets().obtenerDiagnosticoConsulta?sheets().obtenerDiagnosticoConsulta():{};
+  var articulos=consulta.articulos||{};
+  var trabajos=consulta.trabajos||{};
+  var fuentes='Artículos: '+Number(articulos.recibidos||0)+' · Trabajos de Titulación: '+Number(trabajos.recibidos||0)+' · Total recibido: '+Number(consulta.totalRecibidos||0)+'.';
+  if(trabajos.ok===false&&trabajos.error){
+    estado('No se pudieron consultar los Trabajos de Titulación. '+texto(trabajos.error)+' '+fuentes,'error');
+    return;
+  }
+  if(articulos.ok===false&&articulos.error){
+    estado('No se pudieron consultar los artículos académicos. '+texto(articulos.error)+' '+fuentes,'warning');
+    return;
+  }
+  if(filtros.mostrados){
+    estado('Mostrando '+filtros.mostrados+' título(s). '+fuentes,'success');
+    return;
+  }
+  estado('No hay coincidencias para el coordinador, tipo y estado seleccionados. '+fuentes,'warning');
+}
 
 function cargarCatalogos(forzar){
   state().limpiarError();state().setCargando(true);
-  estado(forzar?'Actualizando Firebase Títulos...':'Cargando coordinadores, artículos y Trabajos de Titulación...','info');
+  estado(forzar?'Actualizando artículos y Trabajos de Titulación...':'Cargando coordinadores, artículos y Trabajos de Titulación...','info');
   if(forzar&&sheets().invalidarCacheEnvios)sheets().invalidarCacheEnvios();
   if(forzar&&sheets().limpiarCache)sheets().limpiarCache();
   return Promise.all([sheets().listarEnvios({forzar:forzar===true}),sheets().listarCoordinadores(forzar===true)]).then(function(resultados){
@@ -56,7 +75,7 @@ function devolver(){var resolucion=modal().obtenerResolucionDevolver();if(!resol
 
 function diagnostico(){ui().mostrarDiagnostico();ui().escribirDiagnostico({estado:'probando',fuentePrincipal:fuenteActual,apiBase:window.TITULOS_API_BASE||''});Promise.allSettled([sheets().leerConfiguracion(),sheets().diagnostico(),sheets().listarCoordinadores(),sheets().listarEnvios({forzar:true})]).then(function(resultados){ui().escribirDiagnostico({fuentePrincipal:fuenteActual,apiBase:window.TITULOS_API_BASE||'',configuracion:resultados[0].status==='fulfilled'?resultados[0].value:{error:textoError(resultados[0].reason)},conexion:resultados[1].status==='fulfilled'?resultados[1].value:{error:textoError(resultados[1].reason)},coordinadores:resultados[2].status==='fulfilled'?resultados[2].value.length:textoError(resultados[2].reason),enviosFirebaseTitulos:resultados[3].status==='fulfilled'?resultados[3].value.length:textoError(resultados[3].reason),consultaEnvios:sheets().obtenerDiagnosticoConsulta?sheets().obtenerDiagnosticoConsulta():{},filtros:state().obtenerDiagnosticoFiltros(),fecha:new Date().toISOString()});});}
 
-function eventos(){var coordinador=$('coordinadorSelect'),buscador=$('buscadorInput'),tipo=$('tipoTrabajoSelect');if(coordinador)coordinador.addEventListener('change',function(){state().setCoordinadorActual(coordinador.value);});if(buscador)buscador.addEventListener('input',function(){state().setBusqueda(buscador.value);});if(tipo)tipo.addEventListener('change',function(){state().setTipoTrabajoActual(tipo.value);});document.addEventListener('click',function(evento){var boton=evento.target&&evento.target.closest?evento.target.closest('[data-accion]'):null;if(!boton)return;var accion=boton.getAttribute('data-accion');if(accion==='cambiar-vista')state().setVistaActual(boton.getAttribute('data-vista'));else if(accion==='actualizar-datos')cargarCatalogos(true);else if(accion==='ver-detalle')abrirDetalle(boton.getAttribute('data-envio-id'));else if(accion==='cerrar-modal')modal().cerrar();else if(accion==='aprobar-envio')aprobar();else if(accion==='devolver-envio')devolver();else if(accion==='mostrar-diagnostico')diagnostico();else if(accion==='ocultar-diagnostico')ui().ocultarDiagnostico();});document.addEventListener('keydown',function(evento){if(evento.key==='Escape')modal().cerrar();});}
+function eventos(){var coordinador=$('coordinadorSelect'),buscador=$('buscadorInput'),tipo=$('tipoTrabajoSelect');if(coordinador)coordinador.addEventListener('change',function(){state().setCoordinadorActual(coordinador.value);resumen();});if(buscador)buscador.addEventListener('input',function(){state().setBusqueda(buscador.value);resumen();});if(tipo)tipo.addEventListener('change',function(){state().setTipoTrabajoActual(tipo.value);resumen();});document.addEventListener('click',function(evento){var boton=evento.target&&evento.target.closest?evento.target.closest('[data-accion]'):null;if(!boton)return;var accion=boton.getAttribute('data-accion');if(accion==='cambiar-vista'){state().setVistaActual(boton.getAttribute('data-vista'));resumen();}else if(accion==='actualizar-datos')cargarCatalogos(true);else if(accion==='ver-detalle')abrirDetalle(boton.getAttribute('data-envio-id'));else if(accion==='cerrar-modal')modal().cerrar();else if(accion==='aprobar-envio')aprobar();else if(accion==='devolver-envio')devolver();else if(accion==='mostrar-diagnostico')diagnostico();else if(accion==='ocultar-diagnostico')ui().ocultarDiagnostico();});document.addEventListener('keydown',function(evento){if(evento.key==='Escape')modal().cerrar();});}
 function iniciar(){if(iniciado)return;iniciado=true;try{validar();state().iniciar();ui().iniciar();modal().iniciar();eventos();cargarCatalogos(false);}catch(error){var elemento=$('estadoPrincipal');if(elemento){elemento.className='status-message is-error';elemento.textContent=textoError(error);}console.error('[CoordinadorMVPApp]',error);}}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',iniciar);else iniciar();
 window.CoordinadorMVPApp=Object.freeze({iniciar:iniciar,cargarCatalogos:cargarCatalogos,cargarTitulos:cargarTitulos,aprobar:aprobar,devolver:devolver,mostrarDiagnostico:diagnostico,obtenerFuenteActual:function(){return fuenteActual;}});
