@@ -34,7 +34,15 @@ function estado(value, fallback = 'PENDIENTE_REVISION') {
 }
 
 function limpiarTitulo(value) {
-  return text(value).replace(/\s+/g, ' ').replace(/^["']|["']$/g, '').trim();
+  let output = text(value).replace(/\s+/g, ' ');
+  while (
+    output.length >= 2 &&
+    ((output.startsWith('"') && output.endsWith('"')) ||
+      (output.startsWith("'") && output.endsWith("'")))
+  ) {
+    output = output.slice(1, -1).trim();
+  }
+  return output;
 }
 
 function normalizarPeriodo(value) {
@@ -42,7 +50,7 @@ function normalizarPeriodo(value) {
   return text(periodSignature(raw) || raw).replace(/\//g, '-');
 }
 
-function envioId(periodoId, cedula) {
+function construirEnvioId(periodoId, cedula) {
   return `${normalizarPeriodo(periodoId) || 'sin_periodo'}__${normalizeCedula(cedula)}__trabajo_titulacion`;
 }
 
@@ -53,76 +61,71 @@ function eventoId(prefix) {
   return `${prefix}__${Date.now()}__${random}`;
 }
 
-function normalizarDetalle(value, numero) {
+function normalizarPropuesta(value, numero) {
+  if (typeof value === 'string') {
+    return { numero, tituloFinal: limpiarTitulo(value) };
+  }
   const item = value && typeof value === 'object' ? value : {};
   return {
     numero,
-    tituloFinal: limpiarTitulo(item.tituloFinal || item.titulo),
-    accionPrincipal: text(item.accionPrincipal || item.accion),
-    productoFinal: text(item.productoFinal || item.producto),
-    problemaNecesidad: text(item.problemaNecesidad || item.problema || item.necesidad),
-    proposito: text(item.proposito || item.finalidad),
-    unidadEstudio: text(item.unidadEstudio || item.grupoEstudio || item.grupo),
-    lugarContexto: text(item.lugarContexto || item.contexto || item.lugar),
-    anioPeriodo: text(item.anioPeriodo || item.periodo || item.tiempo),
-    objetivoGeneral: text(item.objetivoGeneral || item.objetivo)
+    tituloFinal: limpiarTitulo(item.tituloFinal || item.titulo || item.tituloMejorado)
   };
 }
 
-function detallesDesdePayload(payload) {
+function propuestasDesdePayload(payload) {
   const input = Array.isArray(payload.propuestasDetalle)
     ? payload.propuestasDetalle
     : Array.isArray(payload.propuestas)
       ? payload.propuestas
       : [];
+
   return [1, 2, 3].map((numero, index) => {
-    const detalle = normalizarDetalle(input[index], numero);
-    detalle.tituloFinal = limpiarTitulo(
-      payload[`titulo${numero}`] || detalle.tituloFinal
+    const propuesta = normalizarPropuesta(input[index], numero);
+    propuesta.tituloFinal = limpiarTitulo(
+      payload[`titulo${numero}`] || propuesta.tituloFinal
     );
-    return detalle;
+    return propuesta;
   });
 }
 
-function validarDetalles(detalles) {
-  const requeridos = [
-    ['tituloFinal', 'título'],
-    ['accionPrincipal', 'acción principal'],
-    ['productoFinal', 'producto final'],
-    ['problemaNecesidad', 'problema o necesidad'],
-    ['proposito', 'propósito'],
-    ['unidadEstudio', 'unidad de estudio'],
-    ['lugarContexto', 'lugar o contexto'],
-    ['anioPeriodo', 'año o período'],
-    ['objetivoGeneral', 'objetivo general']
-  ];
-  detalles.forEach((detalle, index) => {
-    requeridos.forEach(([campo, etiqueta]) => {
-      if (!text(detalle[campo])) {
-        throw new Error(`Completa ${etiqueta} en la propuesta ${index + 1}.`);
-      }
-    });
+function validarPropuestas(propuestas) {
+  propuestas.forEach((propuesta, index) => {
+    if (!propuesta.tituloFinal) {
+      throw new Error(`Escribe el título propuesto ${index + 1}.`);
+    }
+    if (propuesta.tituloFinal.length < 8) {
+      throw new Error(`El título propuesto ${index + 1} es demasiado corto.`);
+    }
   });
-  const titulos = detalles.map((item) => item.tituloFinal.toLowerCase());
+
+  const titulos = propuestas.map((item) => item.tituloFinal.toLowerCase());
   if (new Set(titulos).size !== 3) {
-    throw new Error('Las tres propuestas deben tener títulos diferentes.');
+    throw new Error('Los tres títulos propuestos deben ser diferentes.');
   }
 }
 
 function publico(row) {
   row = row || {};
   const id = text(row.id || row._docId || row._id);
-  const detalles = Array.isArray(row.propuestasDetalle)
-    ? row.propuestasDetalle.map((item, index) => normalizarDetalle(item, index + 1))
-    : [1, 2, 3].map((numero) => normalizarDetalle({
-      tituloFinal: row[`titulo${numero}`]
-    }, numero));
-  const preferido = Number(row.tituloPreferidoNumero || 0);
+  const input = Array.isArray(row.propuestasDetalle)
+    ? row.propuestasDetalle
+    : [row.titulo1, row.titulo2, row.titulo3];
+  const propuestas = [1, 2, 3].map((numero, index) => {
+    const normalizada = normalizarPropuesta(input[index], numero);
+    normalizada.tituloFinal = limpiarTitulo(
+      row[`titulo${numero}`] || normalizada.tituloFinal
+    );
+    return normalizada;
+  });
+  const preferido = Number(row.tituloPreferidoNumero || row.preferido || 0);
+  const status = estado(row.estado || row.estadoFinal);
+
   return {
     ...row,
     id,
     _id: id,
     _clave: id,
+    idRegistro: id,
     envioId: id,
     tipoTrabajo: TIPO,
     tipoTrabajoLabel: 'Trabajo de Titulación',
@@ -135,31 +138,34 @@ function publico(row) {
     periodoId: text(row.periodoId),
     periodo: text(row.periodoNombre || row.periodoLabel || row.periodoId),
     periodoLabel: text(row.periodoNombre || row.periodoLabel || row.periodoId),
-    titulo1: detalles[0] ? detalles[0].tituloFinal : '',
-    titulo2: detalles[1] ? detalles[1].tituloFinal : '',
-    titulo3: detalles[2] ? detalles[2].tituloFinal : '',
-    propuestasDetalle: detalles,
+    titulo1: propuestas[0].tituloFinal,
+    titulo2: propuestas[1].tituloFinal,
+    titulo3: propuestas[2].tituloFinal,
+    propuestasDetalle: propuestas,
     tituloPreferidoNumero: preferido,
     preferido,
-    tituloPreferidoTexto: preferido && detalles[preferido - 1]
-      ? detalles[preferido - 1].tituloFinal
+    tituloPreferidoTexto: preferido && propuestas[preferido - 1]
+      ? propuestas[preferido - 1].tituloFinal
       : '',
-    estado: estado(row.estado),
-    estadoFinal: estado(row.estado),
+    estado: status,
+    estadoFinal: status,
     tituloFinal: limpiarTitulo(row.tituloFinal),
     tituloAprobado: limpiarTitulo(row.tituloFinal),
     comentarioCoordinador: text(row.observacion || row.comentarioCoordinador),
     observacion: text(row.observacion || row.comentarioCoordinador),
-    permitirReenvio: estado(row.estado) === 'DEVUELTO'
+    fechaRevision: text(row.fechaResolucion),
+    permitirReenvio: status === 'DEVUELTO'
   };
 }
 
 async function buscarPorCedula(cedulaValue, periodoValue, env) {
   const cedula = normalizeCedula(cedulaValue);
   if (!cedula) return null;
+
   const variantes = cedula.startsWith('0') ? [cedula, cedula.slice(1)] : [cedula];
   const encontrados = [];
   const vistos = new Set();
+
   for (const variante of variantes) {
     const rows = await queryEqual('TITULOS', ENVIOS, 'cedula', variante, 100, env);
     for (const row of rows) {
@@ -168,15 +174,18 @@ async function buscarPorCedula(cedulaValue, periodoValue, env) {
       encontrados.push(row);
     }
   }
+
   const periodo = normalizarPeriodo(periodoValue);
   const candidatos = periodo
     ? encontrados.filter((row) => normalizarPeriodo(row.periodoId || row.periodoNombre) === periodo)
     : encontrados;
+
   candidatos.sort((a, b) => {
     const dateA = Date.parse(a.fechaEnvio || a.actualizadoEn || a._updateTime || '') || 0;
     const dateB = Date.parse(b.fechaEnvio || b.actualizadoEn || b._updateTime || '') || 0;
     return dateB - dateA;
   });
+
   return candidatos[0] || null;
 }
 
@@ -194,6 +203,7 @@ async function consultar(payload, env) {
       payload.periodoId || payload.periodoLabel || payload.periodo,
       env
     );
+
   if (!row) {
     return {
       ok: true,
@@ -203,6 +213,7 @@ async function consultar(payload, env) {
       tipoTrabajo: TIPO
     };
   }
+
   const envio = publico(row);
   return {
     ok: true,
@@ -222,12 +233,14 @@ async function consultar(payload, env) {
 async function guardarEnvio(payload, env) {
   const cedula = normalizeCedula(payload.cedula || payload.numeroIdentificacion);
   if (!cedula) throw new Error('No se recibió una cédula válida.');
-  const detalles = detallesDesdePayload(payload);
-  validarDetalles(detalles);
+
+  const propuestas = propuestasDesdePayload(payload);
+  validarPropuestas(propuestas);
 
   const basic = await getStudentBasic(cedula, {
     periodoId: payload.periodoId || payload.periodo || payload.periodoLabel
   }, env);
+
   if (basic.encontrado !== true || !basic.estudiante) {
     throw new Error('La cédula no corresponde a un estudiante habilitado.');
   }
@@ -239,16 +252,17 @@ async function guardarEnvio(payload, env) {
   const periodoNombre = text(
     student.periodoLabel || payload.periodoLabel || payload.periodo || periodoId
   );
+
   if (!periodoId) throw new Error('No se pudo determinar el período del estudiante.');
 
   const previous = await buscarPorCedula(cedula, periodoId, env);
   if (previous && estado(previous.estado) !== 'DEVUELTO') {
-    const error = new Error('Tus propuestas de Trabajo de Titulación ya fueron enviadas y están siendo revisadas.');
+    const error = new Error('Tus títulos de Trabajo de Titulación ya fueron enviados y están siendo revisados.');
     error.duplicado = true;
     throw error;
   }
 
-  const id = previous && previous.id || envioId(periodoId, cedula);
+  const id = previous && previous.id || construirEnvioId(periodoId, cedula);
   const versiones = await queryEqual('TITULOS', VERSIONES, 'envioId', id, 1000, env);
   const numeroVersion = versiones.reduce(
     (max, item) => Math.max(max, Number(item.numeroVersion || 0)),
@@ -272,10 +286,10 @@ async function guardarEnvio(payload, env) {
     periodoId,
     periodoNombre: periodoNombre || periodoId,
     telegram: text(payload.telegram || payload.telegramUser),
-    titulo1: detalles[0].tituloFinal,
-    titulo2: detalles[1].tituloFinal,
-    titulo3: detalles[2].tituloFinal,
-    propuestasDetalle: detalles,
+    titulo1: propuestas[0].tituloFinal,
+    titulo2: propuestas[1].tituloFinal,
+    titulo3: propuestas[2].tituloFinal,
+    propuestasDetalle: propuestas,
     tituloPreferidoNumero: favorito,
     tituloFinal: null,
     estado: 'PENDIENTE_REVISION',
@@ -298,7 +312,10 @@ async function guardarEnvio(payload, env) {
         envioId: id,
         tipoTrabajo: TIPO,
         numeroVersion,
-        propuestasDetalle: detalles,
+        titulo1: propuestas[0].tituloFinal,
+        titulo2: propuestas[1].tituloFinal,
+        titulo3: propuestas[2].tituloFinal,
+        propuestasDetalle: propuestas,
         tituloPreferidoNumero: favorito,
         estado: 'PENDIENTE_REVISION',
         observacion: '',
@@ -326,21 +343,24 @@ async function guardarEnvio(payload, env) {
     numeroVersion,
     estado: 'PENDIENTE_REVISION',
     tipoTrabajo: TIPO,
-    mensaje: 'Trabajo de Titulación enviado correctamente para revisión.'
+    mensaje: 'Títulos de Trabajo de Titulación enviados correctamente para revisión.'
   };
 }
 
 async function listar(payload, env) {
   let rows = await listCollection('TITULOS', ENVIOS, { maxDocuments: 10000 }, env);
   const requestedStatus = text(payload.estado) ? estado(payload.estado, '') : '';
+
   if (requestedStatus) {
     rows = rows.filter((row) => estado(row.estado) === requestedStatus);
   }
+
   rows.sort((a, b) => {
     const dateA = Date.parse(a.fechaEnvio || a.actualizadoEn || a._updateTime || '') || 0;
     const dateB = Date.parse(b.fechaEnvio || b.actualizadoEn || b._updateTime || '') || 0;
     return dateB - dateA;
   });
+
   return { ok: true, envios: rows.map(publico), tipoTrabajo: TIPO };
 }
 
@@ -352,16 +372,21 @@ async function guardarResolucion(payload, env) {
       payload.periodoId || payload.periodoLabel || payload.periodo,
       env
     );
+
   if (!envio) throw new Error('No se encontró el Trabajo de Titulación indicado.');
 
   const status = estado(payload.estadoFinal || payload.estado, 'APROBADO');
   if (!ESTADOS_RESOLUCION.has(status)) {
     throw new Error('La resolución debe ser APROBADO, REEMPLAZADO o DEVUELTO.');
   }
+
   const selected = limpiarTitulo(payload.tituloElegido || payload.preferido || envio.titulo1);
   const corrected = limpiarTitulo(payload.tituloCorregido || payload.tituloFinal);
   const finalTitle = corrected || selected;
-  const observation = text(payload.observacion || payload.comentario || payload.comentarioCoordinador);
+  const observation = text(
+    payload.observacion || payload.comentario || payload.comentarioCoordinador
+  );
+
   if (status === 'DEVUELTO' && observation.length < 4) {
     throw new Error('La devolución necesita un comentario de al menos 4 caracteres.');
   }
@@ -369,19 +394,28 @@ async function guardarResolucion(payload, env) {
     throw new Error('La aprobación necesita un título final.');
   }
 
-  const resoluciones = await queryEqual('TITULOS', RESOLUCIONES, 'envioId', envio.id, 1000, env);
+  const resoluciones = await queryEqual(
+    'TITULOS',
+    RESOLUCIONES,
+    'envioId',
+    envio.id,
+    1000,
+    env
+  );
   const numeroResolucion = resoluciones.reduce(
     (max, item) => Math.max(max, Number(item.numeroResolucion || 0)),
     0
   ) + 1;
-  const resolutionId = eventoId(`${envio.id}__r${String(numeroResolucion).padStart(3, '0')}`);
+  const resolucionId = eventoId(
+    `${envio.id}__r${String(numeroResolucion).padStart(3, '0')}`
+  );
   const coordinador = text(payload.coordinador || payload.nombreCoordinador);
   const fecha = text(payload.fechaResolucion) || nowIso();
 
   await commitDocuments('TITULOS', [
     {
       collection: RESOLUCIONES,
-      id: resolutionId,
+      id: resolucionId,
       data: {
         envioId: envio.id,
         tipoTrabajo: TIPO,
@@ -405,7 +439,7 @@ async function guardarResolucion(payload, env) {
         observacion: observation,
         coordinador,
         fechaResolucion: fecha,
-        resolucionActualId: resolutionId,
+        resolucionActualId: resolucionId,
         requiereRevision: status === 'DEVUELTO',
         actualizadoEn: fecha
       },
@@ -417,7 +451,7 @@ async function guardarResolucion(payload, env) {
   return {
     ok: true,
     envioId: envio.id,
-    resolucionId: resolutionId,
+    resolucionId,
     estado: status,
     tituloFinal: status === 'DEVUELTO' ? '' : finalTitle,
     mensaje: status === 'DEVUELTO'
@@ -445,12 +479,15 @@ async function processRequest(context) {
     'LISTAR_ENVIOS_TRABAJO_TITULACION',
     'GUARDAR_RESOLUCION_TRABAJO_TITULACION'
   ]);
+
   if (coordinatorOnly.has(action) && !['coordinator', 'admin'].includes(userRole)) {
     return jsonReply(request, { ok: false, mensaje: 'Acción no autorizada.' }, 403);
   }
 
   try {
-    if (action === 'PING') return jsonReply(request, { ok: true, servicio: 'trabajo-titulacion' });
+    if (action === 'PING') {
+      return jsonReply(request, { ok: true, servicio: 'trabajo-titulacion' });
+    }
     if (action === 'CONSULTAR_ENVIO_TRABAJO_TITULACION') {
       return jsonReply(request, await consultar(payload, env));
     }
@@ -467,13 +504,18 @@ async function processRequest(context) {
   } catch (error) {
     return jsonReply(request, {
       ok: false,
-      mensaje: error && error.message ? error.message : 'No se pudo completar la operación.'
+      mensaje: error && error.message
+        ? error.message
+        : 'No se pudo completar la operación.'
     }, error && error.duplicado ? 409 : 500);
   }
 }
 
 export function onRequestOptions(context) {
-  return new Response(null, { status: 204, headers: corsHeaders(context.request) });
+  return new Response(null, {
+    status: 204,
+    headers: corsHeaders(context.request)
+  });
 }
 
 export function onRequestPost(context) {
