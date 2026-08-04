@@ -6,12 +6,14 @@
   <meta name="description" content="Registro de propuestas de títulos para Trabajo de Titulación del ITSQMET.">
   <title>Trabajo de Titulación | ITSQMET</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="css/trabajo-titulacion.css?v=1.0.1">
+  <link rel="stylesheet" href="css/trabajo-titulacion.css?v=1.1.0">
 </head>
 <body>
   <header class="app-header">
     <div class="header-inner brand-line">
-      <div class="brand-mark">ITSQMET</div>
+      <div class="brand-logo-wrap">
+        <img class="brand-logo" src="/estudiantes/img/logo-itsqmet.png" alt="Instituto Tecnológico Superior Quito Metropolitano">
+      </div>
       <div>
         <h1>Registro de Trabajo de Titulación</h1>
         <p>Registra tres títulos propuestos para revisión de coordinación.</p>
@@ -36,6 +38,26 @@
         <div class="actions full"><button class="btn btn-primary" type="submit">Consultar</button></div>
       </form>
       <div id="consultaEstado" class="status info"></div>
+
+      <section id="registroExistente" class="existing-record" hidden aria-live="polite">
+        <div class="existing-record__head">
+          <div>
+            <p class="kicker">Registro encontrado</p>
+            <h3>Tus títulos de Trabajo de Titulación</h3>
+          </div>
+          <span id="existenteEstado" class="state-badge">-</span>
+        </div>
+        <div class="existing-student-grid">
+          <div><span>Estudiante</span><strong id="existenteNombres">-</strong></div>
+          <div><span>Carrera</span><strong id="existenteCarrera">-</strong></div>
+          <div><span>Período</span><strong id="existentePeriodo">-</strong></div>
+        </div>
+        <div id="existenteTitulos" class="existing-titles"></div>
+        <div id="existenteResolucion" class="existing-resolution" hidden>
+          <div><span>Título final</span><strong id="existenteTituloFinal">-</strong></div>
+          <div><span>Observación del coordinador</span><p id="existenteObservacion">-</p></div>
+        </div>
+      </section>
     </section>
 
     <section class="card" data-step="2" hidden>
@@ -90,6 +112,6 @@
     </article>
   </template>
 
-  <script src="js/trabajo-titulacion.js?v=1.0.1"></script>
+  <script src="js/trabajo-titulacion.js?v=1.1.0"></script>
 </body>
 </html>
