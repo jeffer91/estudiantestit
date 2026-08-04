@@ -1,0 +1,481 @@
+import {
+  commitDocuments,
+  listCollection,
+  normalizeCedula,
+  nowIso,
+  periodSignature,
+  queryEqual,
+  text
+} from '../_lib/firestore.js';
+import { getStudentBasic } from '../_lib/requisitos-firebase.js';
+import {
+  corsHeaders,
+  jsonReply,
+  normalizeAction,
+  readJson,
+  rejectUnknownOrigin,
+  role
+} from '../_lib/http.js';
+
+const ENVIOS = 'envios_trabajo_titulacion';
+const VERSIONES = 'versiones_trabajo_titulacion';
+const RESOLUCIONES = 'resoluciones_trabajo_titulacion';
+const TIPO = 'TRABAJO_TITULACION';
+const ESTADOS_RESOLUCION = new Set(['APROBADO', 'REEMPLAZADO', 'DEVUELTO']);
+
+function estado(value, fallback = 'PENDIENTE_REVISION') {
+  const normalized = text(value).toUpperCase().replace(/[^A-Z0-9]+/g, '_');
+  if (!normalized) return fallback;
+  if (normalized.includes('DEVUEL')) return 'DEVUELTO';
+  if (normalized.includes('REEMPLAZ')) return 'REEMPLAZADO';
+  if (normalized.includes('APROBAD')) return 'APROBADO';
+  if (normalized.includes('PENDIENT')) return 'PENDIENTE_REVISION';
+  return normalized;
+}
+
+function limpiarTitulo(value) {
+  return text(value).replace(/\s+/g, ' ').replace(/^["']|["']$/g, '').trim();
+}
+
+function normalizarPeriodo(value) {
+  const raw = text(value);
+  return text(periodSignature(raw) || raw).replace(/\//g, '-');
+}
+
+function envioId(periodoId, cedula) {
+  return `${normalizarPeriodo(periodoId) || 'sin_periodo'}__${normalizeCedula(cedula)}__trabajo_titulacion`;
+}
+
+function eventoId(prefix) {
+  const random = typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID().replace(/-/g, '').slice(0, 12)
+    : Math.random().toString(36).slice(2, 14);
+  return `${prefix}__${Date.now()}__${random}`;
+}
+
+function normalizarDetalle(value, numero) {
+  const item = value && typeof value === 'object' ? value : {};
+  return {
+    numero,
+    tituloFinal: limpiarTitulo(item.tituloFinal || item.titulo),
+    accionPrincipal: text(item.accionPrincipal || item.accion),
+    productoFinal: text(item.productoFinal || item.producto),
+    problemaNecesidad: text(item.problemaNecesidad || item.problema || item.necesidad),
+    proposito: text(item.proposito || item.finalidad),
+    unidadEstudio: text(item.unidadEstudio || item.grupoEstudio || item.grupo),
+    lugarContexto: text(item.lugarContexto || item.contexto || item.lugar),
+    anioPeriodo: text(item.anioPeriodo || item.periodo || item.tiempo),
+    objetivoGeneral: text(item.objetivoGeneral || item.objetivo)
+  };
+}
+
+function detallesDesdePayload(payload) {
+  const input = Array.isArray(payload.propuestasDetalle)
+    ? payload.propuestasDetalle
+    : Array.isArray(payload.propuestas)
+      ? payload.propuestas
+      : [];
+  return [1, 2, 3].map((numero, index) => {
+    const detalle = normalizarDetalle(input[index], numero);
+    detalle.tituloFinal = limpiarTitulo(
+      payload[`titulo${numero}`] || detalle.tituloFinal
+    );
+    return detalle;
+  });
+}
+
+function validarDetalles(detalles) {
+  const requeridos = [
+    ['tituloFinal', 'título'],
+    ['accionPrincipal', 'acción principal'],
+    ['productoFinal', 'producto final'],
+    ['problemaNecesidad', 'problema o necesidad'],
+    ['proposito', 'propósito'],
+    ['unidadEstudio', 'unidad de estudio'],
+    ['lugarContexto', 'lugar o contexto'],
+    ['anioPeriodo', 'año o período'],
+    ['objetivoGeneral', 'objetivo general']
+  ];
+  detalles.forEach((detalle, index) => {
+    requeridos.forEach(([campo, etiqueta]) => {
+      if (!text(detalle[campo])) {
+        throw new Error(`Completa ${etiqueta} en la propuesta ${index + 1}.`);
+      }
+    });
+  });
+  const titulos = detalles.map((item) => item.tituloFinal.toLowerCase());
+  if (new Set(titulos).size !== 3) {
+    throw new Error('Las tres propuestas deben tener títulos diferentes.');
+  }
+}
+
+function publico(row) {
+  row = row || {};
+  const id = text(row.id || row._docId || row._id);
+  const detalles = Array.isArray(row.propuestasDetalle)
+    ? row.propuestasDetalle.map((item, index) => normalizarDetalle(item, index + 1))
+    : [1, 2, 3].map((numero) => normalizarDetalle({
+      tituloFinal: row[`titulo${numero}`]
+    }, numero));
+  const preferido = Number(row.tituloPreferidoNumero || 0);
+  return {
+    ...row,
+    id,
+    _id: id,
+    _clave: id,
+    envioId: id,
+    tipoTrabajo: TIPO,
+    tipoTrabajoLabel: 'Trabajo de Titulación',
+    cedula: normalizeCedula(row.cedula || row.numeroIdentificacion),
+    numeroIdentificacion: normalizeCedula(row.cedula || row.numeroIdentificacion),
+    nombres: text(row.nombres || row.estudiante),
+    estudiante: text(row.nombres || row.estudiante),
+    carrera: text(row.carreraNombre || row.carrera || row.nombreCarrera),
+    nombreCarrera: text(row.carreraNombre || row.carrera || row.nombreCarrera),
+    periodoId: text(row.periodoId),
+    periodo: text(row.periodoNombre || row.periodoLabel || row.periodoId),
+    periodoLabel: text(row.periodoNombre || row.periodoLabel || row.periodoId),
+    titulo1: detalles[0] ? detalles[0].tituloFinal : '',
+    titulo2: detalles[1] ? detalles[1].tituloFinal : '',
+    titulo3: detalles[2] ? detalles[2].tituloFinal : '',
+    propuestasDetalle: detalles,
+    tituloPreferidoNumero: preferido,
+    preferido,
+    tituloPreferidoTexto: preferido && detalles[preferido - 1]
+      ? detalles[preferido - 1].tituloFinal
+      : '',
+    estado: estado(row.estado),
+    estadoFinal: estado(row.estado),
+    tituloFinal: limpiarTitulo(row.tituloFinal),
+    tituloAprobado: limpiarTitulo(row.tituloFinal),
+    comentarioCoordinador: text(row.observacion || row.comentarioCoordinador),
+    observacion: text(row.observacion || row.comentarioCoordinador),
+    permitirReenvio: estado(row.estado) === 'DEVUELTO'
+  };
+}
+
+async function buscarPorCedula(cedulaValue, periodoValue, env) {
+  const cedula = normalizeCedula(cedulaValue);
+  if (!cedula) return null;
+  const variantes = cedula.startsWith('0') ? [cedula, cedula.slice(1)] : [cedula];
+  const encontrados = [];
+  const vistos = new Set();
+  for (const variante of variantes) {
+    const rows = await queryEqual('TITULOS', ENVIOS, 'cedula', variante, 100, env);
+    for (const row of rows) {
+      if (vistos.has(row.id)) continue;
+      vistos.add(row.id);
+      encontrados.push(row);
+    }
+  }
+  const periodo = normalizarPeriodo(periodoValue);
+  const candidatos = periodo
+    ? encontrados.filter((row) => normalizarPeriodo(row.periodoId || row.periodoNombre) === periodo)
+    : encontrados;
+  candidatos.sort((a, b) => {
+    const dateA = Date.parse(a.fechaEnvio || a.actualizadoEn || a._updateTime || '') || 0;
+    const dateB = Date.parse(b.fechaEnvio || b.actualizadoEn || b._updateTime || '') || 0;
+    return dateB - dateA;
+  });
+  return candidatos[0] || null;
+}
+
+async function buscarPorId(id, env) {
+  if (!text(id)) return null;
+  const rows = await listCollection('TITULOS', ENVIOS, { maxDocuments: 10000 }, env);
+  return rows.find((row) => text(row.id || row._docId) === text(id)) || null;
+}
+
+async function consultar(payload, env) {
+  const row = payload.envioId
+    ? await buscarPorId(payload.envioId, env)
+    : await buscarPorCedula(
+      payload.cedula || payload.numeroIdentificacion,
+      payload.periodoId || payload.periodoLabel || payload.periodo,
+      env
+    );
+  if (!row) {
+    return {
+      ok: true,
+      encontrado: false,
+      existe: false,
+      tieneEnvio: false,
+      tipoTrabajo: TIPO
+    };
+  }
+  const envio = publico(row);
+  return {
+    ok: true,
+    encontrado: true,
+    existe: true,
+    tieneEnvio: envio.estado !== 'DEVUELTO',
+    permiteReenvio: envio.estado === 'DEVUELTO',
+    estado: envio.estado,
+    envio,
+    registro: envio,
+    mensaje: envio.estado === 'DEVUELTO'
+      ? 'El Trabajo de Titulación fue devuelto y puede corregirse.'
+      : 'Trabajo de Titulación encontrado correctamente.'
+  };
+}
+
+async function guardarEnvio(payload, env) {
+  const cedula = normalizeCedula(payload.cedula || payload.numeroIdentificacion);
+  if (!cedula) throw new Error('No se recibió una cédula válida.');
+  const detalles = detallesDesdePayload(payload);
+  validarDetalles(detalles);
+
+  const basic = await getStudentBasic(cedula, {
+    periodoId: payload.periodoId || payload.periodo || payload.periodoLabel
+  }, env);
+  if (basic.encontrado !== true || !basic.estudiante) {
+    throw new Error('La cédula no corresponde a un estudiante habilitado.');
+  }
+
+  const student = basic.estudiante;
+  const periodoId = normalizarPeriodo(
+    student.periodoId || payload.periodoId || payload.periodo || payload.periodoLabel
+  );
+  const periodoNombre = text(
+    student.periodoLabel || payload.periodoLabel || payload.periodo || periodoId
+  );
+  if (!periodoId) throw new Error('No se pudo determinar el período del estudiante.');
+
+  const previous = await buscarPorCedula(cedula, periodoId, env);
+  if (previous && estado(previous.estado) !== 'DEVUELTO') {
+    const error = new Error('Tus propuestas de Trabajo de Titulación ya fueron enviadas y están siendo revisadas.');
+    error.duplicado = true;
+    throw error;
+  }
+
+  const id = previous && previous.id || envioId(periodoId, cedula);
+  const versiones = await queryEqual('TITULOS', VERSIONES, 'envioId', id, 1000, env);
+  const numeroVersion = versiones.reduce(
+    (max, item) => Math.max(max, Number(item.numeroVersion || 0)),
+    0
+  ) + 1;
+  const versionId = eventoId(`${id}__v${String(numeroVersion).padStart(3, '0')}`);
+  const preferido = Number(payload.tituloPreferidoNumero || payload.preferido || 1);
+  const favorito = [1, 2, 3].includes(preferido) ? preferido : 1;
+  const fecha = nowIso();
+  const nombres = text(student.nombres || payload.nombres || payload.estudiante);
+  const carrera = text(student.carrera || payload.carrera || payload.nombreCarrera);
+
+  const envioData = {
+    tipoTrabajo: TIPO,
+    tipoTrabajoLabel: 'Trabajo de Titulación',
+    cedula,
+    numeroIdentificacion: cedula,
+    nombres,
+    carreraNombre: carrera,
+    carreraCodigo: text(student.codigoCarrera || payload.codigoCarrera),
+    periodoId,
+    periodoNombre: periodoNombre || periodoId,
+    telegram: text(payload.telegram || payload.telegramUser),
+    titulo1: detalles[0].tituloFinal,
+    titulo2: detalles[1].tituloFinal,
+    titulo3: detalles[2].tituloFinal,
+    propuestasDetalle: detalles,
+    tituloPreferidoNumero: favorito,
+    tituloFinal: null,
+    estado: 'PENDIENTE_REVISION',
+    observacion: null,
+    coordinador: null,
+    fechaEnvio: fecha,
+    fechaResolucion: null,
+    versionActual: numeroVersion,
+    versionActualId: versionId,
+    resolucionActualId: null,
+    requiereRevision: false,
+    actualizadoEn: fecha
+  };
+
+  await commitDocuments('TITULOS', [
+    {
+      collection: VERSIONES,
+      id: versionId,
+      data: {
+        envioId: id,
+        tipoTrabajo: TIPO,
+        numeroVersion,
+        propuestasDetalle: detalles,
+        tituloPreferidoNumero: favorito,
+        estado: 'PENDIENTE_REVISION',
+        observacion: '',
+        fechaEnvio: fecha
+      },
+      merge: false,
+      exists: false
+    },
+    {
+      collection: ENVIOS,
+      id,
+      data: envioData,
+      merge: true,
+      ...(previous && previous._updateTime
+        ? { updateTime: previous._updateTime }
+        : { exists: false })
+    }
+  ], env);
+
+  return {
+    ok: true,
+    envioId: id,
+    idRegistro: id,
+    versionId,
+    numeroVersion,
+    estado: 'PENDIENTE_REVISION',
+    tipoTrabajo: TIPO,
+    mensaje: 'Trabajo de Titulación enviado correctamente para revisión.'
+  };
+}
+
+async function listar(payload, env) {
+  let rows = await listCollection('TITULOS', ENVIOS, { maxDocuments: 10000 }, env);
+  const requestedStatus = text(payload.estado) ? estado(payload.estado, '') : '';
+  if (requestedStatus) {
+    rows = rows.filter((row) => estado(row.estado) === requestedStatus);
+  }
+  rows.sort((a, b) => {
+    const dateA = Date.parse(a.fechaEnvio || a.actualizadoEn || a._updateTime || '') || 0;
+    const dateB = Date.parse(b.fechaEnvio || b.actualizadoEn || b._updateTime || '') || 0;
+    return dateB - dateA;
+  });
+  return { ok: true, envios: rows.map(publico), tipoTrabajo: TIPO };
+}
+
+async function guardarResolucion(payload, env) {
+  const envio = payload.envioId
+    ? await buscarPorId(payload.envioId, env)
+    : await buscarPorCedula(
+      payload.cedula || payload.numeroIdentificacion,
+      payload.periodoId || payload.periodoLabel || payload.periodo,
+      env
+    );
+  if (!envio) throw new Error('No se encontró el Trabajo de Titulación indicado.');
+
+  const status = estado(payload.estadoFinal || payload.estado, 'APROBADO');
+  if (!ESTADOS_RESOLUCION.has(status)) {
+    throw new Error('La resolución debe ser APROBADO, REEMPLAZADO o DEVUELTO.');
+  }
+  const selected = limpiarTitulo(payload.tituloElegido || payload.preferido || envio.titulo1);
+  const corrected = limpiarTitulo(payload.tituloCorregido || payload.tituloFinal);
+  const finalTitle = corrected || selected;
+  const observation = text(payload.observacion || payload.comentario || payload.comentarioCoordinador);
+  if (status === 'DEVUELTO' && observation.length < 4) {
+    throw new Error('La devolución necesita un comentario de al menos 4 caracteres.');
+  }
+  if (status !== 'DEVUELTO' && !finalTitle) {
+    throw new Error('La aprobación necesita un título final.');
+  }
+
+  const resoluciones = await queryEqual('TITULOS', RESOLUCIONES, 'envioId', envio.id, 1000, env);
+  const numeroResolucion = resoluciones.reduce(
+    (max, item) => Math.max(max, Number(item.numeroResolucion || 0)),
+    0
+  ) + 1;
+  const resolutionId = eventoId(`${envio.id}__r${String(numeroResolucion).padStart(3, '0')}`);
+  const coordinador = text(payload.coordinador || payload.nombreCoordinador);
+  const fecha = text(payload.fechaResolucion) || nowIso();
+
+  await commitDocuments('TITULOS', [
+    {
+      collection: RESOLUCIONES,
+      id: resolutionId,
+      data: {
+        envioId: envio.id,
+        tipoTrabajo: TIPO,
+        numeroResolucion,
+        coordinador,
+        estado: status,
+        tituloElegido: selected,
+        tituloCorregido: corrected,
+        observacion: observation,
+        fechaResolucion: fecha
+      },
+      merge: false,
+      exists: false
+    },
+    {
+      collection: ENVIOS,
+      id: envio.id,
+      data: {
+        estado: status,
+        tituloFinal: status === 'DEVUELTO' ? null : finalTitle,
+        observacion: observation,
+        coordinador,
+        fechaResolucion: fecha,
+        resolucionActualId: resolutionId,
+        requiereRevision: status === 'DEVUELTO',
+        actualizadoEn: fecha
+      },
+      merge: true,
+      ...(envio._updateTime ? { updateTime: envio._updateTime } : {})
+    }
+  ], env);
+
+  return {
+    ok: true,
+    envioId: envio.id,
+    resolucionId: resolutionId,
+    estado: status,
+    tituloFinal: status === 'DEVUELTO' ? '' : finalTitle,
+    mensaje: status === 'DEVUELTO'
+      ? 'Trabajo de Titulación devuelto correctamente.'
+      : 'Trabajo de Titulación aprobado correctamente.'
+  };
+}
+
+async function processRequest(context) {
+  const { request, env } = context;
+  const originError = rejectUnknownOrigin(request);
+  if (originError) return originError;
+
+  let body;
+  try {
+    body = await readJson(request);
+  } catch (error) {
+    return jsonReply(request, { ok: false, mensaje: error.message }, 400);
+  }
+
+  const action = normalizeAction(body.accion || body.action);
+  const payload = body.datos || body.data || {};
+  const userRole = role(request);
+  const coordinatorOnly = new Set([
+    'LISTAR_ENVIOS_TRABAJO_TITULACION',
+    'GUARDAR_RESOLUCION_TRABAJO_TITULACION'
+  ]);
+  if (coordinatorOnly.has(action) && !['coordinator', 'admin'].includes(userRole)) {
+    return jsonReply(request, { ok: false, mensaje: 'Acción no autorizada.' }, 403);
+  }
+
+  try {
+    if (action === 'PING') return jsonReply(request, { ok: true, servicio: 'trabajo-titulacion' });
+    if (action === 'CONSULTAR_ENVIO_TRABAJO_TITULACION') {
+      return jsonReply(request, await consultar(payload, env));
+    }
+    if (action === 'ENVIO_TRABAJO_TITULACION') {
+      return jsonReply(request, await guardarEnvio(payload, env));
+    }
+    if (action === 'LISTAR_ENVIOS_TRABAJO_TITULACION') {
+      return jsonReply(request, await listar(payload, env));
+    }
+    if (action === 'GUARDAR_RESOLUCION_TRABAJO_TITULACION') {
+      return jsonReply(request, await guardarResolucion(payload, env));
+    }
+    return jsonReply(request, { ok: false, mensaje: 'Acción no reconocida.' }, 400);
+  } catch (error) {
+    return jsonReply(request, {
+      ok: false,
+      mensaje: error && error.message ? error.message : 'No se pudo completar la operación.'
+    }, error && error.duplicado ? 409 : 500);
+  }
+}
+
+export function onRequestOptions(context) {
+  return new Response(null, { status: 204, headers: corsHeaders(context.request) });
+}
+
+export function onRequestPost(context) {
+  return processRequest(context);
+}
