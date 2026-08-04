@@ -14,6 +14,7 @@ const files = [
   'functions/_lib/titulos-firebase-fixed.js',
   'functions/_lib/titulos-firebase-v6.js',
   'functions/_lib/titulos-firebase-v7.js',
+  'functions/_lib/trabajo-titulacion-unificado.js',
   'functions/_lib/admin-global-fixed.js',
   'functions/_lib/admin-global-v5.js',
   'functions/_lib/admin-global-v6.js',
