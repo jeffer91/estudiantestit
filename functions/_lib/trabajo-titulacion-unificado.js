@@ -14,6 +14,7 @@ export const COLECCION_RESOLUCIONES = 'resoluciones';
 const LEGACY_ENVIOS = 'envios_trabajo_titulacion';
 const LEGACY_VERSIONES = 'versiones_trabajo_titulacion';
 const LEGACY_RESOLUCIONES = 'resoluciones_trabajo_titulacion';
+const MIGRATION_MARKER_ID = 'migracion_trabajos_titulacion_v1';
 
 function fechaValor(row) {
   return Date.parse(
@@ -46,6 +47,12 @@ function valoresPeriodo(value) {
   }
   const direct = text(value);
   return direct ? [direct] : [];
+}
+
+function migrationEnabled(env, options = {}) {
+  if (options.forzar === true) return true;
+  const raw = text(env && env.ENABLE_LEGACY_TITULOS_MIGRATION).toLowerCase();
+  return ['1', 'true', 'yes', 'si', 'sí'].includes(raw);
 }
 
 export function cedulaEstricta(value) {
@@ -129,7 +136,31 @@ async function copiarColeccion(origen, destino, transform, env) {
   return { encontrados: rows.length, copiados, omitidos };
 }
 
-export async function migrarTrabajosTitulacionLegados(env) {
+export async function migrarTrabajosTitulacionLegados(env, options = {}) {
+  /* Nunca se ejecuta automáticamente durante consultas normales. Antes esta
+     función barría tres colecciones completas en cada solicitud, agotando la
+     cuota de Firestore. Para ejecutarla se debe habilitar explícitamente la
+     variable ENABLE_LEGACY_TITULOS_MIGRATION o usar { forzar: true }. */
+  if (!migrationEnabled(env, options)) {
+    return {
+      ok: true,
+      omitida: true,
+      motivo: 'MIGRACION_LEGADA_DESACTIVADA',
+      totalCopiados: 0
+    };
+  }
+
+  const marker = await getDocument('TITULOS', 'configuracion', MIGRATION_MARKER_ID, env);
+  if (marker && marker.completada === true && options.forzar !== true) {
+    return {
+      ok: true,
+      omitida: true,
+      motivo: 'MIGRACION_YA_COMPLETADA',
+      completadaEn: text(marker.completadaEn),
+      totalCopiados: Number(marker.totalCopiados || 0)
+    };
+  }
+
   const envios = await copiarColeccion(
     LEGACY_ENVIOS,
     COLECCION_ENVIOS,
@@ -173,17 +204,26 @@ export async function migrarTrabajosTitulacionLegados(env) {
     env
   );
 
+  const totalCopiados = envios.copiados + versiones.copiados + resoluciones.copiados;
+  await setDocument('TITULOS', 'configuracion', MIGRATION_MARKER_ID, {
+    completada: true,
+    completadaEn: new Date().toISOString(),
+    totalCopiados,
+    envios,
+    versiones,
+    resoluciones
+  }, { merge: true }, env);
+
   return {
     ok: true,
     envios,
     versiones,
     resoluciones,
-    totalCopiados: envios.copiados + versiones.copiados + resoluciones.copiados
+    totalCopiados
   };
 }
 
 export async function listarTrabajosTitulacionUnificados(env) {
-  await migrarTrabajosTitulacionLegados(env);
   const rows = await listCollection('TITULOS', COLECCION_ENVIOS, { maxDocuments: 10000 }, env);
   return rows.filter(esTrabajoTitulacion);
 }
