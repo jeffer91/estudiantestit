@@ -29,6 +29,7 @@ const titlesV7 = read('functions/_lib/titulos-firebase-v7.js');
 const adminGlobalV5 = read('functions/_lib/admin-global-v5.js');
 const adminGlobalV6 = read('functions/_lib/admin-global-v6.js');
 const unifiedWork = read('functions/_lib/trabajo-titulacion-unificado.js');
+const requisitos = read('functions/_lib/requisitos-firebase-fixed.js');
 
 assert(
   !/listarTitulos\(\{\s*carreras:\s*['"]['"]\s*,\s*carrera:\s*['"]['"]\s*,\s*estado:\s*['"]['"]\s*,\s*periodo:\s*['"]['"]\s*\}\)/.test(admin),
@@ -119,6 +120,16 @@ assert(
   'El módulo activo de Coordinadores permite consultas sin carrera ni período.'
 );
 
+assert(
+  /const includePeriods = scope === 'periods' \|\| scope === 'all'/.test(requisitos) &&
+  /const includeCareers = scope !== 'periods'/.test(requisitos),
+  'Requisitos vuelve a leer períodos y carreras aunque solo se solicite un catálogo.'
+);
+assert(
+  /includePeriods \? listTitlePeriods\(env\) : Promise\.resolve\(\[\]\)/.test(requisitos),
+  'La consulta de carreras todavía vuelve a descargar el catálogo de períodos.'
+);
+
 if (errors.length) {
   console.error('\n[Cuota Firebase] Se encontraron riesgos:\n');
   errors.forEach((error, index) => console.error(`${index + 1}. ${error}`));
@@ -129,4 +140,5 @@ if (errors.length) {
 console.log('[Cuota Firebase] Administrador consulta títulos por período.');
 console.log('[Cuota Firebase] Toda la cadena activa de Coordinadores conserva los filtros.');
 console.log('[Cuota Firebase] Historial y Trabajo de Titulación usan consultas filtradas.');
+console.log('[Cuota Firebase] Requisitos evita lecturas duplicadas de catálogos.');
 console.log('[Cuota Firebase] Migraciones automáticas y dobles lecturas permanecen bloqueadas.');
