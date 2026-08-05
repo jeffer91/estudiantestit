@@ -1,4 +1,4 @@
-/* Lectura definitiva de Firebase Títulos con períodos canónicos. */
+/* Lectura optimizada de Firebase Títulos con períodos canónicos. */
 import {
   executeTitulosAction as executePrevious,
   publicTitleConfiguration
@@ -16,8 +16,7 @@ import {
 import {
   TIPO_TRABAJO_TITULACION,
   coincidePeriodoTrabajo,
-  esTrabajoTitulacion,
-  migrarTrabajosTitulacionLegados
+  esTrabajoTitulacion
 } from './trabajo-titulacion-unificado.js';
 
 function normalizeStatus(value, fallback = 'PENDIENTE_REVISION') {
@@ -126,9 +125,55 @@ function careerMatches(row, filters) {
   return filters.some((filter) => name === filter || id === filter || name.includes(filter));
 }
 
+async function queryValues(collectionName, field, values, limit, env) {
+  const map = new Map();
+  for (const value of values) {
+    if (!text(value)) continue;
+    const rows = await queryEqual('TITULOS', collectionName, field, value, limit, env);
+    rows.forEach((row) => map.set(row.id, row));
+  }
+  return [...map.values()];
+}
+
+async function queryByFirstMatchingField(collectionName, fields, values, limit, env) {
+  for (const field of fields) {
+    const rows = await queryValues(collectionName, field, values, limit, env);
+    if (rows.length) return rows;
+  }
+  return [];
+}
+
+async function candidateEnvios(payload, env) {
+  const careerValues = splitList(payload.carreras || payload.carrera || payload.nombreCarrera);
+  const periodValues = [payload.periodoId, payload.periodoLabel, payload.periodo]
+    .map(text).filter(Boolean);
+  const statusValue = text(payload.estado) ? normalizeStatus(payload.estado, '') : '';
+
+  /* La prioridad evita descargar toda la colección: Coordinadores consulta por
+     sus carreras; otras vistas pueden consultar por período o estado. */
+  if (careerValues.length) {
+    return queryByFirstMatchingField('envios', [
+      'carreraNombre', 'nombreCarrera', 'carrera',
+      'carreraCodigo', 'codigoCarrera', 'carreraId'
+    ], careerValues, 1000, env);
+  }
+  if (periodValues.length) {
+    const canonical = periodValues.map((value) => periodSignature(value)).filter(Boolean);
+    const values = [...new Set([...periodValues, ...canonical])];
+    return queryByFirstMatchingField('envios', [
+      'periodoId', 'periodId', 'periodoCanonicoId',
+      'periodoNombre', 'periodoLabel', 'periodo'
+    ], values, 1000, env);
+  }
+  if (statusValue) {
+    return queryByFirstMatchingField('envios', ['estado', 'estadoFinal'], [statusValue], 1000, env);
+  }
+
+  return listCollection('TITULOS', 'envios', { maxDocuments: 5000 }, env);
+}
+
 async function listEnvios(payload = {}, env) {
-  await migrarTrabajosTitulacionLegados(env);
-  let rows = await listCollection('TITULOS', 'envios', { maxDocuments: 10000 }, env);
+  let rows = await candidateEnvios(payload, env);
   const filters = splitList(payload.carreras || payload.carrera || payload.nombreCarrera)
     .map((item) => item.toLowerCase());
   const requestedPeriods = [payload.periodoId, payload.periodoLabel, payload.periodo].map(text).filter(Boolean);
@@ -152,7 +197,6 @@ async function listEnvios(payload = {}, env) {
 }
 
 async function listCoordinatorPopulation(payload = {}, env) {
-  await migrarTrabajosTitulacionLegados(env);
   const global = await buildAdminGlobalList({
     periodoId: text(payload.periodoId || payload.periodoLabel || payload.periodo),
     periodo: text(payload.periodo || payload.periodoLabel || payload.periodoId),
@@ -182,7 +226,6 @@ async function queryUnique(field, values, env) {
 }
 
 async function findEnvio(payload = {}, env, defaultType = '') {
-  await migrarTrabajosTitulacionLegados(env);
   const cedula = normalizeCedula(payload.cedula || payload.numeroIdentificacion || payload.identificacion);
   if (!cedula) return null;
   const variants = cedula.startsWith('0') ? [cedula, cedula.slice(1)] : [cedula];
@@ -261,6 +304,11 @@ export async function executeTitulosAction(action, payload = {}, userRole = 'stu
       registros: envios,
       filas: envios,
       total: envios.length,
+      consultaFiltrada: Boolean(
+        splitList(payload.carreras || payload.carrera || payload.nombreCarrera).length ||
+        text(payload.periodoId || payload.periodoLabel || payload.periodo) ||
+        text(payload.estado)
+      ),
       fuente: 'FIREBASE_TITULOS_DIRECTO'
     };
   }
