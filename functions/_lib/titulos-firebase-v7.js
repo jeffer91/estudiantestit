@@ -1,151 +1,209 @@
-/* Corrección de guardado de resoluciones en Firebase Títulos. */
+/*
+  Historial de revisiones para Coordinadores.
+  Mantiene la implementación anterior y agrega la última resolución histórica
+  a los envíos reenviados, sin alterar lo que ve la aplicación de Estudiantes.
+*/
 import {
   executeTitulosAction as executePrevious,
   publicTitleConfiguration
-} from './titulos-firebase-v6.js';
+} from './titulos-firebase-v7-core.js';
 import {
-  commitDocuments,
-  normalizeCedula,
-  nowIso,
+  listCollection,
   queryEqual,
   text
 } from './firestore-fixed.js';
 
-const RESOLUTION_ACTIONS = new Set([
+const LIST_ACTIONS = new Set([
+  'LISTAR_ENVIOS_COORDINADOR',
+  'LISTAR_ENVIOS_POR_CARRERA'
+]);
+const CONSULT_ACTIONS = new Set([
+  'CONSULTAR_ENVIO_BASE_CEDULA',
+  'CONSULTAR_ENVIO_CEDULA',
+  'VERIFICAR_ENVIO'
+]);
+const WRITE_ACTIONS = new Set([
+  'ENVIO_ESTUDIANTE',
   'APROBAR_ENVIO_COORDINADOR',
   'DEVOLVER_ENVIO_COORDINADOR',
   'GUARDAR_REVISION_COORDINADOR',
   'GUARDAR_RESOLUCION',
   'MOVER_DEVUELTO_COORDINADOR',
-  'ADMIN_DEVOLVER_TITULOS'
+  'ADMIN_DEVOLVER_TITULOS',
+  'ADMIN_ELIMINAR_TITULOS'
 ]);
-const RESOLUTION_STATES = new Set(['APROBADO', 'REEMPLAZADO', 'DEVUELTO']);
 
-function normalizeStatus(value, fallback = 'APROBADO') {
+const HISTORY_CACHE_MS = 30 * 1000;
+let historyCache = null;
+let historyCacheExpiresAt = 0;
+let historyPending = null;
+
+function normalizeStatus(value) {
   const normalized = text(value).toUpperCase().replace(/[^A-Z0-9]+/g, '_');
-  if (!normalized) return fallback;
   if (normalized.includes('DEVUEL')) return 'DEVUELTO';
   if (normalized.includes('REEMPLAZ')) return 'REEMPLAZADO';
   if (normalized.includes('APROBAD')) return 'APROBADO';
+  if (normalized.includes('PENDIENT')) return 'PENDIENTE_REVISION';
   return normalized;
 }
 
-function cleanTitle(value) {
-  let output = text(value).replace(/\s+/g, ' ');
-  while (
-    output.length >= 2 &&
-    ((output.startsWith('"') && output.endsWith('"')) ||
-      (output.startsWith("'") && output.endsWith("'")))
-  ) output = output.slice(1, -1).trim();
-  return output;
+function envioId(value) {
+  value = value || {};
+  return text(value.envioId || value.id || value.idRegistro || value._id || value._docId);
 }
 
-function coordinatorName(value, fallback) {
-  if (typeof value === 'string') return text(value);
-  const item = value && typeof value === 'object' ? value : {};
-  return text(item.nombre || item.coordinador || item.name || item.id || fallback);
+function resolutionEnvioId(value) {
+  value = value || {};
+  return text(value.envioId || value.idEnvio || value.registroId);
 }
 
-function uniqueEventId(prefix) {
-  const random = typeof crypto !== 'undefined' && crypto.randomUUID
-    ? crypto.randomUUID().replace(/-/g, '').slice(0, 12)
-    : Math.random().toString(36).slice(2, 14);
-  return `${prefix}__${Date.now()}__${random}`;
+function resolutionDate(value) {
+  value = value || {};
+  return Date.parse(value.fechaResolucion || value.actualizadoEn || value._updateTime || '') || 0;
 }
 
-async function currentEnvio(payload, env) {
-  const cedula = normalizeCedula(payload.cedula || payload.numeroIdentificacion);
-  const result = await executePrevious('VERIFICAR_ENVIO', {
-    cedula,
-    numeroIdentificacion: cedula,
-    periodoId: payload.periodoId,
-    periodoLabel: payload.periodoLabel,
-    periodo: payload.periodo,
-    tipoTrabajo: payload.tipoTrabajo
-  }, 'coordinator', env);
-  return result && (result.envio || result.registro) || null;
+function isLaterResolution(candidate, current) {
+  if (!current) return true;
+  const candidateNumber = Number(candidate.numeroResolucion || 0);
+  const currentNumber = Number(current.numeroResolucion || 0);
+  if (candidateNumber !== currentNumber) return candidateNumber > currentNumber;
+  return resolutionDate(candidate) > resolutionDate(current);
 }
 
-async function saveResolution(payload = {}, env) {
-  const cedula = normalizeCedula(payload.cedula || payload.numeroIdentificacion);
-  if (!cedula) throw new Error('No se recibió una cédula válida.');
+function publicPreviousResolution(value) {
+  value = value || {};
+  const observation = text(
+    value.observacion || value.comentarioCoordinador || value.comentario || value.motivo
+  );
+  return {
+    id: text(value.id || value._id || value._docId),
+    envioId: resolutionEnvioId(value),
+    numeroResolucion: Number(value.numeroResolucion || 0),
+    estado: normalizeStatus(value.estado || value.estadoFinal),
+    coordinador: text(value.coordinador || value.nombreCoordinador),
+    observacion: observation,
+    comentarioCoordinador: observation,
+    fechaResolucion: text(value.fechaResolucion || value.actualizadoEn || value._updateTime),
+    tituloElegido: text(value.tituloElegido),
+    tituloCorregido: text(value.tituloCorregido || value.tituloFinal)
+  };
+}
 
-  const envio = await currentEnvio(payload, env);
-  if (!envio || !text(envio.id || envio.envioId)) throw new Error('No se encontró el envío del estudiante.');
+function clearHistoryCache() {
+  historyCache = null;
+  historyCacheExpiresAt = 0;
+  historyPending = null;
+}
 
-  const envioId = text(envio.id || envio.envioId);
-  const status = normalizeStatus(payload.estadoFinal || payload.estado, 'APROBADO');
-  if (!RESOLUTION_STATES.has(status)) throw new Error('La resolución debe ser APROBADO, REEMPLAZADO o DEVUELTO.');
+async function historyMap(env) {
+  if (historyCache && historyCacheExpiresAt > Date.now()) return historyCache;
+  if (historyPending) return historyPending;
 
-  const selected = cleanTitle(payload.tituloElegido || payload.preferido || envio.titulo1);
-  const corrected = cleanTitle(payload.tituloCorregido);
-  const finalTitle = corrected || selected;
-  const observation = text(payload.observacion || payload.comentario || payload.comentarioCoordinador);
-  const coordinador = coordinatorName(payload.coordinador, payload.nombreCoordinador);
+  historyPending = listCollection('TITULOS', 'resoluciones', { maxDocuments: 20000 }, env)
+    .then((rows) => {
+      const map = new Map();
+      for (const row of Array.isArray(rows) ? rows : []) {
+        const id = resolutionEnvioId(row);
+        if (!id) continue;
+        const current = map.get(id);
+        if (isLaterResolution(row, current)) map.set(id, row);
+      }
+      historyCache = map;
+      historyCacheExpiresAt = Date.now() + HISTORY_CACHE_MS;
+      return map;
+    })
+    .finally(() => {
+      historyPending = null;
+    });
 
-  if (!coordinador) throw new Error('No se recibió el nombre del coordinador.');
-  if (status === 'DEVUELTO' && observation.length < 4) throw new Error('La devolución necesita un comentario de al menos 4 caracteres.');
-  if (status !== 'DEVUELTO' && !finalTitle) throw new Error('La aprobación necesita un título final.');
+  return historyPending;
+}
 
-  const resolutions = await queryEqual('TITULOS', 'resoluciones', 'envioId', envioId, 1000, env);
-  const number = resolutions.reduce((max, item) => Math.max(max, Number(item.numeroResolucion || 0)), 0) + 1;
-  const resolutionId = uniqueEventId(`${envioId}__r${String(number).padStart(3, '0')}`);
-  const date = text(payload.fechaResolucion) || nowIso();
+function decorateEnvio(value, resolution) {
+  if (!value || typeof value !== 'object' || !resolution) return value;
+  const status = normalizeStatus(value.estado || value.estadoFinal || value.estadoProceso);
 
-  await commitDocuments('TITULOS', [
-    {
-      collection: 'resoluciones',
-      id: resolutionId,
-      data: {
-        envioId,
-        tipoTrabajo: text(payload.tipoTrabajo || envio.tipoTrabajo),
-        numeroResolucion: number,
-        coordinador,
-        estado: status,
-        tituloElegido: selected,
-        tituloCorregido: corrected,
-        observacion: observation,
-        fechaResolucion: date
-      },
-      merge: false,
-      exists: false
-    },
-    {
-      collection: 'envios',
-      id: envioId,
-      data: {
-        estado: status,
-        tituloFinal: status === 'DEVUELTO' ? null : finalTitle,
-        observacion: observation,
-        coordinador,
-        fechaResolucion: date,
-        resolucionActualId: resolutionId,
-        requiereRevision: status === 'DEVUELTO',
-        actualizadoEn: date
-      },
-      merge: true,
-      ...(envio._updateTime ? { updateTime: envio._updateTime } : {})
-    }
-  ], env);
+  /* La revisión histórica se presenta únicamente cuando el estudiante ya
+     reenvió y el registro volvió a PENDIENTE_REVISION. */
+  if (status !== 'PENDIENTE_REVISION') return value;
+
+  const previous = publicPreviousResolution(resolution);
+  if (!previous.observacion && !previous.coordinador && !previous.fechaResolucion) return value;
 
   return {
-    ok: true,
-    envioId,
-    resolucionId: resolutionId,
-    coordinador,
-    estado: status,
-    estadoFinal: status,
-    tituloFinal: status === 'DEVUELTO' ? '' : finalTitle,
-    mensaje: status === 'DEVUELTO'
-      ? 'Propuestas devueltas correctamente en Firebase Títulos.'
-      : 'Resolución guardada correctamente en Firebase Títulos.'
+    ...value,
+    revisionAnterior: previous,
+    comentarioRevisionAnterior: previous.observacion,
+    coordinadorRevisionAnterior: previous.coordinador,
+    fechaRevisionAnterior: previous.fechaResolucion,
+    estadoRevisionAnterior: previous.estado,
+    numeroRevisionAnterior: previous.numeroResolucion
+  };
+}
+
+function firstArray(result) {
+  if (!result || typeof result !== 'object') return [];
+  for (const key of ['envios', 'registros', 'filas', 'estudiantes']) {
+    if (Array.isArray(result[key])) return result[key];
+  }
+  return [];
+}
+
+function decorateListResult(result, map) {
+  if (!result || typeof result !== 'object') return result;
+  const source = firstArray(result);
+  if (!source.length) return result;
+  const decorated = source.map((item) => decorateEnvio(item, map.get(envioId(item))));
+  return {
+    ...result,
+    envios: decorated,
+    registros: decorated,
+    filas: decorated,
+    ...(Array.isArray(result.estudiantes) ? { estudiantes: decorated } : {}),
+    historialRevisionesIncluido: true
+  };
+}
+
+async function latestResolutionForEnvio(value, env) {
+  const id = envioId(value);
+  if (!id) return null;
+  const rows = await queryEqual('TITULOS', 'resoluciones', 'envioId', id, 1000, env);
+  return (Array.isArray(rows) ? rows : []).reduce(
+    (latest, item) => isLaterResolution(item, latest) ? item : latest,
+    null
+  );
+}
+
+async function decorateConsultResult(result, env) {
+  if (!result || typeof result !== 'object') return result;
+  const current = result.envio || result.registro;
+  if (!current) return result;
+  const resolution = await latestResolutionForEnvio(current, env);
+  if (!resolution) return result;
+  const decorated = decorateEnvio(current, resolution);
+  return {
+    ...result,
+    envio: decorated,
+    registro: decorated,
+    revisionAnterior: decorated.revisionAnterior || null
   };
 }
 
 export async function executeTitulosAction(action, payload = {}, userRole = 'student', env) {
   const normalized = text(action).toUpperCase();
-  if (RESOLUTION_ACTIONS.has(normalized)) return saveResolution(payload, env);
-  return executePrevious(action, payload, userRole, env);
+  const role = text(userRole || 'student').toLowerCase();
+  const result = await executePrevious(action, payload, userRole, env);
+
+  if (WRITE_ACTIONS.has(normalized)) clearHistoryCache();
+  if (role === 'student') return result;
+
+  if (LIST_ACTIONS.has(normalized)) {
+    return decorateListResult(result, await historyMap(env));
+  }
+  if (CONSULT_ACTIONS.has(normalized)) {
+    return decorateConsultResult(result, env);
+  }
+  return result;
 }
 
 export { publicTitleConfiguration };
