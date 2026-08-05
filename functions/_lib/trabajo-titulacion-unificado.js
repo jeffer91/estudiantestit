@@ -2,6 +2,7 @@ import {
   getDocument,
   listCollection,
   periodSignature,
+  queryEqual,
   setDocument,
   text
 } from './firestore-fixed.js';
@@ -224,6 +225,14 @@ export async function migrarTrabajosTitulacionLegados(env, options = {}) {
 }
 
 export async function listarTrabajosTitulacionUnificados(env) {
-  const rows = await listCollection('TITULOS', COLECCION_ENVIOS, { maxDocuments: 10000 }, env);
-  return rows.filter(esTrabajoTitulacion);
+  /* El listado normal se resuelve por el campo tipoTrabajo. Ya no recorre toda
+     la colección envios para filtrar en memoria. */
+  return queryEqual(
+    'TITULOS',
+    COLECCION_ENVIOS,
+    'tipoTrabajo',
+    TIPO_TRABAJO_TITULACION,
+    1000,
+    env
+  );
 }
