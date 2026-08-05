@@ -44,6 +44,25 @@ function splitList(value) {
   return text(value).split(/[,;|\n]+/).map(text).filter(Boolean);
 }
 
+function trueValue(value) {
+  if (value === true) return true;
+  return ['1', 'true', 'yes', 'si', 'sí'].includes(text(value).toLowerCase());
+}
+
+function activeValue(value) {
+  if (value === undefined || value === null || value === '') return true;
+  if (value === false) return false;
+  return !['0', 'false', 'no', 'inactivo', 'desactivado', 'anulado'].includes(text(value).toLowerCase());
+}
+
+function principalValue(row) {
+  return Boolean(row && (
+    row.principal === true ||
+    row.esPrincipal === true ||
+    text(row.tipo).toUpperCase() === 'PRINCIPAL'
+  ));
+}
+
 function periodLabel(row) {
   return text(row && (
     row.periodoNombre || row.periodoLabel || row.periodoCanonicoLabel || row.periodo ||
@@ -143,6 +162,28 @@ async function queryByFirstMatchingField(collectionName, fields, values, limit, 
   return [];
 }
 
+async function principalPeriodValues(env) {
+  const periods = await listCollection('TITULOS', 'periodos', { maxDocuments: 500 }, env);
+  const active = periods.filter((item) => activeValue(
+    item.activo !== undefined ? item.activo : item.estado
+  ));
+  const selected = active.find(principalValue) || active[0] || periods.find(principalValue) || periods[0];
+  if (!selected) return [];
+  const values = [
+    selected.id,
+    selected.periodoId,
+    selected.periodId,
+    selected.periodoCanonicoId,
+    selected.nombre,
+    selected.label,
+    selected.periodoNombre,
+    selected.periodoLabel,
+    selected.periodo
+  ].map(text).filter(Boolean);
+  const canonical = values.map((value) => periodSignature(value)).filter(Boolean);
+  return [...new Set([...values, ...canonical])];
+}
+
 async function candidateEnvios(payload, env) {
   const careerValues = splitList(payload.carreras || payload.carrera || payload.nombreCarrera);
   const periodValues = [payload.periodoId, payload.periodoLabel, payload.periodo]
@@ -169,7 +210,18 @@ async function candidateEnvios(payload, env) {
     return queryByFirstMatchingField('envios', ['estado', 'estadoFinal'], [statusValue], 1000, env);
   }
 
-  return listCollection('TITULOS', 'envios', { maxDocuments: 5000 }, env);
+  /* Una lectura global solo se permite cuando la acción lo solicita de forma
+     explícita. Las pantallas antiguas sin filtros reciben el período principal
+     en vez de recorrer hasta 5.000 documentos de todos los períodos. */
+  if (trueValue(payload.incluirTodos || payload.todas)) {
+    return listCollection('TITULOS', 'envios', { maxDocuments: 5000 }, env);
+  }
+  const principal = await principalPeriodValues(env);
+  if (!principal.length) return [];
+  return queryByFirstMatchingField('envios', [
+    'periodoId', 'periodId', 'periodoCanonicoId',
+    'periodoNombre', 'periodoLabel', 'periodo'
+  ], principal, 1000, env);
 }
 
 async function listEnvios(payload = {}, env) {
@@ -267,7 +319,7 @@ async function consultEnvio(payload, env, userRole) {
 }
 
 async function summary(env) {
-  const envios = await listEnvios({}, env);
+  const envios = await listEnvios({ incluirTodos: true }, env);
   const estados = envios.reduce((output, item) => {
     output[item.estado] = (output[item.estado] || 0) + 1;
     return output;
@@ -292,8 +344,25 @@ async function summary(env) {
 
 export async function executeTitulosAction(action, payload = {}, userRole = 'student', env) {
   const normalized = text(action).toUpperCase();
+  const role = text(userRole).toLowerCase();
   if (normalized === 'PING') return pingProject('TITULOS', env);
   if (normalized === 'LISTAR_ENVIOS_COORDINADOR' || normalized === 'LISTAR_ENVIOS_POR_CARRERA') {
+    const careers = splitList(payload.carreras || payload.carrera || payload.nombreCarrera);
+    const hasOtherFilter = Boolean(
+      text(payload.periodoId || payload.periodoLabel || payload.periodo) || text(payload.estado)
+    );
+    if (role === 'coordinator' && !careers.length && !hasOtherFilter) {
+      return {
+        ok: true,
+        envios: [],
+        registros: [],
+        filas: [],
+        total: 0,
+        consultaFiltrada: true,
+        mensaje: 'El coordinador no tiene carreras asignadas; no se realizó una lectura global.',
+        fuente: 'FIREBASE_TITULOS_DIRECTO'
+      };
+    }
     if (payload.incluirFaltantes === true || text(payload.incluirFaltantes).toLowerCase() === 'true') {
       return listCoordinatorPopulation(payload, env);
     }
@@ -305,9 +374,10 @@ export async function executeTitulosAction(action, payload = {}, userRole = 'stu
       filas: envios,
       total: envios.length,
       consultaFiltrada: Boolean(
-        splitList(payload.carreras || payload.carrera || payload.nombreCarrera).length ||
+        careers.length ||
         text(payload.periodoId || payload.periodoLabel || payload.periodo) ||
-        text(payload.estado)
+        text(payload.estado) ||
+        !trueValue(payload.incluirTodos || payload.todas)
       ),
       fuente: 'FIREBASE_TITULOS_DIRECTO'
     };
