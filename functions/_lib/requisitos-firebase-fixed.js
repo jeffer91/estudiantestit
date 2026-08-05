@@ -80,8 +80,14 @@ export async function pullRequisitos(action, payload = {}, env) {
 
   if (normalizedAction === 'pull_bl2') {
     const scope = text(payload.scope || 'all').toLowerCase();
-    const periods = await listTitlePeriods(env);
-    const careers = scope === 'periods' ? [] : await listTitleCareers(payload.periodoId, env);
+    /* Una consulta de carreras no necesita volver a leer el catálogo de
+       períodos. Cada alcance obtiene únicamente el catálogo solicitado. */
+    const includePeriods = scope === 'periods' || scope === 'all';
+    const includeCareers = scope !== 'periods';
+    const [periods, careers] = await Promise.all([
+      includePeriods ? listTitlePeriods(env) : Promise.resolve([]),
+      includeCareers ? listTitleCareers(payload.periodoId, env) : Promise.resolve([])
+    ]);
     return {
       ok: true,
       fuente: 'FIREBASE_UTET_Y_TITULOS',
