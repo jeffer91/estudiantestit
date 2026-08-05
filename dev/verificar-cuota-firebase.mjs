@@ -19,8 +19,11 @@ function assert(condition, message) {
 }
 
 const admin = read('administrador/ad-js/ad-google-sheets.app.js');
+const coordinatorHtml = read('coordinadores-mvp/coordinador.html');
+const coordinatorBootstrap = read('coordinadores-mvp/js/coordinador.bootstrap.independiente.js');
 const coordinator = read('coordinadores-mvp/js/coordinador.app.js');
 const coordinatorApi = read('coordinadores-mvp/js/coordinador.sheets.primary.js');
+const coordinatorWrapper = read('coordinadores-mvp/js/coordinador.envios.carreras.js');
 const titlesV6 = read('functions/_lib/titulos-firebase-v6.js');
 const titlesV7 = read('functions/_lib/titulos-firebase-v7.js');
 const adminGlobalV5 = read('functions/_lib/admin-global-v5.js');
@@ -90,12 +93,30 @@ assert(
 );
 
 assert(
+  /coordinador\.bootstrap\.independiente\.js/.test(coordinatorHtml) &&
+  /coordinador\.envios\.carreras\.js/.test(coordinatorBootstrap),
+  'La prueba no está siguiendo la cadena real de módulos cargados por Coordinadores.'
+);
+assert(
   /listarEnvios\(\{forzar:forzar===true,carreras:coordinador\.carreras\|\|\[\]\}\)/.test(coordinator),
   'Coordinadores no consulta únicamente sus carreras asignadas.'
 );
 assert(
-  !/incluirTodos:\s*['"]true['"]/.test(coordinatorApi),
-  'Coordinadores vuelve a solicitar todos los envíos explícitamente.'
+  !/incluirTodos:\s*['"]?true['"]?/.test(coordinatorApi),
+  'El servicio principal de Coordinadores vuelve a solicitar todos los envíos.'
+);
+assert(
+  !/incluirTodos\s*:\s*['"]?true['"]?/.test(coordinatorWrapper) &&
+  !/todas\s*:\s*['"]?true['"]?/.test(coordinatorWrapper),
+  'Un módulo cargado después del servicio principal vuelve a solicitar todos los envíos.'
+);
+assert(
+  /listarOriginal\(opciones\)/.test(coordinatorWrapper),
+  'El módulo de compatibilidad de Coordinadores no conserva los filtros originales.'
+);
+assert(
+  /!carreras\.length&&!periodo/.test(coordinatorWrapper),
+  'El módulo activo de Coordinadores permite consultas sin carrera ni período.'
 );
 
 if (errors.length) {
@@ -106,6 +127,6 @@ if (errors.length) {
 }
 
 console.log('[Cuota Firebase] Administrador consulta títulos por período.');
-console.log('[Cuota Firebase] Coordinadores consulta únicamente carreras asignadas.');
+console.log('[Cuota Firebase] Toda la cadena activa de Coordinadores conserva los filtros.');
 console.log('[Cuota Firebase] Historial y Trabajo de Titulación usan consultas filtradas.');
 console.log('[Cuota Firebase] Migraciones automáticas y dobles lecturas permanecen bloqueadas.');
