@@ -21,13 +21,14 @@
     "deploy:administrador:preview": "npm run build:administrador && npx wrangler pages deploy .pages-administrador --project-name titulos-administrador --branch preview-administrador",
     "check:syntax": "node dev/verificar-sintaxis.mjs",
     "check:apps": "node dev/verificar-apps.mjs",
+    "check:quota": "node dev/verificar-cuota-firebase.mjs",
     "check:outlook": "node dev/verificar-correo-outlook.mjs",
     "check:architecture": "node dev/verificar-arquitectura.mjs",
     "check:firebase-auth": "node dev/verificar-firebase-auth.mjs",
     "check:access": "node dev/verificar-logica-acceso.mjs",
     "check:apps-script": "node dev/verificar-apps-script.mjs",
     "check:electron": "node dev/verificar-electron-administrador.mjs",
-    "check": "npm run check:syntax && npm run check:apps && npm run check:outlook && npm run check:architecture && npm run check:firebase-auth && npm run check:access && npm run check:apps-script && npm run check:electron"
+    "check": "npm run check:syntax && npm run check:apps && npm run check:quota && npm run check:outlook && npm run check:architecture && npm run check:firebase-auth && npm run check:access && npm run check:apps-script && npm run check:electron"
   },
   "devDependencies": {
     "electron": "43.2.0"
