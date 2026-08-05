@@ -1,11 +1,13 @@
-/* Administración global basada en períodos canónicos y periodoNombre de envios. */
+/* Administración global optimizada por período canónico. */
 import {
   commitDocuments,
+  getDocument,
   latestBy,
   listCollection,
   normalizeCedula,
   nowIso,
   periodSignature,
+  queryEqual,
   samePeriod,
   text
 } from './firestore-fixed.js';
@@ -13,6 +15,10 @@ import {
   assignCareerCoordinator,
   listAdminCareers
 } from './admin-global-fixed.js';
+import {
+  TIPO_TRABAJO_TITULACION,
+  esTrabajoTitulacion
+} from './trabajo-titulacion-unificado.js';
 
 export { assignCareerCoordinator, listAdminCareers };
 
@@ -121,6 +127,10 @@ function status(row) {
   return 'PENDIENTE_REVISION';
 }
 
+function workType(row) {
+  return esTrabajoTitulacion(row) ? TIPO_TRABAJO_TITULACION : 'ARTICULO_ACADEMICO';
+}
+
 const MONTHS = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
@@ -137,6 +147,7 @@ function publicEnvio(row) {
   if (!row) return null;
   const preferred = Number(row.tituloPreferidoNumero || row.preferido || 0);
   const titles = [text(row.titulo1), text(row.titulo2), text(row.titulo3)];
+  const type = workType(row);
   return {
     envioId: text(row.id || row._docId || row._id),
     titulo1: titles[0], titulo2: titles[1], titulo3: titles[2],
@@ -147,64 +158,102 @@ function publicEnvio(row) {
     coordinador: text(row.coordinador || row.nombreCoordinador),
     observacion: text(row.observacion || row.comentarioCoordinador || row.comentario),
     fechaEnvio: text(row.fechaEnvio || row.actualizadoEn || row._createTime),
-    fechaResolucion: text(row.fechaResolucion || row.fechaRevision)
+    fechaResolucion: text(row.fechaResolucion || row.fechaRevision),
+    tipoTrabajo: type,
+    tipoTrabajoLabel: type === TIPO_TRABAJO_TITULACION ? 'Trabajo de Titulación' : 'Artículo académico'
   };
 }
 
-export async function listAdminPeriodsCatalog(env) {
-  const [periodRows, enrollments, envios] = await Promise.all([
-    listCollection('TITULOS', 'periodos', { maxDocuments: 1000 }, env),
-    listCollection('UTET', 'EstudiantesPeriodo', { maxDocuments: 10000 }, env),
-    listCollection('TITULOS', 'envios', { maxDocuments: 10000 }, env)
-  ]);
+async function queryValues(project, collectionName, field, values, limit, env) {
   const map = new Map();
-
-  function ensure(signature, label, source) {
-    const id = periodSignature(label) || periodSignature(signature);
-    if (!id) return null;
-    if (!map.has(id)) map.set(id, {
-      id, documentId: '', label: text(label) || labelFromSignature(id), activo: false,
-      principal: false, estudiantes: new Set(), envios: new Set(), origenes: []
-    });
-    const item = map.get(id);
-    if (label && (!item.label || item.label === labelFromSignature(id))) item.label = text(label);
-    if (source && !item.origenes.includes(source)) item.origenes.push(source);
-    return item;
+  for (const value of values) {
+    if (!text(value)) continue;
+    const rows = await queryEqual(project, collectionName, field, value, limit, env);
+    rows.forEach((row) => map.set(row.id, row));
   }
+  return [...map.values()];
+}
 
-  for (const row of periodRows) {
-    const label = periodLabel(row) || labelFromSignature(periodSignature(row.id));
-    const item = ensure(period(row) || row.id, label, 'periodos');
-    if (!item) continue;
-    item.documentId = text(row.id) || item.id;
-    item.activo = active(row.activo !== undefined ? row.activo : row.estado, true);
-    item.principal = principal(row);
+async function queryByFirstMatchingField(project, collectionName, fields, values, limit, env) {
+  for (const field of fields) {
+    const rows = await queryValues(project, collectionName, field, values, limit, env);
+    if (rows.length) return rows;
   }
-  for (const row of enrollments) {
-    const item = ensure(period(row), periodLabel(row), 'EstudiantesPeriodo');
-    if (!item || !enrollmentActive(row)) continue;
+  return [];
+}
+
+function periodValues(payload) {
+  const raw = [payload.periodoId, payload.periodoLabel, payload.periodo].map(text).filter(Boolean);
+  const canonical = raw.map((value) => periodSignature(value)).filter(Boolean);
+  return [...new Set([...raw, ...canonical])];
+}
+
+async function queryPeriodRows(project, collectionName, payload, env) {
+  const values = periodValues(payload);
+  if (!values.length) return [];
+  return queryByFirstMatchingField(project, collectionName, [
+    'periodoId', 'periodId', 'periodoCanonicoId', 'ultimoPeriodoId',
+    'periodoNombre', 'periodoLabel', 'periodoCanonicoLabel', 'periodo'
+  ], values, 1000, env);
+}
+
+async function getStudentDocument(id, env) {
+  const canonical = normalizeCedula(id);
+  if (!canonical) return null;
+  const direct = await getDocument('UTET', 'Estudiantes', canonical, env);
+  if (direct) return direct;
+  return canonical.startsWith('0')
+    ? getDocument('UTET', 'Estudiantes', canonical.slice(1), env)
+    : null;
+}
+
+async function mapLimited(items, limit, worker) {
+  const output = new Array(items.length);
+  let cursor = 0;
+  async function run() {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      output[index] = await worker(items[index], index);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, run));
+  return output;
+}
+
+async function loadMissingBaseStudents(rows, env) {
+  const rowsById = new Map();
+  rows.forEach((row) => {
     const id = cedula(row);
-    if (id) item.estudiantes.add(id);
-  }
-  for (const row of envios) {
-    const item = ensure(period(row), periodLabel(row), 'envios');
-    if (!item) continue;
-    const id = cedula(row);
-    if (id) item.envios.add(id);
-  }
+    if (id && !rowsById.has(id)) rowsById.set(id, row);
+  });
+  const ids = [...rowsById.entries()]
+    .filter(([, row]) => !names(row) || !career(row))
+    .map(([id]) => id);
+  const documents = await mapLimited(ids, 12, async (id) => [id, await getStudentDocument(id, env)]);
+  return new Map(documents.filter((item) => item[1]));
+}
 
-  const periods = [...map.values()].map((item) => ({
-    id: item.id,
-    periodoId: item.id,
-    documentId: item.documentId || item.id,
-    label: item.label || labelFromSignature(item.id),
-    periodoLabel: item.label || labelFromSignature(item.id),
-    activo: item.activo === true,
-    principal: item.principal === true,
-    estudiantes: item.estudiantes.size,
-    envios: item.envios.size,
-    origenes: item.origenes
-  })).sort((a, b) => {
+export async function listAdminPeriodsCatalog(env) {
+  /* Los períodos se leen únicamente desde su catálogo. Antes esta pantalla
+     barría EstudiantesPeriodo y envios completos solo para mostrar el selector. */
+  const periodRows = await listCollection('TITULOS', 'periodos', { maxDocuments: 1000 }, env);
+  const periods = periodRows.map((row) => {
+    const id = period(row) || periodSignature(row.id) || text(row.id);
+    const label = periodLabel(row) || labelFromSignature(id);
+    return {
+      id,
+      periodoId: id,
+      documentId: text(row.id) || id,
+      label,
+      periodoLabel: label,
+      activo: active(row.activo !== undefined ? row.activo : row.estado, true),
+      principal: principal(row),
+      estudiantes: Number(row.totalEstudiantes || row.estudiantes || 0),
+      envios: Number(row.totalEnvios || row.envios || 0),
+      origenes: ['periodos']
+    };
+  }).filter((item) => item.id).sort((a, b) => {
     const endA = a.id.split('__').pop();
     const endB = b.id.split('__').pop();
     return endA === endB ? b.id.localeCompare(a.id, 'es') : endB.localeCompare(endA, 'es');
@@ -222,7 +271,8 @@ export async function listAdminPeriodsCatalog(env) {
     registros: periods,
     principal: periods.find((item) => item.principal) || null,
     total: periods.length,
-    fuente: 'PERIODOS_CANONICOS_UTET_TITULOS'
+    consultaOptimizada: true,
+    fuente: 'CATALOGO_PERIODOS_FIREBASE_TITULOS'
   };
 }
 
@@ -282,30 +332,30 @@ export async function buildAdminGlobalList(payload = {}, env) {
   const requestedCareer = text(payload.carrera || payload.nombreCarrera);
   if (!requestedPeriod) throw new Error('Selecciona un período para cargar la lista global.');
 
-  const [enrollments, students, envios, careersResult] = await Promise.all([
-    listCollection('UTET', 'EstudiantesPeriodo', { maxDocuments: 10000 }, env),
-    listCollection('UTET', 'Estudiantes', { maxDocuments: 10000 }, env),
-    listCollection('TITULOS', 'envios', { maxDocuments: 10000 }, env),
+  const [enrollmentRows, envios, careersResult] = await Promise.all([
+    queryPeriodRows('UTET', 'EstudiantesPeriodo', payload, env),
+    queryPeriodRows('TITULOS', 'envios', payload, env),
     listAdminCareers(env)
   ]);
+
+  /* Como respaldo se consulta Estudiantes por período, no la colección entera. */
+  const studentPeriodRows = enrollmentRows.length
+    ? []
+    : await queryPeriodRows('UTET', 'Estudiantes', payload, env);
+  const expectedRows = enrollmentRows.length ? enrollmentRows : studentPeriodRows;
+  const baseStudents = await loadMissingBaseStudents(expectedRows, env);
+
   const byCode = new Map(), byName = new Map();
   careersResult.carreras.forEach((item) => {
     if (item.codigo) byCode.set(normalized(item.codigo), item);
     if (item.nombre) byName.set(normalized(item.nombre), item);
   });
-  const studentsById = new Map();
-  students.forEach((row) => {
-    const id = cedula(row);
-    if (id) studentsById.set(id, row);
-  });
 
-  let expected = enrollments.filter((row) => enrollmentActive(row) && samePeriod(period(row), requestedPeriod));
-  if (!expected.length) expected = students.filter((row) => samePeriod(period(row), requestedPeriod));
   const expectedById = new Map();
-  expected.forEach((enrollment) => {
+  expectedRows.filter(enrollmentActive).forEach((enrollment) => {
     const id = cedula(enrollment);
     if (!id) return;
-    const student = mergeStudent(studentsById.get(id), enrollment, id, byCode, byName);
+    const student = mergeStudent(baseStudents.get(id), enrollment, id, byCode, byName);
     if (requestedCareer && normalized(student.carrera) !== normalized(requestedCareer)) return;
     expectedById.set(id, student);
   });
@@ -337,10 +387,18 @@ export async function buildAdminGlobalList(payload = {}, env) {
   enviosById.forEach((rows, id) => {
     if (expectedById.has(id)) return;
     const row = latestBy(rows, ['versionActual'], ['fechaEnvio', '_updateTime']);
-    outsidePopulation.push({
-      cedula: id, nombres: names(row), carrera: career(row),
-      periodoId: periodSignature(requestedPeriod), estado: status(row), envioId: text(row.id)
-    });
+    const envio = publicEnvio(row) || {};
+    const item = {
+      cedula: id,
+      nombres: names(row),
+      carrera: career(row),
+      codigoCarrera: careerCode(row),
+      periodoId: periodSignature(requestedPeriod),
+      fueraPoblacion: true,
+      ...envio
+    };
+    if (requestedCareer && normalized(item.carrera) !== normalized(requestedCareer)) return;
+    outsidePopulation.push(item);
   });
 
   const missing = records.filter((item) => item.estado === 'NO_ENVIADO');
@@ -354,8 +412,10 @@ export async function buildAdminGlobalList(payload = {}, env) {
     faltantes: missing,
     fueraPoblacion: outsidePopulation,
     total: records.length,
-    totalEnviosPeriodo: [...enviosById.keys()].length,
-    mensaje: records.length ? 'Lista global construida correctamente desde las dos Firebase.' :
+    totalEnviosPeriodo: enviosById.size,
+    consultaOptimizada: true,
+    lecturasBaseEstudiantes: baseStudents.size,
+    mensaje: records.length ? 'Lista global construida con consultas filtradas por período.' :
       'No se encontraron estudiantes activos para el período.'
   };
 }
@@ -392,5 +452,5 @@ export async function buildAdminStatistics(payload = {}, env) {
     return total;
   }, { esperados: 0, enviados: 0, faltan: 0, pendientes: 0, aprobados: 0, reemplazados: 0, devueltos: 0 });
   resumen.avance = resumen.esperados ? Number(((resumen.enviados / resumen.esperados) * 100).toFixed(1)) : 0;
-  return { ...global, resumen, carreras, mensaje: 'Estadísticas calculadas desde la misma lista global.' };
+  return { ...global, resumen, carreras, mensaje: 'Estadísticas calculadas con consultas filtradas por período.' };
 }
