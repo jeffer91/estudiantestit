@@ -229,15 +229,14 @@ async function queryRowsByPeriod(values, env) {
   const unique = [...new Set((Array.isArray(values) ? values : []).map(text).filter(Boolean))];
   if (!unique.length) return [];
 
+  const map = new Map();
   for (const field of PERIOD_FIELDS) {
-    const map = new Map();
     for (const value of unique) {
       const rows = await queryEqual('TITULOS', 'envios', field, value, 1000, env);
       rows.forEach((row, index) => map.set(rowId(row, index), row));
     }
-    if (map.size) return [...map.values()];
   }
-  return [];
+  return [...map.values()];
 }
 
 async function backfillCareerKeys(rows, env) {
