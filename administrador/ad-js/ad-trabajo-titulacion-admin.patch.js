@@ -24,7 +24,7 @@
   function currentStudent(){return studentById($('ad-v2-detail-id')&&$('ad-v2-detail-id').textContent);}
   function isWork(item){return text(item&&item.tipoTrabajo).toUpperCase()===TYPE;}
   function stateOf(item){return text(item&&item.estado).toUpperCase();}
-  function isApproved(item){var value=stateOf(item);return value==='APROBADO'||value==='REEMPLAZADO';}
+  function canSendCoordinator(item){var value=stateOf(item);return value==='APROBADO'||value==='REEMPLAZADO'||value==='DEVUELTO';}
   function isReturned(item){return stateOf(item)==='DEVUELTO';}
 
   function request(action,data){
@@ -137,14 +137,14 @@
     if($('ad-v2-work-admin-comment'))$('ad-v2-work-admin-comment').value=text(item.observacion);
     if($('ad-v2-work-admin-reason'))$('ad-v2-work-admin-reason').value='';
 
-    var reopen=document.querySelector('[data-work-admin-action="reopen"]');
-    var returnButton=document.querySelector('[data-work-admin-action="return"]');
-    if(reopen){reopen.hidden=!isApproved(item);reopen.disabled=!isApproved(item);}
-    if(returnButton){returnButton.hidden=isReturned(item);returnButton.disabled=isReturned(item);}
+    var coordinatorButton=document.querySelector('[data-work-admin-action="reopen"]');
+    var studentButton=document.querySelector('[data-work-admin-action="return"]');
+    if(coordinatorButton){coordinatorButton.hidden=false;coordinatorButton.disabled=!canSendCoordinator(item);}
+    if(studentButton){studentButton.hidden=false;studentButton.disabled=false;}
 
-    if(isApproved(item))status('Aprobado. Puedes devolverlo al coordinador para una nueva revisión.','info');
-    else if(isReturned(item))status('Devuelto al estudiante.','info');
-    else status('Pendiente de revisión.','info');
+    if(isReturned(item))status('Devuelto al estudiante. Puedes enviarlo nuevamente al coordinador o confirmar la devolución al estudiante.','info');
+    else if(canSendCoordinator(item))status('Puedes devolverlo al coordinador para una nueva revisión o al estudiante para corrección.','info');
+    else status('Pendiente de revisión. Puedes devolverlo al estudiante.','info');
   }
 
   function payload(item){
@@ -173,14 +173,15 @@
       data.comentario=comment;
       confirmation='¿Guardar este comentario?';
     }else if(action==='reopen'){
-      if(!isApproved(item)){status('Solo se puede devolver al coordinador una revisión aprobada.','danger');return;}
+      if(!canSendCoordinator(item)){status('Este trabajo ya está pendiente de revisión del coordinador.','info');return;}
       endpointAction='ADMIN_REABRIR_REVISION_TRABAJO_TITULACION';
-      confirmation='Volverá a Pendiente de revisión y el coordinador podrá revisar y comentar nuevamente. ¿Continuar?';
+      confirmation='El trabajo volverá a Pendiente de revisión para el coordinador. ¿Continuar?';
     }else if(action==='return'){
-      if(isReturned(item)){status('Este trabajo ya está devuelto al estudiante.','info');return;}
       endpointAction='ADMIN_DEVOLVER_TRABAJO_TITULACION';
       if(comment)data.comentario=comment;
-      confirmation='El estudiante podrá corregir y volver a enviar. ¿Continuar?';
+      confirmation=isReturned(item)
+        ? 'El trabajo ya está devuelto. ¿Confirmar nuevamente la devolución al estudiante?'
+        : 'El estudiante podrá corregir y volver a enviar. ¿Continuar?';
     }else if(action==='remove'){
       if(reason.length<4){status('Para quitar el envío, escribe un motivo de al menos 4 caracteres.','danger');return;}
       endpointAction='ADMIN_QUITAR_ENVIO_TRABAJO_TITULACION';
