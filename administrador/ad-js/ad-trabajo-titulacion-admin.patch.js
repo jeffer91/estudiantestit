@@ -7,6 +7,8 @@
 
   function text(value){return String(value===null||value===undefined?'':value).trim();}
   function $(id){return document.getElementById(id);}
+  function rows(){var data=window.ADAdminGlobalLast||{};return data.registros||data.estudiantes||[];}
+  function studentById(id){id=text(id);return rows().find(function(item){return text(item&&item.cedula)===id;})||null;}
   function status(message,type){
     var el=$('ad-v2-work-admin-status');
     if(!el)return;
@@ -19,14 +21,11 @@
     }catch(error){}
     return text(window.location&&window.location.origin).replace(/\/$/,'');
   }
-  function currentStudent(){
-    var id=text($('ad-v2-detail-id')&&$('ad-v2-detail-id').textContent);
-    var data=window.ADAdminGlobalLast||{};
-    var rows=data.registros||data.estudiantes||[];
-    return rows.find(function(item){return text(item&&item.cedula)===id;})||null;
-  }
+  function currentStudent(){return studentById($('ad-v2-detail-id')&&$('ad-v2-detail-id').textContent);}
   function isWork(item){return text(item&&item.tipoTrabajo).toUpperCase()===TYPE;}
-  function isApproved(item){var value=text(item&&item.estado).toUpperCase();return value==='APROBADO'||value==='REEMPLAZADO';}
+  function stateOf(item){return text(item&&item.estado).toUpperCase();}
+  function isApproved(item){var value=stateOf(item);return value==='APROBADO'||value==='REEMPLAZADO';}
+  function isReturned(item){return stateOf(item)==='DEVUELTO';}
 
   function request(action,data){
     return fetch(base()+'/api/admin-trabajo-titulacion',{
@@ -74,15 +73,15 @@
     section.className='ad-v2-work-admin';
     section.hidden=true;
     section.innerHTML=''+
-      '<h4>Administración · Trabajo de Titulación</h4>'+
-      '<p class="ad-v2-work-admin__help">Puedes corregir el comentario, reabrir una aprobación realizada por error, devolver el trabajo o quitar el envío conservando trazabilidad.</p>'+
-      '<label><strong>Comentario actual / corregido</strong><textarea id="ad-v2-work-admin-comment" rows="3" placeholder="Comentario del coordinador"></textarea></label>'+
-      '<label><strong>Motivo administrativo</strong><textarea id="ad-v2-work-admin-reason" rows="3" placeholder="Obligatorio para reabrir, devolver o quitar"></textarea></label>'+
-      '<pre id="ad-v2-work-admin-status" class="ad-result-box">Selecciona una acción administrativa.</pre>'+
+      '<h4>Trabajo de Titulación</h4>'+
+      '<p class="ad-v2-work-admin__help">Acciones administrativas con historial.</p>'+
+      '<label><strong>Comentario</strong><textarea id="ad-v2-work-admin-comment" rows="3" placeholder="Comentario de la revisión"></textarea></label>'+
+      '<label><strong>Motivo</strong><textarea id="ad-v2-work-admin-reason" rows="2" placeholder="Solo para reabrir, devolver o quitar"></textarea></label>'+
+      '<pre id="ad-v2-work-admin-status" class="ad-result-box"></pre>'+
       '<div class="ad-v2-work-admin__actions">'+
       '<button class="ad-btn ad-btn-secondary" type="button" data-work-admin-action="comment">Guardar comentario</button>'+
-      '<button class="ad-btn ad-btn-warning" type="button" data-work-admin-action="reopen">Reabrir revisión</button>'+
-      '<button class="ad-btn ad-btn-primary" type="button" data-work-admin-action="return">Devolver al estudiante</button>'+
+      '<button class="ad-btn ad-btn-warning" type="button" data-work-admin-action="reopen">Reabrir</button>'+
+      '<button class="ad-btn ad-btn-primary" type="button" data-work-admin-action="return">Devolver</button>'+
       '<button class="ad-btn ad-btn-danger" type="button" data-work-admin-action="remove">Quitar envío</button>'+
       '</div>';
     review.insertAdjacentElement('afterend',section);
@@ -91,10 +90,33 @@
     style.id='ad-v2-work-admin-style';
     style.textContent=''+
       '.ad-v2-work-admin{margin-top:14px;border:1px solid #dfe9f5;border-radius:14px;padding:14px;background:#fbfdff}'+
-      '.ad-v2-work-admin label{display:grid;gap:7px;margin-top:11px}.ad-v2-work-admin textarea{width:100%;min-height:78px}'+
-      '.ad-v2-work-admin__help{margin:4px 0 10px;color:#5b7190}.ad-v2-work-admin__actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}';
+      '.ad-v2-work-admin label{display:grid;gap:7px;margin-top:10px}.ad-v2-work-admin textarea{width:100%;min-height:64px}'+
+      '.ad-v2-work-admin__help{margin:3px 0 8px;color:#5b7190}.ad-v2-work-admin__actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}';
     document.head.appendChild(style);
     return true;
+  }
+
+  function syncTableActions(){
+    var body=$('ad-v2-title-body');
+    if(!body)return;
+    body.querySelectorAll('[data-v2-action="delete"][data-id]').forEach(function(button){
+      var item=studentById(button.getAttribute('data-id'));
+      button.hidden=isWork(item);
+    });
+    body.querySelectorAll('[data-v2-action="detail"][data-id]').forEach(function(button){
+      var item=studentById(button.getAttribute('data-id'));
+      if(isWork(item))button.title='Ver y administrar Trabajo de Titulación';
+    });
+  }
+
+  function watchTable(attempt){
+    var body=$('ad-v2-title-body');
+    if(body){
+      new MutationObserver(syncTableActions).observe(body,{childList:true,subtree:true});
+      syncTableActions();
+      return;
+    }
+    if((attempt||0)<30)window.setTimeout(function(){watchTable((attempt||0)+1);},100);
   }
 
   function sync(){
@@ -114,11 +136,15 @@
 
     if($('ad-v2-work-admin-comment'))$('ad-v2-work-admin-comment').value=text(item.observacion);
     if($('ad-v2-work-admin-reason'))$('ad-v2-work-admin-reason').value='';
+
     var reopen=document.querySelector('[data-work-admin-action="reopen"]');
+    var returnButton=document.querySelector('[data-work-admin-action="return"]');
     if(reopen){reopen.hidden=!isApproved(item);reopen.disabled=!isApproved(item);}
-    status(isApproved(item)
-      ? 'Si la aprobación fue un error, usa “Reabrir revisión”. El coordinador volverá a verla como pendiente y podrá escribir comentarios.'
-      : 'El Trabajo de Titulación está disponible para acciones administrativas.','info');
+    if(returnButton){returnButton.hidden=isReturned(item);returnButton.disabled=isReturned(item);}
+
+    if(isApproved(item))status('Aprobado. Usa “Reabrir” si el coordinador debe revisarlo otra vez.','info');
+    else if(isReturned(item))status('Devuelto al estudiante.','info');
+    else status('Pendiente de revisión.','info');
   }
 
   function payload(item){
@@ -134,7 +160,7 @@
 
   function run(action){
     var item=currentStudent();
-    if(!item||!isWork(item)){status('No se encontró un Trabajo de Titulación activo.','danger');return;}
+    if(!item||!isWork(item)){status('No se encontró el Trabajo de Titulación.','danger');return;}
     var data=payload(item);
     var comment=text($('ad-v2-work-admin-comment')&&$('ad-v2-work-admin-comment').value);
     var reason=text($('ad-v2-work-admin-reason')&&$('ad-v2-work-admin-reason').value);
@@ -145,27 +171,29 @@
       if(!comment){status('Escribe el comentario que deseas guardar.','danger');return;}
       endpointAction='ADMIN_EDITAR_COMENTARIO_TRABAJO_TITULACION';
       data.comentario=comment;
-      confirmation='¿Guardar el comentario corregido?';
+      confirmation='¿Guardar este comentario?';
     }else if(action==='reopen'){
-      if(reason.length<4){status('Escribe un motivo de al menos 4 caracteres para reabrir la revisión.','danger');return;}
+      if(!isApproved(item)){status('Solo se puede reabrir una revisión aprobada.','danger');return;}
+      if(reason.length<4){status('Escribe un motivo de al menos 4 caracteres.','danger');return;}
       endpointAction='ADMIN_REABRIR_REVISION_TRABAJO_TITULACION';
       data.motivo=reason;
-      confirmation='La aprobación actual quedará en el historial y el trabajo volverá a Pendiente de revisión. ¿Continuar?';
+      confirmation='Volverá a Pendiente de revisión y el coordinador podrá revisar y comentar nuevamente. ¿Continuar?';
     }else if(action==='return'){
-      if(reason.length<4){status('Escribe un motivo de al menos 4 caracteres para devolver.','danger');return;}
+      if(isReturned(item)){status('Este trabajo ya está devuelto.','info');return;}
+      if(reason.length<4){status('Escribe un motivo de al menos 4 caracteres.','danger');return;}
       endpointAction='ADMIN_DEVOLVER_TRABAJO_TITULACION';
       data.motivo=reason;
-      confirmation='El estudiante podrá corregir y volver a enviar. ¿Devolver este Trabajo de Titulación?';
+      confirmation='El estudiante podrá corregir y volver a enviar. ¿Continuar?';
     }else if(action==='remove'){
-      if(reason.length<4){status('Escribe un motivo de al menos 4 caracteres para quitar el envío.','danger');return;}
+      if(reason.length<4){status('Escribe un motivo de al menos 4 caracteres.','danger');return;}
       endpointAction='ADMIN_QUITAR_ENVIO_TRABAJO_TITULACION';
       data.motivo=reason;
-      confirmation='Se quitará el envío activo y el estudiante podrá registrar nuevamente. El respaldo quedará en el historial. ¿Continuar?';
+      confirmation='Se quitará el envío activo. El respaldo quedará en el historial. ¿Continuar?';
     }else{return;}
 
     if(!window.confirm(confirmation))return;
     setBusy(true);
-    status('Procesando acción administrativa...','info');
+    status('Guardando...','info');
     request(endpointAction,data).then(function(result){
       status(result.mensaje||'Acción completada.','success');
       return refresh();
@@ -178,9 +206,22 @@
   function install(){
     if(installed)return;
     installed=true;
+    watchTable(0);
     document.addEventListener('click',function(event){
       var actionButton=event.target&&event.target.closest?event.target.closest('[data-work-admin-action]'):null;
       if(actionButton){event.preventDefault();event.stopPropagation();run(actionButton.getAttribute('data-work-admin-action'));return;}
+
+      var deleteButton=event.target&&event.target.closest?event.target.closest('[data-v2-action="delete"][data-id]'):null;
+      if(deleteButton){
+        var item=studentById(deleteButton.getAttribute('data-id'));
+        if(isWork(item)){
+          event.preventDefault();event.stopPropagation();
+          var detailButton=document.querySelector('[data-v2-action="detail"][data-id="'+deleteButton.getAttribute('data-id')+'"]');
+          if(detailButton)detailButton.click();
+          return;
+        }
+      }
+
       var detail=event.target&&event.target.closest?event.target.closest('[data-v2-action="detail"]'):null;
       if(detail)window.setTimeout(sync,0);
     },true);
