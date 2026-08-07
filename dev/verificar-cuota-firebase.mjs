@@ -26,6 +26,10 @@ const coordinatorApi = read('coordinadores-mvp/js/coordinador.sheets.primary.js'
 const coordinatorWrapper = read('coordinadores-mvp/js/coordinador.envios.carreras.js');
 const titlesV6 = read('functions/_lib/titulos-firebase-v6.js');
 const titlesV7 = read('functions/_lib/titulos-firebase-v7.js');
+const history = read('functions/_lib/titulos-historial.js');
+const historyApi = read('functions/api/historial-titulos.js');
+const workApi = read('functions/api/trabajo-titulacion.js');
+const localBuilder = read('dev/preparar-pages-local.mjs');
 const adminGlobalV5 = read('functions/_lib/admin-global-v5.js');
 const adminGlobalV6 = read('functions/_lib/admin-global-v6.js');
 const unifiedWork = read('functions/_lib/trabajo-titulacion-unificado.js');
@@ -64,6 +68,52 @@ assert(
 assert(
   !/listCollection\([\s\S]*'resoluciones'/.test(titlesV7),
   'El historial de coordinadores vuelve a leer toda la colección resoluciones.'
+);
+assert(
+  /principalPeriodValues/.test(titlesV7) && /queryRowsByPeriod/.test(titlesV7) &&
+  /compatibilidadAcotadaPorPeriodo:\s*true/.test(titlesV7),
+  'La compatibilidad de carreras no está acotada al período solicitado o principal.'
+);
+assert(
+  !/(?:listCollection|listEnviosCollection)\('TITULOS',\s*'envios',\s*\{\s*maxDocuments:\s*5000/.test(titlesV7),
+  'La capa final de Coordinadores todavía puede leer 5.000 envíos para resolver una carrera.'
+);
+
+assert(
+  /queryEqual\('TITULOS',\s*'versiones_envio',\s*'envioId'/.test(history) &&
+  /queryEqual\('TITULOS',\s*'resoluciones',\s*'envioId'/.test(history),
+  'El historial completo no consulta versiones y resoluciones por envioId.'
+);
+assert(
+  /ensureCurrentVersion/.test(history) && /ensureCurrentResolution/.test(history),
+  'El historial no recupera una versión o resolución actual cuando falta el documento hijo.'
+);
+assert(
+  /consultarHistorialTitulos/.test(historyApi),
+  'No existe el endpoint independiente del historial.'
+);
+
+assert(
+  /commitDocuments\('TITULOS',\s*\[/.test(workApi) &&
+  /collection:\s*COLECCION_VERSIONES/.test(workApi) &&
+  /collection:\s*COLECCION_RESOLUCIONES/.test(workApi),
+  'Trabajo de Titulación no guarda el envío y su historial de forma atómica.'
+);
+assert(
+  /carreraClave:\s*claveCarrera/.test(workApi),
+  'Trabajo de Titulación no guarda la clave normalizada de la carrera.'
+);
+assert(
+  /Number\(previous && previous\.versionActual \|\| 0\)/.test(workApi) &&
+  /Number\(envio\.numeroRevisiones \|\| 0\)/.test(workApi),
+  'Los contadores de Trabajo de Titulación podrían repetirse si faltó un documento histórico.'
+);
+
+assert(
+  /HISTORY_FILE/.test(localBuilder) &&
+  /prepararTrabajoLocal\(\)/.test(localBuilder) &&
+  /injectScript\(html, HISTORY_FILE\)/.test(localBuilder),
+  'El entorno local no carga el historial en Artículos y Trabajo de Titulación.'
 );
 
 assert(
@@ -139,6 +189,8 @@ if (errors.length) {
 
 console.log('[Cuota Firebase] Administrador consulta títulos por período.');
 console.log('[Cuota Firebase] Toda la cadena activa de Coordinadores conserva los filtros.');
-console.log('[Cuota Firebase] Historial y Trabajo de Titulación usan consultas filtradas.');
+console.log('[Cuota Firebase] Compatibilidad de carreras acotada al período y sin lectura global.');
+console.log('[Cuota Firebase] Historial completo consultado por envioId y con recuperación segura.');
+console.log('[Cuota Firebase] Trabajo de Titulación guarda historial atómico y carrera normalizada.');
 console.log('[Cuota Firebase] Requisitos evita lecturas duplicadas de catálogos.');
 console.log('[Cuota Firebase] Migraciones automáticas y dobles lecturas permanecen bloqueadas.');
