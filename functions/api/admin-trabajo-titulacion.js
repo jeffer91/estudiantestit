@@ -1,6 +1,5 @@
 import {
   commitDocuments,
-  deleteDocument,
   getDocument,
   nowIso,
   text
@@ -153,6 +152,9 @@ async function reopenReview(payload, env) {
 
 async function returnWork(payload, env) {
   const envio = await getWork(payload, env);
+  if (currentStatus(envio) === 'DEVUELTO') {
+    throw new Error('Este Trabajo de Titulación ya está devuelto al estudiante.');
+  }
   const reason = text(payload.motivo || payload.observacion || payload.comentario);
   if (reason.length < 4) throw new Error('Escribe un motivo de al menos 4 caracteres para devolver.');
   const fecha = nowIso();
@@ -206,38 +208,44 @@ async function removeWork(payload, env) {
   const fecha = nowIso();
   const auditId = eventId(`${envio.id}__admin_quitado`);
 
-  await commitDocuments('TITULOS', [{
-    collection: COLECCION_RESOLUCIONES,
-    id: auditId,
-    data: auditData(envio, 'ADMIN_QUITAR_ENVIO_TRABAJO_TITULACION', reason, {
-      estado: 'QUITADO_POR_ADMIN',
-      observacion: reason,
-      fechaResolucion: fecha,
-      respaldoEnvio: {
-        cedula: text(envio.cedula || envio.numeroIdentificacion),
-        nombres: text(envio.nombres || envio.estudiante),
-        carreraNombre: text(envio.carreraNombre || envio.carrera),
-        periodoId: text(envio.periodoId),
-        periodoNombre: text(envio.periodoNombre || envio.periodoLabel),
-        titulo1: text(envio.titulo1),
-        titulo2: text(envio.titulo2),
-        titulo3: text(envio.titulo3),
-        tituloPreferidoNumero: Number(envio.tituloPreferidoNumero || 0),
-        tituloFinal: text(envio.tituloFinal),
-        estado: currentStatus(envio),
-        observacion: text(envio.observacion),
-        coordinador: text(envio.coordinador),
-        fechaEnvio: text(envio.fechaEnvio),
-        fechaResolucion: text(envio.fechaResolucion),
-        versionActual: Number(envio.versionActual || 0),
-        numeroRevisiones: Number(envio.numeroRevisiones || 0)
-      }
-    }),
-    merge: false,
-    exists: false
-  }], env);
+  await commitDocuments('TITULOS', [
+    {
+      collection: COLECCION_RESOLUCIONES,
+      id: auditId,
+      data: auditData(envio, 'ADMIN_QUITAR_ENVIO_TRABAJO_TITULACION', reason, {
+        estado: 'QUITADO_POR_ADMIN',
+        observacion: reason,
+        fechaResolucion: fecha,
+        respaldoEnvio: {
+          cedula: text(envio.cedula || envio.numeroIdentificacion),
+          nombres: text(envio.nombres || envio.estudiante),
+          carreraNombre: text(envio.carreraNombre || envio.carrera),
+          periodoId: text(envio.periodoId),
+          periodoNombre: text(envio.periodoNombre || envio.periodoLabel),
+          titulo1: text(envio.titulo1),
+          titulo2: text(envio.titulo2),
+          titulo3: text(envio.titulo3),
+          tituloPreferidoNumero: Number(envio.tituloPreferidoNumero || 0),
+          tituloFinal: text(envio.tituloFinal),
+          estado: currentStatus(envio),
+          observacion: text(envio.observacion),
+          coordinador: text(envio.coordinador),
+          fechaEnvio: text(envio.fechaEnvio),
+          fechaResolucion: text(envio.fechaResolucion),
+          versionActual: Number(envio.versionActual || 0),
+          numeroRevisiones: Number(envio.numeroRevisiones || 0)
+        }
+      }),
+      merge: false,
+      exists: false
+    },
+    {
+      collection: COLECCION_ENVIOS,
+      id: envio.id,
+      delete: true
+    }
+  ], env);
 
-  await deleteDocument('TITULOS', COLECCION_ENVIOS, envio.id, env);
   return { ok: true, envioId: envio.id, estado: 'NO_ENVIADO', mensaje: 'Envío quitado. El estudiante puede registrar nuevamente sus propuestas.' };
 }
 
