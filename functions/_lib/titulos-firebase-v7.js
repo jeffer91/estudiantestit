@@ -5,7 +5,7 @@ import {
 } from './titulos-firebase-v7-core.js';
 import {
   getDocument,
-  listCollection,
+  listCollection as listEnviosCollection,
   normalizeCedula,
   queryEqual,
   setDocument,
@@ -215,7 +215,7 @@ async function recoverCareerList(result, payload, env) {
 
   let compatibilityRows = [];
   if (missing.length) {
-    const allRows = await listCollection('TITULOS', 'envios', { maxDocuments: 5000 }, env);
+    const allRows = await listEnviosCollection('TITULOS', 'envios', { maxDocuments: 5000 }, env);
     compatibilityRows = allRows.filter(
       (row) => rowMatchesPayload(row, { ...payload, carreras: missing }, missing)
     );
