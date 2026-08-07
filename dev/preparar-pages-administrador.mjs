@@ -27,8 +27,19 @@ function actualizarVersionHtml(file) {
   fs.writeFileSync(file, html, 'utf8');
 }
 
-actualizarVersionHtml(path.join(output, 'ad-index.html'));
-fs.copyFileSync(path.join(output, 'ad-index.html'), path.join(output, 'index.html'));
+function instalarAccionesTrabajoTitulacion(file) {
+  let html = fs.readFileSync(file, 'utf8');
+  const script = `  <script src="./ad-js/ad-trabajo-titulacion-admin.patch.js?v=${VERSION_ADMIN}"></script>\n`;
+  if (!html.includes('ad-trabajo-titulacion-admin.patch.js')) {
+    html = html.replace('</body>', `${script}</body>`);
+  }
+  fs.writeFileSync(file, html, 'utf8');
+}
+
+const adminOutputEntry = path.join(output, 'ad-index.html');
+actualizarVersionHtml(adminOutputEntry);
+instalarAccionesTrabajoTitulacion(adminOutputEntry);
+fs.copyFileSync(adminOutputEntry, path.join(output, 'index.html'));
 
 const notFoundHtml = `<!doctype html>
 <html lang="es">
@@ -68,6 +79,7 @@ for (const required of [
   path.join(output, 'ad-js', 'ad-api.service.js'),
   path.join(output, 'ad-js', 'ad-google-sheets.app.js'),
   path.join(output, 'ad-js', 'ad-administracion-global.js'),
+  path.join(output, 'ad-js', 'ad-trabajo-titulacion-admin.patch.js'),
   path.join(output, 'ad-js', 'ad-correo-outlook.js'),
   path.join(output, 'ad-js', 'ad-pdf-firebase.js'),
   path.join(output, 'ad-js', 'ad-version.js')
@@ -89,6 +101,6 @@ for (const directory of [
 console.log('[Pages administrador] Carpeta preparada en .pages-administrador.');
 console.log(`[Pages administrador] Versión ${VERSION_ADMIN}.`);
 console.log('[Pages administrador] Ruta pública principal: /.');
-console.log('[Pages administrador] Incluye períodos, carreras, lista global, estadísticas, WhatsApp, Outlook y PDF.');
+console.log('[Pages administrador] Incluye períodos, carreras, lista global, estadísticas, WhatsApp, Outlook, PDF y acciones administrativas para Trabajo de Titulación.');
 console.log('[Pages administrador] La carpeta functions permanece en la raíz para habilitar /api/*.');
 console.log('[Pages administrador] Protege este proyecto con Cloudflare Access antes de usarlo en producción.');
