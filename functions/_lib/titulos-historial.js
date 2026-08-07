@@ -160,13 +160,28 @@ function legacyVersion(envio) {
 
 function legacyResolution(envio) {
   if (!envio) return null;
-  const status = normalizeStatus(envio.estado || envio.estadoFinal);
-  const observation = text(envio.observacion || envio.comentarioCoordinador || envio.comentario);
-  const coordinator = text(envio.coordinador || envio.nombreCoordinador);
-  const date = text(envio.fechaResolucion || envio.fechaRevision);
+  const currentStatus = normalizeStatus(envio.estado || envio.estadoFinal);
+  const historicalId = text(envio.ultimaResolucionId);
+  const historicalObservation = text(envio.ultimoComentario);
+  const historicalCoordinator = text(envio.ultimoCoordinador);
+  const historicalDate = text(envio.ultimaFechaRevision);
+  const historicalStatusRaw = text(envio.ultimoEstadoRevision || envio.estadoUltimaRevision);
+  const hasHistoricalSummary = Boolean(
+    historicalId || historicalObservation || historicalCoordinator || historicalDate
+  );
+  const status = hasHistoricalSummary && currentStatus === 'PENDIENTE_REVISION'
+    ? (historicalStatusRaw ? normalizeStatus(historicalStatusRaw) : 'DEVUELTO')
+    : currentStatus;
+  const observation = text(
+    envio.observacion || envio.comentarioCoordinador || envio.comentario || historicalObservation
+  );
+  const coordinator = text(
+    envio.coordinador || envio.nombreCoordinador || historicalCoordinator
+  );
+  const date = text(envio.fechaResolucion || envio.fechaRevision || historicalDate);
   if (status === 'PENDIENTE_REVISION' && !observation && !coordinator && !date) return null;
   return publicResolution({
-    id: text(envio.resolucionActualId) || `${rowId(envio)}__legacy_r1`,
+    id: text(envio.resolucionActualId || envio.ultimaResolucionId) || `${rowId(envio)}__legacy_r1`,
     envioId: rowId(envio),
     numeroResolucion: Number(envio.numeroRevisiones || 1),
     estado: status,
@@ -265,6 +280,7 @@ async function persistSummary(envio, summary, env) {
     numeroRevisiones: summary.numeroRevisiones,
     versionActual: summary.versionActual,
     ultimaResolucionId: text(latest.id),
+    ultimoEstadoRevision: text(latest.estado),
     ultimoComentario: text(latest.comentario),
     ultimoCoordinador: text(latest.coordinador),
     ultimaFechaRevision: text(latest.fechaResolucion)
