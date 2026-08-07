@@ -6,6 +6,7 @@ const root = process.cwd();
 const output = path.join(root, '.pages-local');
 const VERSION_ESTUDIANTES = '2.4.4';
 const VERSION_ADMIN = '3.3.3';
+const HISTORY_FILE = 'js/titulos.historial.publico.js';
 const LEGACY_SCRIPTS = [
   'estudiante.consulta.optimizada.js',
   'estudiante.devolucion.runtime.js',
@@ -49,6 +50,15 @@ function copyFile(name) {
   return true;
 }
 
+function injectScript(html, sourcePath) {
+  if (html.includes(sourcePath)) return html;
+  if (!html.includes('</body>')) {
+    throw new Error('No se encontró </body> para insertar el historial local.');
+  }
+  const script = `  <script src="${sourcePath}?v=${VERSION_ESTUDIANTES}"></script>\n`;
+  return html.replace('</body>', script + '</body>');
+}
+
 function prepararEstudiantesLocal() {
   const entry = path.join(output, 'estudiantes-mvp', 'estudiante.html');
   if (!fs.existsSync(entry)) return;
@@ -62,6 +72,19 @@ function prepararEstudiantesLocal() {
     throw new Error('El HTML local de Estudiantes no carga la consulta unificada.');
   }
   html = html.replace(/\?v=\d+\.\d+\.\d+/g, `?v=${VERSION_ESTUDIANTES}`);
+  html = injectScript(html, HISTORY_FILE);
+  fs.writeFileSync(entry, html, 'utf8');
+}
+
+function prepararTrabajoLocal() {
+  const entry = path.join(output, 'trabajo-titulacion-mvp', 'index.html');
+  const history = path.join(output, 'estudiantes-mvp', HISTORY_FILE);
+  if (!fs.existsSync(entry)) return;
+  if (!fs.existsSync(history)) {
+    throw new Error('No se encontró el historial público para Trabajo de Titulación.');
+  }
+  let html = fs.readFileSync(entry, 'utf8');
+  html = injectScript(html, '/estudiantes-mvp/' + HISTORY_FILE);
   fs.writeFileSync(entry, html, 'utf8');
 }
 
@@ -87,6 +110,7 @@ for (const required of ['estudiantes-mvp', 'trabajo-titulacion-mvp', 'coordinado
 }
 
 prepararEstudiantesLocal();
+prepararTrabajoLocal();
 prepararAdministradorLocal();
 
 if (!copiedFiles.includes('index.html')) {
@@ -110,6 +134,7 @@ if (!copiedFiles.includes('index.html')) {
 
 console.log('[Pages local] Entorno preparado en .pages-local.');
 console.log(`[Pages local] Estudiantes ${VERSION_ESTUDIANTES}: UTET → Sheets → Títulos.`);
+console.log('[Pages local] Historial activo en Artículos y Trabajo de Titulación.');
 console.log('[Pages local] Trabajo de Titulación disponible en /trabajo-titulacion-mvp/.');
 console.log('[Pages local] Coordinadores: artículos y Trabajos de Titulación.');
 console.log('[Pages local] Administrador: dos Firebase y reporte PDF.');
