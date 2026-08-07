@@ -102,10 +102,9 @@ async function reopenReview(payload, env) {
   const envio = await getWork(payload, env);
   const status = currentStatus(envio);
   if (!['APROBADO', 'REEMPLAZADO'].includes(status)) {
-    throw new Error('Solo se puede reabrir un Trabajo de Titulación aprobado o aprobado con corrección.');
+    throw new Error('Solo se puede devolver al coordinador un Trabajo de Titulación aprobado o aprobado con corrección.');
   }
-  const reason = text(payload.motivo || payload.observacion || payload.comentario);
-  if (reason.length < 4) throw new Error('Escribe un motivo de al menos 4 caracteres para reabrir la revisión.');
+  const reason = 'Devuelto al coordinador por el administrador.';
   const fecha = nowIso();
   const auditId = eventId(`${envio.id}__admin_reapertura`);
 
@@ -146,7 +145,7 @@ async function reopenReview(payload, env) {
     ok: true,
     envioId: envio.id,
     estado: 'PENDIENTE_REVISION',
-    mensaje: 'Revisión reabierta. El coordinador puede volver a revisar, comentar, aprobar o devolver.'
+    mensaje: 'Devuelto al coordinador. Puede volver a revisar, comentar, aprobar o devolver.'
   };
 }
 
@@ -155,8 +154,10 @@ async function returnWork(payload, env) {
   if (currentStatus(envio) === 'DEVUELTO') {
     throw new Error('Este Trabajo de Titulación ya está devuelto al estudiante.');
   }
-  const reason = text(payload.motivo || payload.observacion || payload.comentario);
-  if (reason.length < 4) throw new Error('Escribe un motivo de al menos 4 caracteres para devolver.');
+  const comment = text(payload.comentario || payload.observacion || payload.comentarioCoordinador)
+    || text(envio.observacion || envio.comentarioCoordinador)
+    || 'Devuelto al estudiante por el administrador.';
+  const reason = 'Devuelto al estudiante por el administrador.';
   const fecha = nowIso();
   const revisionNumber = Number(envio.numeroRevisiones || 0) + 1;
   const resolutionId = eventId(`${envio.id}__admin_devuelto`);
@@ -168,13 +169,13 @@ async function returnWork(payload, env) {
       data: {
         estado: 'DEVUELTO',
         tituloFinal: null,
-        observacion: reason,
+        observacion: comment,
         coordinador: 'Administrador',
         fechaResolucion: fecha,
         resolucionActualId: resolutionId,
         ultimaResolucionId: resolutionId,
         numeroRevisiones: revisionNumber,
-        ultimoComentario: reason,
+        ultimoComentario: comment,
         ultimoCoordinador: 'Administrador',
         ultimaFechaRevision: fecha,
         requiereRevision: true,
@@ -190,7 +191,7 @@ async function returnWork(payload, env) {
         numeroResolucion: revisionNumber,
         coordinador: 'Administrador',
         estado: 'DEVUELTO',
-        observacion: reason,
+        observacion: comment,
         fechaResolucion: fecha
       }),
       merge: false,
@@ -198,7 +199,7 @@ async function returnWork(payload, env) {
     }
   ], env);
 
-  return { ok: true, envioId: envio.id, estado: 'DEVUELTO', mensaje: 'Trabajo de Titulación devuelto correctamente.' };
+  return { ok: true, envioId: envio.id, estado: 'DEVUELTO', mensaje: 'Trabajo de Titulación devuelto al estudiante.' };
 }
 
 async function removeWork(payload, env) {
