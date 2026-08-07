@@ -74,14 +74,14 @@
     section.hidden=true;
     section.innerHTML=''+
       '<h4>Trabajo de Titulación</h4>'+
-      '<p class="ad-v2-work-admin__help">Acciones administrativas con historial.</p>'+
+      '<p class="ad-v2-work-admin__help">Acciones administrativas simples, con historial automático.</p>'+
       '<label><strong>Comentario</strong><textarea id="ad-v2-work-admin-comment" rows="3" placeholder="Comentario de la revisión"></textarea></label>'+
-      '<label><strong>Motivo</strong><textarea id="ad-v2-work-admin-reason" rows="2" placeholder="Solo para reabrir, devolver o quitar"></textarea></label>'+
+      '<label><strong>Motivo para quitar envío</strong><textarea id="ad-v2-work-admin-reason" rows="2" placeholder="Solo se usa si vas a quitar el envío"></textarea></label>'+
       '<pre id="ad-v2-work-admin-status" class="ad-result-box"></pre>'+
       '<div class="ad-v2-work-admin__actions">'+
       '<button class="ad-btn ad-btn-secondary" type="button" data-work-admin-action="comment">Guardar comentario</button>'+
-      '<button class="ad-btn ad-btn-warning" type="button" data-work-admin-action="reopen">Reabrir</button>'+
-      '<button class="ad-btn ad-btn-primary" type="button" data-work-admin-action="return">Devolver</button>'+
+      '<button class="ad-btn ad-btn-warning" type="button" data-work-admin-action="reopen">Devolver al coordinador</button>'+
+      '<button class="ad-btn ad-btn-primary" type="button" data-work-admin-action="return">Devolver al estudiante</button>'+
       '<button class="ad-btn ad-btn-danger" type="button" data-work-admin-action="remove">Quitar envío</button>'+
       '</div>';
     review.insertAdjacentElement('afterend',section);
@@ -142,7 +142,7 @@
     if(reopen){reopen.hidden=!isApproved(item);reopen.disabled=!isApproved(item);}
     if(returnButton){returnButton.hidden=isReturned(item);returnButton.disabled=isReturned(item);}
 
-    if(isApproved(item))status('Aprobado. Usa “Reabrir” si el coordinador debe revisarlo otra vez.','info');
+    if(isApproved(item))status('Aprobado. Puedes devolverlo al coordinador para una nueva revisión.','info');
     else if(isReturned(item))status('Devuelto al estudiante.','info');
     else status('Pendiente de revisión.','info');
   }
@@ -173,19 +173,16 @@
       data.comentario=comment;
       confirmation='¿Guardar este comentario?';
     }else if(action==='reopen'){
-      if(!isApproved(item)){status('Solo se puede reabrir una revisión aprobada.','danger');return;}
-      if(reason.length<4){status('Escribe un motivo de al menos 4 caracteres.','danger');return;}
+      if(!isApproved(item)){status('Solo se puede devolver al coordinador una revisión aprobada.','danger');return;}
       endpointAction='ADMIN_REABRIR_REVISION_TRABAJO_TITULACION';
-      data.motivo=reason;
       confirmation='Volverá a Pendiente de revisión y el coordinador podrá revisar y comentar nuevamente. ¿Continuar?';
     }else if(action==='return'){
-      if(isReturned(item)){status('Este trabajo ya está devuelto.','info');return;}
-      if(reason.length<4){status('Escribe un motivo de al menos 4 caracteres.','danger');return;}
+      if(isReturned(item)){status('Este trabajo ya está devuelto al estudiante.','info');return;}
       endpointAction='ADMIN_DEVOLVER_TRABAJO_TITULACION';
-      data.motivo=reason;
+      if(comment)data.comentario=comment;
       confirmation='El estudiante podrá corregir y volver a enviar. ¿Continuar?';
     }else if(action==='remove'){
-      if(reason.length<4){status('Escribe un motivo de al menos 4 caracteres.','danger');return;}
+      if(reason.length<4){status('Para quitar el envío, escribe un motivo de al menos 4 caracteres.','danger');return;}
       endpointAction='ADMIN_QUITAR_ENVIO_TRABAJO_TITULACION';
       data.motivo=reason;
       confirmation='Se quitará el envío activo. El respaldo quedará en el historial. ¿Continuar?';
