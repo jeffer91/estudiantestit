@@ -5,8 +5,9 @@ import {
 } from './titulos-firebase-v7-core.js';
 import {
   getDocument,
-  listCollection as listEnviosCollection,
+  listCollection,
   normalizeCedula,
+  periodSignature,
   queryEqual,
   setDocument,
   text
@@ -30,6 +31,10 @@ const STOPWORDS_CARRERA = new Set([
   'EN', 'DE', 'DEL', 'LA', 'EL', 'Y', 'ONLINE', 'LINEA',
   'TECNOLOGIA', 'TECNOLOGO', 'SUPERIOR', 'UNIVERSITARIA', 'UNIVERSITARIO', 'TSU'
 ]);
+const PERIOD_FIELDS = [
+  'periodoId', 'periodId', 'periodoCanonicoId',
+  'periodoNombre', 'periodoLabel', 'periodo'
+];
 
 function normalizeStatus(value) {
   const normalized = text(value).toUpperCase().replace(/[^A-Z0-9]+/g, '_');
@@ -56,6 +61,21 @@ function careerKey(value) {
 function splitList(value) {
   if (Array.isArray(value)) return value.map(text).filter(Boolean);
   return text(value).split(/[,;|\n]+/).map(text).filter(Boolean);
+}
+
+function activeValue(value) {
+  if (value === undefined || value === null || value === '') return true;
+  if (value === false) return false;
+  return !['0', 'false', 'no', 'inactivo', 'desactivado', 'anulado']
+    .includes(text(value).toLowerCase());
+}
+
+function principalValue(row) {
+  return Boolean(row && (
+    row.principal === true ||
+    row.esPrincipal === true ||
+    text(row.tipo).toUpperCase() === 'PRINCIPAL'
+  ));
 }
 
 function careerTokens(value) {
@@ -135,12 +155,18 @@ function requestedCareers(payload) {
   return splitList(payload.carreras || payload.carrera || payload.nombreCarrera);
 }
 
+function requestedPeriods(payload) {
+  const direct = [payload.periodoId, payload.periodoLabel, payload.periodo]
+    .map(text).filter(Boolean);
+  const canonical = direct.map((value) => periodSignature(value)).filter(Boolean);
+  return [...new Set([...direct, ...canonical])];
+}
+
 function rowMatchesPayload(row, payload, careers = requestedCareers(payload)) {
   if (!rowMatchesCareer(row, careers)) return false;
   if (!rowHasTitles(row)) return false;
 
-  const periods = [payload.periodoId, payload.periodoLabel, payload.periodo]
-    .map(text).filter(Boolean);
+  const periods = requestedPeriods(payload);
   if (periods.length && !coincidePeriodoTrabajo(row, periods)) return false;
 
   const status = text(payload.estado) ? normalizeStatus(payload.estado) : '';
@@ -171,6 +197,45 @@ async function queryRowsByCareerKey(careers, env) {
     rows.forEach((row, index) => map.set(rowId(row, index), row));
   }
   return [...map.values()];
+}
+
+async function principalPeriodValues(env) {
+  const periods = await listCollection('TITULOS', 'periodos', { maxDocuments: 500 }, env);
+  const active = periods.filter((item) => activeValue(
+    item.activo !== undefined ? item.activo : item.estado
+  ));
+  const selected = active.find(principalValue) || active[0] ||
+    periods.find(principalValue) || periods[0];
+  if (!selected) return [];
+
+  const values = [
+    selected.id,
+    selected.periodoId,
+    selected.periodId,
+    selected.periodoCanonicoId,
+    selected.nombre,
+    selected.label,
+    selected.periodoNombre,
+    selected.periodoLabel,
+    selected.periodo
+  ].map(text).filter(Boolean);
+  const canonical = values.map((value) => periodSignature(value)).filter(Boolean);
+  return [...new Set([...values, ...canonical])];
+}
+
+async function queryRowsByPeriod(values, env) {
+  const unique = [...new Set((Array.isArray(values) ? values : []).map(text).filter(Boolean))];
+  if (!unique.length) return [];
+
+  for (const field of PERIOD_FIELDS) {
+    const map = new Map();
+    for (const value of unique) {
+      const rows = await queryEqual('TITULOS', 'envios', field, value, 1000, env);
+      rows.forEach((row, index) => map.set(rowId(row, index), row));
+    }
+    if (map.size) return [...map.values()];
+  }
+  return [];
 }
 
 async function backfillCareerKeys(rows, env) {
@@ -214,10 +279,16 @@ async function recoverCareerList(result, payload, env) {
   );
 
   let compatibilityRows = [];
+  let compatibilityPeriods = requestedPeriods(payload);
   if (missing.length) {
-    const allRows = await listEnviosCollection('TITULOS', 'envios', { maxDocuments: 5000 }, env);
-    compatibilityRows = allRows.filter(
-      (row) => rowMatchesPayload(row, { ...payload, carreras: missing }, missing)
+    if (!compatibilityPeriods.length) compatibilityPeriods = await principalPeriodValues(env);
+    const periodRows = await queryRowsByPeriod(compatibilityPeriods, env);
+    compatibilityRows = periodRows.filter(
+      (row) => rowMatchesPayload(
+        row,
+        { ...payload, carreras: missing, periodo: compatibilityPeriods },
+        missing
+      )
     );
     combined = mergeRows(combined, compatibilityRows)
       .filter((row) => rowMatchesPayload(row, payload, careers));
@@ -235,6 +306,8 @@ async function recoverCareerList(result, payload, env) {
     total: combined.length,
     consultaFiltrada: true,
     consultaCarreraNormalizada: true,
+    compatibilidadAcotadaPorPeriodo: true,
+    periodosCompatibilidad: compatibilityPeriods,
     recuperadosPorClave: keyedRows.length,
     recuperadosCompatibilidad: compatibilityRows.length,
     carrerasSinCoincidenciaExacta: missing
