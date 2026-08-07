@@ -184,13 +184,6 @@
       var detail=event.target&&event.target.closest?event.target.closest('[data-v2-action="detail"]'):null;
       if(detail)window.setTimeout(sync,0);
     },true);
-
-    var observer=new MutationObserver(function(){
-      var modal=$('ad-v2-detail-modal');
-      if(modal&&!modal.hidden)window.setTimeout(sync,0);
-    });
-    observer.observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['hidden']});
-    window.setInterval(function(){if($('ad-v2-detail-modal')&&!$('ad-v2-detail-modal').hidden)sync();},1000);
   }
 
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});else install();
