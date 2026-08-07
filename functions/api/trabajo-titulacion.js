@@ -1,8 +1,8 @@
 import {
+  commitDocuments,
   getDocument,
   nowIso,
   queryEqual,
-  setDocument,
   text
 } from '../_lib/firestore-fixed.js';
 import { getStudentBasic } from '../_lib/requisitos-firebase-fixed.js';
@@ -48,6 +48,13 @@ function limpiarTitulo(value) {
     (output.startsWith("'") && output.endsWith("'"))
   )) output = output.slice(1, -1).trim();
   return output;
+}
+
+function claveCarrera(value) {
+  return text(value).toLowerCase().normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
 }
 
 function eventoId(prefix) {
@@ -185,16 +192,6 @@ async function consultar(payload, env) {
   };
 }
 
-async function guardarHistorialSeguro(collection, id, data, env) {
-  try {
-    await setDocument('TITULOS', collection, id, data, { merge: false }, env);
-    return true;
-  } catch (error) {
-    console.warn('[Trabajo de Titulación] No se pudo guardar el historial:', error);
-    return false;
-  }
-}
-
 async function guardarEnvio(payload, env) {
   const cedula = cedulaEstricta(payload.cedula || payload.numeroIdentificacion);
   if (!cedula) throw new Error('La cédula debe contener exactamente 10 dígitos.');
@@ -228,13 +225,22 @@ async function guardarEnvio(payload, env) {
 
   const id = previous && previous.id || idTrabajoTitulacion(periodoId, cedula);
   const versiones = await queryEqual('TITULOS', COLECCION_VERSIONES, 'envioId', id, 1000, env);
-  const numeroVersion = versiones.reduce((max, item) => Math.max(max, Number(item.numeroVersion || 0)), 0) + 1;
+  const numeroVersion = versiones.reduce(
+    (max, item) => Math.max(max, Number(item.numeroVersion || 0)),
+    Number(previous && previous.versionActual || 0)
+  ) + 1;
   const versionId = eventoId(`${id}__v${String(numeroVersion).padStart(3, '0')}`);
   const preferido = Number(payload.tituloPreferidoNumero || payload.preferido || 1);
   const favorito = [1, 2, 3].includes(preferido) ? preferido : 1;
   const fecha = nowIso();
   const nombres = text(student.nombres || student.Nombres || payload.nombres || payload.estudiante);
   const carrera = text(student.carrera || student.NombreCarrera || payload.carrera || payload.nombreCarrera);
+  const carreraCodigo = text(student.codigoCarrera || student.CodigoCarrera || payload.codigoCarrera);
+  const revisionesPrevias = Number(previous && previous.numeroRevisiones || 0);
+  const ultimaResolucionId = text(previous && (previous.resolucionActualId || previous.ultimaResolucionId));
+  const ultimoComentario = text(previous && (previous.observacion || previous.ultimoComentario));
+  const ultimoCoordinador = text(previous && (previous.coordinador || previous.ultimoCoordinador));
+  const ultimaFechaRevision = text(previous && (previous.fechaResolucion || previous.ultimaFechaRevision));
 
   const envioData = {
     tipoTrabajo: TIPO,
@@ -243,7 +249,8 @@ async function guardarEnvio(payload, env) {
     numeroIdentificacion: cedula,
     nombres,
     carreraNombre: carrera,
-    carreraCodigo: text(student.codigoCarrera || student.CodigoCarrera || payload.codigoCarrera),
+    carreraCodigo,
+    carreraClave: claveCarrera(carrera || carreraCodigo),
     periodoId,
     periodoNombre: periodoNombre || periodoId,
     telegram: text(payload.telegram || payload.telegramUser),
@@ -259,26 +266,49 @@ async function guardarEnvio(payload, env) {
     fechaEnvio: fecha,
     fechaResolucion: null,
     versionActual: numeroVersion,
+    numeroEnvios: numeroVersion,
+    numeroReenvios: Math.max(0, numeroVersion - 1),
+    numeroRevisiones: revisionesPrevias,
     versionActualId: versionId,
     resolucionActualId: null,
+    ultimaResolucionId,
+    ultimoComentario,
+    ultimoCoordinador,
+    ultimaFechaRevision,
     requiereRevision: false,
     actualizadoEn: fecha
   };
 
-  await setDocument('TITULOS', COLECCION_ENVIOS, id, envioData, { merge: false }, env);
-  await guardarHistorialSeguro(COLECCION_VERSIONES, versionId, {
-    envioId: id,
-    tipoTrabajo: TIPO,
-    numeroVersion,
-    titulo1: propuestas[0].tituloFinal,
-    titulo2: propuestas[1].tituloFinal,
-    titulo3: propuestas[2].tituloFinal,
-    propuestasDetalle: propuestas,
-    tituloPreferidoNumero: favorito,
-    estado: 'PENDIENTE_REVISION',
-    observacion: '',
-    fechaEnvio: fecha
-  }, env);
+  await commitDocuments('TITULOS', [
+    {
+      collection: COLECCION_ENVIOS,
+      id,
+      data: envioData,
+      merge: false,
+      ...(previous && previous._updateTime
+        ? { updateTime: previous._updateTime }
+        : { exists: false })
+    },
+    {
+      collection: COLECCION_VERSIONES,
+      id: versionId,
+      data: {
+        envioId: id,
+        tipoTrabajo: TIPO,
+        numeroVersion,
+        titulo1: propuestas[0].tituloFinal,
+        titulo2: propuestas[1].tituloFinal,
+        titulo3: propuestas[2].tituloFinal,
+        propuestasDetalle: propuestas,
+        tituloPreferidoNumero: favorito,
+        estado: 'PENDIENTE_REVISION',
+        observacion: '',
+        fechaEnvio: fecha
+      },
+      merge: false,
+      exists: false
+    }
+  ], env);
 
   return {
     ok: true,
@@ -286,6 +316,9 @@ async function guardarEnvio(payload, env) {
     idRegistro: id,
     versionId,
     numeroVersion,
+    numeroEnvios: numeroVersion,
+    numeroReenvios: Math.max(0, numeroVersion - 1),
+    numeroRevisiones: revisionesPrevias,
     estado: 'PENDIENTE_REVISION',
     tipoTrabajo: TIPO,
     mensaje: 'Títulos de Trabajo de Titulación enviados correctamente para revisión.'
@@ -322,38 +355,61 @@ async function guardarResolucion(payload, env) {
   if (status !== 'DEVUELTO' && !finalTitle) throw new Error('La aprobación necesita un título final.');
 
   const resoluciones = await queryEqual('TITULOS', COLECCION_RESOLUCIONES, 'envioId', envio.id, 1000, env);
-  const numeroResolucion = resoluciones.reduce((max, item) => Math.max(max, Number(item.numeroResolucion || 0)), 0) + 1;
+  const numeroResolucion = resoluciones.reduce(
+    (max, item) => Math.max(max, Number(item.numeroResolucion || 0)),
+    Number(envio.numeroRevisiones || 0)
+  ) + 1;
   const resolucionId = eventoId(`${envio.id}__r${String(numeroResolucion).padStart(3, '0')}`);
   const coordinador = text(payload.coordinador || payload.nombreCoordinador);
   const fecha = text(payload.fechaResolucion) || nowIso();
 
-  await setDocument('TITULOS', COLECCION_ENVIOS, envio.id, {
-    estado: status,
-    tituloFinal: status === 'DEVUELTO' ? null : finalTitle,
-    observacion: observation,
-    coordinador,
-    fechaResolucion: fecha,
-    resolucionActualId: resolucionId,
-    requiereRevision: status === 'DEVUELTO',
-    actualizadoEn: fecha
-  }, { merge: true }, env);
-
-  await guardarHistorialSeguro(COLECCION_RESOLUCIONES, resolucionId, {
-    envioId: envio.id,
-    tipoTrabajo: TIPO,
-    numeroResolucion,
-    coordinador,
-    estado: status,
-    tituloElegido: selected,
-    tituloCorregido: corrected,
-    observacion: observation,
-    fechaResolucion: fecha
-  }, env);
+  await commitDocuments('TITULOS', [
+    {
+      collection: COLECCION_ENVIOS,
+      id: envio.id,
+      data: {
+        estado: status,
+        tituloFinal: status === 'DEVUELTO' ? null : finalTitle,
+        observacion: observation,
+        coordinador,
+        fechaResolucion: fecha,
+        resolucionActualId: resolucionId,
+        ultimaResolucionId: resolucionId,
+        numeroRevisiones: numeroResolucion,
+        ultimoComentario: observation,
+        ultimoCoordinador: coordinador,
+        ultimaFechaRevision: fecha,
+        requiereRevision: status === 'DEVUELTO',
+        actualizadoEn: fecha
+      },
+      merge: true,
+      ...(envio._updateTime ? { updateTime: envio._updateTime } : {})
+    },
+    {
+      collection: COLECCION_RESOLUCIONES,
+      id: resolucionId,
+      data: {
+        envioId: envio.id,
+        tipoTrabajo: TIPO,
+        numeroResolucion,
+        coordinador,
+        estado: status,
+        tituloElegido: selected,
+        tituloCorregido: corrected,
+        observacion: observation,
+        fechaResolucion: fecha
+      },
+      merge: false,
+      exists: false
+    }
+  ], env);
 
   return {
     ok: true,
     envioId: envio.id,
     resolucionId,
+    numeroResolucion,
+    numeroRevisiones: numeroResolucion,
     estado: status,
     tituloFinal: status === 'DEVUELTO' ? '' : finalTitle,
     mensaje: status === 'DEVUELTO'
