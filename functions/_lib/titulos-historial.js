@@ -116,7 +116,8 @@ function publicVersion(value, index) {
     titulo2: cleanTitle(value.titulo2),
     titulo3: cleanTitle(value.titulo3),
     tituloPreferidoNumero: preferred,
-    legado: value.legado === true
+    legado: value.legado === true,
+    recuperadoDesdeEnvio: value.recuperadoDesdeEnvio === true
   };
 }
 
@@ -136,7 +137,8 @@ function publicResolution(value, index) {
     fechaResolucion: text(value.fechaResolucion || value.fechaRevision || value.actualizadoEn || value._updateTime),
     tituloElegido: cleanTitle(value.tituloElegido),
     tituloCorregido: cleanTitle(value.tituloCorregido || value.tituloFinal),
-    legado: value.legado === true
+    legado: value.legado === true,
+    recuperadoDesdeEnvio: value.recuperadoDesdeEnvio === true
   };
 }
 
@@ -193,6 +195,66 @@ function sortResolutions(rows) {
   });
 }
 
+function sameVersionContent(left, right) {
+  return Number(left.numeroVersion || 0) === Number(right.numeroVersion || 0) &&
+    cleanTitle(left.titulo1) === cleanTitle(right.titulo1) &&
+    cleanTitle(left.titulo2) === cleanTitle(right.titulo2) &&
+    cleanTitle(left.titulo3) === cleanTitle(right.titulo3);
+}
+
+function sameResolutionContent(left, right) {
+  return Number(left.numeroResolucion || 0) === Number(right.numeroResolucion || 0) &&
+    normalizeStatus(left.estado) === normalizeStatus(right.estado) &&
+    text(left.coordinador) === text(right.coordinador) &&
+    text(left.comentario || left.observacion) === text(right.comentario || right.observacion) &&
+    text(left.fechaResolucion) === text(right.fechaResolucion);
+}
+
+function ensureCurrentVersion(versions, envio) {
+  const current = legacyVersion(envio);
+  if (!current) return sortVersions(versions);
+
+  const explicitId = text(envio.versionActualId);
+  const currentNumber = Math.max(1, Number(envio.versionActual || current.numeroVersion || 1));
+  const normalizedCurrent = {
+    ...current,
+    id: explicitId || current.id,
+    numeroVersion: currentNumber,
+    recuperadoDesdeEnvio: true
+  };
+
+  const exists = explicitId
+    ? versions.some((item) => text(item.id) === explicitId)
+    : versions.some((item) => sameVersionContent(item, normalizedCurrent));
+  return sortVersions(exists ? versions : [...versions, normalizedCurrent]);
+}
+
+function ensureCurrentResolution(resolutions, envio) {
+  const current = legacyResolution(envio);
+  if (!current) return sortResolutions(resolutions);
+
+  const explicitId = text(envio.resolucionActualId || envio.ultimaResolucionId);
+  const maxExisting = resolutions.reduce(
+    (max, item) => Math.max(max, Number(item.numeroResolucion || 0)),
+    0
+  );
+  const hinted = Number(envio.numeroRevisiones || current.numeroResolucion || 0);
+  const currentNumber = explicitId
+    ? Math.max(1, hinted, maxExisting + 1)
+    : Math.max(1, hinted);
+  const normalizedCurrent = {
+    ...current,
+    id: explicitId || current.id,
+    numeroResolucion: currentNumber,
+    recuperadoDesdeEnvio: true
+  };
+
+  const exists = explicitId
+    ? resolutions.some((item) => text(item.id) === explicitId)
+    : resolutions.some((item) => sameResolutionContent(item, normalizedCurrent));
+  return sortResolutions(exists ? resolutions : [...resolutions, normalizedCurrent]);
+}
+
 async function persistSummary(envio, summary, env) {
   const id = rowId(envio);
   if (!id) return;
@@ -240,14 +302,8 @@ export async function consultarHistorialTitulos(payload = {}, env) {
   let versions = sortVersions(dedupe(versionRows).map(publicVersion));
   let resolutions = sortResolutions(dedupe(resolutionRows).map(publicResolution));
 
-  if (!versions.length) {
-    const fallback = legacyVersion(envio);
-    if (fallback) versions = [fallback];
-  }
-  if (!resolutions.length) {
-    const fallback = legacyResolution(envio);
-    if (fallback) resolutions = [fallback];
-  }
+  versions = ensureCurrentVersion(versions, envio);
+  resolutions = ensureCurrentResolution(resolutions, envio);
 
   const maxVersion = versions.reduce(
     (max, item) => Math.max(max, Number(item.numeroVersion || 0)),
@@ -279,6 +335,8 @@ export async function consultarHistorialTitulos(payload = {}, env) {
     versiones: versions,
     revisiones: resolutions,
     historialDisponible: versions.length > 0 || resolutions.length > 0,
-    registroLegado: versions.some((item) => item.legado) || resolutions.some((item) => item.legado)
+    registroLegado: versions.some((item) => item.legado) || resolutions.some((item) => item.legado),
+    historialRecuperado: versions.some((item) => item.recuperadoDesdeEnvio) ||
+      resolutions.some((item) => item.recuperadoDesdeEnvio)
   };
 }
