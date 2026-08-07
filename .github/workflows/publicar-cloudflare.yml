@@ -1,0 +1,68 @@
+name: Publicar en Cloudflare Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: publicar-cloudflare-main
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Verificar credenciales de Cloudflare
+        shell: bash
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "Faltan los secretos CLOUDFLARE_API_TOKEN o CLOUDFLARE_ACCOUNT_ID en GitHub Actions."
+            exit 1
+          fi
+
+      - name: Verificar proyecto
+        run: npm run check
+
+      - name: Construir Estudiantes y Trabajo de Titulación
+        run: npm run build:estudiantes
+
+      - name: Publicar Estudiantes y Trabajo de Titulación
+        run: npx --yes wrangler@4 pages deploy .pages-estudiantes --project-name titulos --branch main --commit-dirty=true
+
+      - name: Construir Coordinadores
+        run: npm run build:coordinadores
+
+      - name: Publicar Coordinadores
+        run: npx --yes wrangler@4 pages deploy .pages-coordinadores --project-name titulos-coordinadores --branch main --commit-dirty=true
+
+      - name: Construir Administrador
+        run: npm run build:administrador
+
+      - name: Publicar Administrador
+        run: npx --yes wrangler@4 pages deploy .pages-administrador --project-name titulos-administrador --branch main --commit-dirty=true
+
+      - name: Resumen
+        run: |
+          echo "Publicación completada:"
+          echo "https://titulos.pages.dev/estudiantes/estudiante"
+          echo "https://titulos.pages.dev/trabajo-titulacion/"
+          echo "https://titulos-coordinadores.pages.dev/"
+          echo "https://titulos-administrador.pages.dev/"
