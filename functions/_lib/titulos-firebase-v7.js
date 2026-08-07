@@ -157,7 +157,9 @@ function requestedCareers(payload) {
 
 function requestedPeriods(payload) {
   const direct = [payload.periodoId, payload.periodoLabel, payload.periodo]
-    .map(text).filter(Boolean);
+    .flatMap((value) => Array.isArray(value) ? value : [value])
+    .map(text)
+    .filter(Boolean);
   const canonical = direct.map((value) => periodSignature(value)).filter(Boolean);
   return [...new Set([...direct, ...canonical])];
 }
@@ -284,11 +286,7 @@ async function recoverCareerList(result, payload, env) {
     if (!compatibilityPeriods.length) compatibilityPeriods = await principalPeriodValues(env);
     const periodRows = await queryRowsByPeriod(compatibilityPeriods, env);
     compatibilityRows = periodRows.filter(
-      (row) => rowMatchesPayload(
-        row,
-        { ...payload, carreras: missing, periodo: compatibilityPeriods },
-        missing
-      )
+      (row) => rowMatchesPayload(row, { ...payload, carreras: missing }, missing)
     );
     combined = mergeRows(combined, compatibilityRows)
       .filter((row) => rowMatchesPayload(row, payload, careers));
