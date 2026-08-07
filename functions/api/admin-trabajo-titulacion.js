@@ -101,8 +101,8 @@ async function editComment(payload, env) {
 async function reopenReview(payload, env) {
   const envio = await getWork(payload, env);
   const status = currentStatus(envio);
-  if (!['APROBADO', 'REEMPLAZADO'].includes(status)) {
-    throw new Error('Solo se puede devolver al coordinador un Trabajo de Titulación aprobado o aprobado con corrección.');
+  if (!['APROBADO', 'REEMPLAZADO', 'DEVUELTO'].includes(status)) {
+    throw new Error('Este Trabajo de Titulación ya está pendiente de revisión del coordinador.');
   }
   const reason = 'Devuelto al coordinador por el administrador.';
   const fecha = nowIso();
@@ -151,15 +151,17 @@ async function reopenReview(payload, env) {
 
 async function returnWork(payload, env) {
   const envio = await getWork(payload, env);
-  if (currentStatus(envio) === 'DEVUELTO') {
-    throw new Error('Este Trabajo de Titulación ya está devuelto al estudiante.');
-  }
+  const alreadyReturned = currentStatus(envio) === 'DEVUELTO';
   const comment = text(payload.comentario || payload.observacion || payload.comentarioCoordinador)
     || text(envio.observacion || envio.comentarioCoordinador)
     || 'Devuelto al estudiante por el administrador.';
-  const reason = 'Devuelto al estudiante por el administrador.';
+  const reason = alreadyReturned
+    ? 'Devolución al estudiante confirmada por el administrador.'
+    : 'Devuelto al estudiante por el administrador.';
   const fecha = nowIso();
-  const revisionNumber = Number(envio.numeroRevisiones || 0) + 1;
+  const revisionNumber = alreadyReturned
+    ? Number(envio.numeroRevisiones || 0)
+    : Number(envio.numeroRevisiones || 0) + 1;
   const resolutionId = eventId(`${envio.id}__admin_devuelto`);
 
   await commitDocuments('TITULOS', [
@@ -187,8 +189,8 @@ async function returnWork(payload, env) {
     {
       collection: COLECCION_RESOLUCIONES,
       id: resolutionId,
-      data: auditData(envio, 'ADMIN_DEVOLVER_TRABAJO_TITULACION', reason, {
-        numeroResolucion: revisionNumber,
+      data: auditData(envio, alreadyReturned ? 'ADMIN_CONFIRMAR_DEVOLUCION_ESTUDIANTE' : 'ADMIN_DEVOLVER_TRABAJO_TITULACION', reason, {
+        ...(alreadyReturned ? {} : { numeroResolucion: revisionNumber }),
         coordinador: 'Administrador',
         estado: 'DEVUELTO',
         observacion: comment,
@@ -199,7 +201,14 @@ async function returnWork(payload, env) {
     }
   ], env);
 
-  return { ok: true, envioId: envio.id, estado: 'DEVUELTO', mensaje: 'Trabajo de Titulación devuelto al estudiante.' };
+  return {
+    ok: true,
+    envioId: envio.id,
+    estado: 'DEVUELTO',
+    mensaje: alreadyReturned
+      ? 'Devolución al estudiante confirmada.'
+      : 'Trabajo de Titulación devuelto al estudiante.'
+  };
 }
 
 async function removeWork(payload, env) {
