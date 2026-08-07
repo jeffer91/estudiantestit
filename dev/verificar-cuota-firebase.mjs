@@ -66,7 +66,7 @@ assert(
   'El historial anterior no se consulta por envioId.'
 );
 assert(
-  !/listCollection\([\s\S]*'resoluciones'/.test(titlesV7),
+  !/listCollection\(\s*['"]TITULOS['"]\s*,\s*['"]resoluciones['"]/.test(titlesV7),
   'El historial de coordinadores vuelve a leer toda la colección resoluciones.'
 );
 assert(
