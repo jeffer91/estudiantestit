@@ -231,9 +231,6 @@ async function saveCompatibleStudentSubmission(payload = {}, env) {
     throw error;
   }
 
-  /* Si existe un documento histórico compatible se conserva exactamente su ID.
-     Así no se crean duplicados al pasar de 2026-02__cedula a
-     2026-02__2026-08__cedula. */
   const id = rowId(previous) || newArticleId(currentPeriodId || currentPeriodLabel, cedula);
   const [versions, resolutions] = await Promise.all([
     relatedRows('versiones_envio', id, env),
