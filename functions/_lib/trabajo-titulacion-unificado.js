@@ -97,26 +97,37 @@ export function cedulaEstricta(value) {
 
 function legacyWorkEvidence(row) {
   row = row || {};
-  const source = normalizarComparacion(
-    row.migradoDesde || row.origenColeccion || row.coleccionOrigen || row.fuenteOrigen
-  );
-  const migrationId = normalizarComparacion(row.migracionId);
-  const id = normalizarComparacion(row.id || row._id || row._docId || row.envioId || row.idRegistro);
 
-  if (source.includes('trabajo titulacion') || source.includes('trabajo_titulacion')) return true;
-  if (id.includes('trabajo titulacion') || id.includes('trabajo_titulacion')) return true;
+  /* En la base real, los Artículos Académicos históricos también pueden tener
+     migracionId, resolución, observación y estado DEVUELTO/APROBADO. Ninguno de
+     esos campos identifica el tipo de trabajo. Un registro sin tipo explícito
+     solo se considera Trabajo de Titulación cuando conserva una señal
+     estructural inequívoca del flujo específico. */
+  const sources = [
+    row.migradoDesde,
+    row.origenColeccion,
+    row.coleccionOrigen,
+    row.fuenteOrigen
+  ].map(normalizarComparacion).filter(Boolean);
+  if (sources.some((source) =>
+    source.includes('trabajo titulacion') || source.includes('trabajo_titulacion')
+  )) return true;
 
-  /* Los primeros lotes migrados de Trabajo de Titulación quedaron en `envios`
-     sin `tipoTrabajo`, pero sí conservaron `migracionId`. Para no confundir
-     artículos modernos, esta compatibilidad solo se activa cuando faltan
-     explícitamente los campos de tipo y el documento tiene rasgos de resolución
-     del flujo antiguo de Trabajo de Titulación. */
-  const hasExplicitType = Boolean(text(row.tipoTrabajo || row.tipoTrabajoLabel));
-  const hasLegacyResolution = Boolean(
-    text(row.resolucionActualId) &&
-    (text(row.observacion) || text(row.fechaResolucion) || row.requiereRevision === true)
+  const identifiers = [
+    row.id,
+    row._id,
+    row._docId,
+    row._documentId,
+    row.envioId,
+    row.idRegistro,
+    row.versionActualId,
+    row.resolucionActualId,
+    row.ultimaResolucionId
+  ].map(normalizarComparacion).filter(Boolean);
+
+  return identifiers.some((id) =>
+    id.includes('trabajo titulacion') || id.includes('trabajo_titulacion')
   );
-  return !hasExplicitType && Boolean(migrationId) && hasLegacyResolution;
 }
 
 export function esTrabajoTitulacion(row) {
@@ -287,8 +298,9 @@ export async function listarTrabajosTitulacionUnificados(env) {
   );
 
   /* Compatibilidad con documentos históricos que quedaron sin `tipoTrabajo`.
-     Se hace una lectura global solo para completar los legados y se deduplica
-     por ID; los documentos modernos siguen resolviéndose por consulta indexada. */
+     La lectura global solo incorpora registros con evidencia estructural
+     inequívoca de Trabajo de Titulación; los artículos históricos sin tipo
+     permanecen como Artículo Académico. */
   const all = await listCollection('TITULOS', COLECCION_ENVIOS, { maxDocuments: 10000 }, env);
   const map = new Map();
   [...direct, ...all.filter(esTrabajoTitulacion)].forEach((row) => {
