@@ -221,7 +221,7 @@ async function currentPeriod(env) {
 }
 
 async function resolvePeriod(document, cedula, env) {
-  const direct = periodInfo(document);
+  const direct = periodInfo(mergedDocument(document));
   if (direct.id) return { ...direct, source: 'ESTUDIANTE' };
 
   const enrollment = await enrollmentForStudent(cedula, env);
@@ -246,8 +246,18 @@ async function resolvePeriod(document, cedula, env) {
   return { ...fallbackInfo, source: fallbackInfo.id ? 'PERIODOS_UTET' : '' };
 }
 
-function minimumStudent(document, cedula, period, includePhone) {
+function minimumStudent(document, cedula, periodOrIncludePhone, includePhone) {
   const row = mergedDocument(document);
+  let period = periodOrIncludePhone;
+  let phoneRequested = includePhone === true;
+
+  /* Compatibilidad con la firma anterior minimumStudent(doc, cedula, boolean). */
+  if (typeof periodOrIncludePhone === 'boolean' || periodOrIncludePhone === undefined) {
+    phoneRequested = periodOrIncludePhone === true;
+    const directPeriod = periodInfo(row);
+    period = { ...directPeriod, source: directPeriod.id ? 'ESTUDIANTE' : '' };
+  }
+
   const names = text(flexible(row, ['nombres', 'Nombres', 'nombreCompleto', 'Nombre']));
   const career = text(flexible(row, [
     'nombreCarreraActual', 'NombreCarreraActual',
@@ -286,7 +296,7 @@ function minimumStudent(document, cedula, period, includePhone) {
     fuentePeriodo: text(period && period.source)
   };
 
-  if (includePhone === true) {
+  if (phoneRequested) {
     student.celular = phone;
     student.Celular = phone;
   }
