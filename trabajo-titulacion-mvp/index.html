@@ -71,6 +71,24 @@
         <div><span>Período</span><strong id="datoPeriodo">-</strong></div>
       </div>
       <div class="notice"><strong>Denominación institucional:</strong> este proceso se denomina “Trabajo de Titulación”.</div>
+
+      <section id="devolucionDetalle" class="existing-record" hidden aria-live="polite">
+        <div class="existing-record__head">
+          <div>
+            <p class="kicker">Corrección solicitada</p>
+            <h3>Revisa lo enviado y la observación del coordinador</h3>
+          </div>
+          <span class="state-badge state-badge--devuelto">Devuelto</span>
+        </div>
+        <div>
+          <p class="muted"><strong>Títulos enviados anteriormente</strong></p>
+          <div id="devolucionTitulos" class="existing-titles"></div>
+        </div>
+        <div class="existing-resolution">
+          <div><span>Observación del coordinador</span><p id="devolucionObservacion">-</p></div>
+        </div>
+      </section>
+
       <div class="grid">
         <label class="full"><span>Usuario de Telegram</span><input id="telegramInput" placeholder="@usuario" autocomplete="off" required></label>
       </div>
@@ -113,6 +131,6 @@
     </article>
   </template>
 
-  <script src="js/trabajo-titulacion.js?v=1.1.1"></script>
+  <script src="js/trabajo-titulacion.js?v=1.1.2"></script>
 </body>
 </html>
