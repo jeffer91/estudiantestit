@@ -1,6 +1,6 @@
 /* Evita que un estudiante con Trabajo de Titulación existente ingrese por error
- * al formulario de Artículo Académico. La comprobación se hace antes de que
- * arranque la consulta normal de esta pantalla.
+ * al formulario de Artículo Académico. Primero obtiene el período académico
+ * actual y luego comprueba el Trabajo de Titulación dentro de ese período.
  */
 (function (window, document) {
   'use strict';
@@ -45,35 +45,53 @@
     if (button) button.disabled = value === true;
   }
 
-  function consultarTrabajo(id) {
-    return fetch(apiBase() + '/api/trabajo-titulacion', {
+  function post(path, action, data) {
+    return fetch(apiBase() + path, {
       method: 'POST',
       cache: 'no-store',
       headers: {
         'Content-Type': 'application/json',
         'X-Titulos-App': 'estudiantes'
       },
-      body: JSON.stringify({
-        accion: 'CONSULTAR_ENVIO_TRABAJO_TITULACION',
-        metodo: 'POST',
-        datos: {
-          cedula: id,
-          numeroIdentificacion: id
-        }
-      })
+      body: JSON.stringify({ accion: action, metodo: 'POST', datos: data || {} })
     }).then(function (response) {
       return response.text().then(function (body) {
         var json = {};
         try {
           json = body ? JSON.parse(body) : {};
         } catch (_error) {
-          throw new Error('No se pudo verificar el tipo de trabajo registrado.');
+          throw new Error('El sistema respondió en un formato no válido.');
         }
         if (!response.ok || json.ok === false) {
           throw new Error(json.mensaje || json.error || ('Error HTTP ' + response.status));
         }
         return json;
       });
+    });
+  }
+
+  function consultarAcademico(id) {
+    return post('/api/requisitos', 'CONSULTAR_ESTUDIANTE_TITULACION', {
+      cedula: id,
+      numeroIdentificacion: id
+    }).then(function (result) {
+      var student = result && (result.estudiante || result.registro || result.data);
+      if (!result || result.encontrado !== true || !student) return null;
+      return {
+        periodoId: text(student.periodoId || student.periodId || result.periodoId),
+        periodoLabel: text(student.periodoLabel || student.periodo || result.periodoLabel)
+      };
+    });
+  }
+
+  function consultarTrabajo(id, academic) {
+    academic = academic || {};
+    return post('/api/trabajo-titulacion', 'CONSULTAR_ENVIO_TRABAJO_TITULACION', {
+      cedula: id,
+      numeroIdentificacion: id,
+      periodoId: text(academic.periodoId),
+      periodoLabel: text(academic.periodoLabel),
+      periodo: text(academic.periodoLabel || academic.periodoId)
     });
   }
 
@@ -109,9 +127,18 @@
       setBusy(true);
       setStatus('Verificando si tu proceso corresponde a Artículo Académico o Trabajo de Titulación…', 'info');
 
-      consultarTrabajo(id).then(function (result) {
-        var envio = result && (result.envio || result.registro);
-        if (result && result.encontrado === true && envio) {
+      consultarAcademico(id).then(function (academic) {
+        if (!academic) {
+          setStatus('', 'info');
+          continueArticle(form);
+          return null;
+        }
+        return consultarTrabajo(id, academic);
+      }).then(function (result) {
+        var envio;
+        if (!result) return;
+        envio = result && (result.envio || result.registro);
+        if (result.encontrado === true && envio) {
           setStatus('Tu registro corresponde a Trabajo de Titulación. Abriendo el formulario correcto…', 'info');
           window.location.assign('/trabajo-titulacion/?cedula=' + encodeURIComponent(id));
           return;
