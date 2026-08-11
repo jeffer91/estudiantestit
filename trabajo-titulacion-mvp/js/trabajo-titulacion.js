@@ -18,6 +18,19 @@
   function escapeHtml(value){return text(value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');}
   function estadoNormal(value){return text(value).toUpperCase().replace(/[^A-Z0-9]+/g,'_');}
   function estadoLabel(value){var current=estadoNormal(value);var labels={PENDIENTE_REVISION:'Pendiente de revisión',PENDIENTE:'Pendiente de revisión',ENVIADO:'Pendiente de revisión',APROBADO:'Aprobado',REEMPLAZADO:'Aprobado con corrección',DEVUELTO:'Devuelto para corrección'};return labels[current]||text(value)||'Sin estado';}
+  function cleanTitle(value){
+    var output=text(value),match;
+    if(!output)return'';
+    match=output.match(/^(?:["']?titulo["']?)\s*:\s*["']([\s\S]*?)["']$/i);
+    if(match)output=text(match[1]);
+    while(output.length>=2&&((output.charAt(0)==='"'&&output.charAt(output.length-1)==='"')||(output.charAt(0)==="'"&&output.charAt(output.length-1)==="'")))output=text(output.slice(1,-1));
+    return output;
+  }
+  function proposalTitle(value){
+    if(typeof value==='string')return cleanTitle(value);
+    value=value&&typeof value==='object'?value:{};
+    return cleanTitle(value.tituloFinal||value.titulo||value.tituloMejorado||value.texto||value.title);
+  }
 
   function buildPanels(){
     var template=$('proposalTemplate').innerHTML;
@@ -43,7 +56,7 @@
   function setProposal(number,data){
     var root=panel(number),input=root&&root.querySelector('[data-field="tituloFinal"]');
     data=data||{};
-    if(input)input.value=text(data.tituloFinal||data.titulo||'');
+    if(input)input.value=cleanTitle(data.tituloFinal||data.titulo||'');
   }
   function collect(){state.proposals=[1,2,3].map(proposal);return state.proposals;}
 
@@ -83,9 +96,39 @@
     var section=$('registroExistente');
     if(section)section.hidden=true;
   }
+  function hideReturnedDetails(){
+    var section=$('devolucionDetalle');
+    if(section)section.hidden=true;
+  }
   function existingProposals(envio){
-    var details=Array.isArray(envio&&envio.propuestasDetalle)?envio.propuestasDetalle:[];
-    return[1,2,3].map(function(number,index){var item=details[index]||{};return{text:text(envio&&envio['titulo'+number]||item.tituloFinal||item.titulo),number:number};});
+    envio=envio||{};
+    var slots=[cleanTitle(envio.titulo1),cleanTitle(envio.titulo2),cleanTitle(envio.titulo3)];
+    var used={};
+    slots.forEach(function(title){if(title)used[normal(title)]=true;});
+    var candidates=[];
+    function add(value){var title=cleanTitle(value),key=normal(title);if(!title||!key||used[key])return;used[key]=true;candidates.push(title);}
+    var details=Array.isArray(envio.propuestasDetalle)?envio.propuestasDetalle:[];
+    var proposals=Array.isArray(envio.propuestas)?envio.propuestas:[];
+    var sent=Array.isArray(envio.titulosEnviados)?envio.titulosEnviados:[];
+    details.forEach(function(item){add(proposalTitle(item));});
+    proposals.forEach(function(item){add(proposalTitle(item));});
+    sent.forEach(function(item){add(proposalTitle(item));});
+    add(envio.tituloElegido);
+    add(envio.tituloPreferidoTexto);
+    add(envio.tituloFinal);
+    add(envio.tituloAprobado);
+    add(envio.tituloCorregido);
+    var cursor=0;
+    for(var index=0;index<3;index+=1){if(!slots[index]&&cursor<candidates.length){slots[index]=candidates[cursor];cursor+=1;}}
+    return slots.map(function(title,index){return{text:title,number:index+1};}).filter(function(item){return Boolean(item.text);});
+  }
+  function titlesHtml(envio,favorite){
+    var items=existingProposals(envio);
+    if(!items.length)return'<article class="existing-title"><strong>No se encontraron títulos conservados en este registro histórico.</strong></article>';
+    return items.map(function(item){
+      var favoriteLabel=favorite===item.number?'<span class="favorite-chip">★ Favorito</span>':'';
+      return'<article class="existing-title'+(favorite===item.number?' is-favorite':'')+'"><div><span>Título '+item.number+'</span>'+favoriteLabel+'</div><strong>'+escapeHtml(item.text)+'</strong></article>';
+    }).join('');
   }
   function renderExisting(envio,statusValue){
     envio=envio||{};
@@ -98,24 +141,34 @@
     $('existenteNombres').textContent=text(envio.nombres||envio.estudiante||state.student&&state.student.nombres)||'-';
     $('existenteCarrera').textContent=text(envio.carrera||envio.carreraNombre||envio.nombreCarrera||state.student&&state.student.carrera)||'-';
     $('existentePeriodo').textContent=text(envio.periodoLabel||envio.periodoNombre||envio.periodoId||state.student&&state.student.periodoLabel)||'-';
-    $('existenteTitulos').innerHTML=existingProposals(envio).map(function(item){
-      var favoriteLabel=favorite===item.number?'<span class="favorite-chip">★ Favorito</span>':'';
-      return'<article class="existing-title'+(favorite===item.number?' is-favorite':'')+'"><div><span>Título '+item.number+'</span>'+favoriteLabel+'</div><strong>'+escapeHtml(item.text||'-')+'</strong></article>';
-    }).join('');
-    var finalTitle=text(envio.tituloFinal||envio.tituloAprobado||envio.tituloCorregido);
-    var observation=text(envio.observacion||envio.comentarioCoordinador||envio.comentario);
+    $('existenteTitulos').innerHTML=titlesHtml(envio,favorite);
+    var finalTitle=cleanTitle(envio.tituloFinal||envio.tituloAprobado||envio.tituloCorregido);
+    var observation=text(envio.observacion||envio.comentarioCoordinador||envio.comentario||envio.ultimoComentario);
     var resolution=$('existenteResolucion');
     resolution.hidden=!finalTitle&&!observation;
     $('existenteTituloFinal').textContent=finalTitle||'-';
     $('existenteObservacion').textContent=observation||'-';
     section.hidden=false;
   }
+  function renderReturnedDetails(envio){
+    envio=envio||{};
+    var section=$('devolucionDetalle');
+    if(!section)return;
+    var favorite=Number(envio.tituloPreferidoNumero||envio.preferido||0);
+    var observation=text(envio.observacion||envio.comentarioCoordinador||envio.comentario||envio.ultimoComentario);
+    $('devolucionTitulos').innerHTML=titlesHtml(envio,favorite);
+    $('devolucionObservacion').textContent=observation||'No consta una observación del coordinador en este registro.';
+    section.hidden=false;
+  }
   function preload(envio){
     if(!envio)return;
     state.previous=envio;
     if(envio.telegram)$('telegramInput').value=text(envio.telegram);
-    var details=Array.isArray(envio.propuestasDetalle)?envio.propuestasDetalle:[];
-    [1,2,3].forEach(function(number){setProposal(number,details[number-1]||{tituloFinal:envio['titulo'+number]});});
+    var existing=existingProposals(envio);
+    [1,2,3].forEach(function(number){
+      var item=existing.find(function(candidate){return candidate.number===number;});
+      setProposal(number,item?{tituloFinal:item.text}:{tituloFinal:''});
+    });
     state.favorite=Number(envio.tituloPreferidoNumero||envio.preferido||0);
   }
 
@@ -124,6 +177,7 @@
     var id=cedula($('cedulaInput').value);
     if(!id){status('consultaEstado','Ingresa una cédula válida de 10 dígitos.','error');return;}
     hideExisting();
+    hideReturnedDetails();
     busy(true);
     status('consultaEstado','Consultando tus datos académicos...','info');
     request('/api/requisitos','CONSULTAR_ESTUDIANTE_TITULACION',{cedula:id,numeroIdentificacion:id}).then(function(result){
@@ -140,19 +194,22 @@
         renderExisting(envio,currentStatus);
         preload(envio);
         if(currentStatus==='DEVUELTO'){
+          renderReturnedDetails(envio);
           status('consultaEstado','Tu registro fue devuelto. Revisa la observación y corrige los títulos.','info');
-          status('datosEstado','Corrige los títulos según las observaciones del coordinador.','info');
+          status('datosEstado','Revisa los títulos enviados y la observación del coordinador antes de continuar.','info');
           showStep(2);
           return;
         }
+        hideReturnedDetails();
         status('consultaEstado','Tus títulos ya están registrados. Estado: '+estadoLabel(currentStatus)+'.','success');
         showStep(1);
         return;
       }
       hideExisting();
+      hideReturnedDetails();
       status('consultaEstado','Datos encontrados correctamente. Continúa con el registro.','success');
       showStep(2);
-    }).catch(function(error){hideExisting();status('consultaEstado',error.message||'No se pudo realizar la consulta.','error');}).finally(function(){busy(false);});
+    }).catch(function(error){hideExisting();hideReturnedDetails();status('consultaEstado',error.message||'No se pudo realizar la consulta.','error');}).finally(function(){busy(false);});
   }
 
   function continueToProposals(){
