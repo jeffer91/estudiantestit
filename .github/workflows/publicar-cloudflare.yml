@@ -14,7 +14,29 @@ permissions:
   contents: read
 
 jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Verificar proyecto
+        run: npm run check
+
+      - name: Construir las aplicaciones
+        run: |
+          npm run build:estudiantes
+          npm run build:coordinadores
+          npm run build:administrador
+
   publicar:
+    needs: verificar
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -30,39 +52,51 @@ jobs:
         with:
           node-version: 24
 
-      - name: Verificar credenciales de Cloudflare
+      - name: Comprobar si hay credenciales de publicación
+        id: cloudflare
         shell: bash
         run: |
-          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
-            echo "Faltan los secretos CLOUDFLARE_API_TOKEN o CLOUDFLARE_ACCOUNT_ID en GitHub Actions."
-            exit 1
+          if [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "No hay secretos CLOUDFLARE_API_TOKEN/CLOUDFLARE_ACCOUNT_ID. Se omite solo la publicación; la verificación y builds ya fueron ejecutados."
           fi
 
-      - name: Verificar proyecto
-        run: npm run check
-
       - name: Construir Estudiantes y Trabajo de Titulación
+        if: steps.cloudflare.outputs.enabled == 'true'
         run: npm run build:estudiantes
 
       - name: Publicar Estudiantes y Trabajo de Titulación
+        if: steps.cloudflare.outputs.enabled == 'true'
         run: npx --yes wrangler@4 pages deploy .pages-estudiantes --project-name titulos --branch main --commit-dirty=true
 
       - name: Construir Coordinadores
+        if: steps.cloudflare.outputs.enabled == 'true'
         run: npm run build:coordinadores
 
       - name: Publicar Coordinadores
+        if: steps.cloudflare.outputs.enabled == 'true'
         run: npx --yes wrangler@4 pages deploy .pages-coordinadores --project-name titulos-coordinadores --branch main --commit-dirty=true
 
       - name: Construir Administrador
+        if: steps.cloudflare.outputs.enabled == 'true'
         run: npm run build:administrador
 
       - name: Publicar Administrador
+        if: steps.cloudflare.outputs.enabled == 'true'
         run: npx --yes wrangler@4 pages deploy .pages-administrador --project-name titulos-administrador --branch main --commit-dirty=true
 
       - name: Resumen
+        shell: bash
         run: |
-          echo "Publicación completada:"
-          echo "https://titulos.pages.dev/estudiantes/estudiante"
-          echo "https://titulos.pages.dev/trabajo-titulacion/"
-          echo "https://titulos-coordinadores.pages.dev/"
-          echo "https://titulos-administrador.pages.dev/"
+          if [ "${{ steps.cloudflare.outputs.enabled }}" = "true" ]; then
+            echo "Publicación completada:"
+            echo "https://titulos.pages.dev/estudiantes/estudiante"
+            echo "https://titulos.pages.dev/trabajo-titulacion/"
+            echo "https://titulos-coordinadores.pages.dev/"
+            echo "https://titulos-administrador.pages.dev/"
+          else
+            echo "Código verificado y compilado correctamente."
+            echo "Publicación automática omitida porque faltan los secretos de Cloudflare en GitHub Actions."
+          fi
