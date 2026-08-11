@@ -47,8 +47,11 @@ assert(
   'La compatibilidad de períodos está mezclando períodos distintos.'
 );
 
+/* Casos reales observados en el respaldo completo de Firebase Títulos.
+   Los artículos históricos pueden tener migracionId, resolución, observación y
+   estado DEVUELTO; eso NO los convierte en Trabajo de Titulación. */
 assert(
-  esTrabajoTitulacion({
+  !esTrabajoTitulacion({
     id: '2026-02__2026-08__1723533988',
     migracionId: 'MIG_20260724053138',
     estado: 'DEVUELTO',
@@ -56,7 +59,40 @@ assert(
     observacion: 'Se debe delimitar el título',
     fechaResolucion: '2026-07-22T13:42:42.257Z'
   }),
-  'Un Trabajo de Titulación histórico migrado sin tipoTrabajo no se reconoce.'
+  'Katherine, un Artículo Académico histórico, está siendo clasificada como Trabajo de Titulación.'
+);
+assert(
+  !esTrabajoTitulacion({
+    id: '2026-02__2026-08__0604119016',
+    migracionId: 'MIG_20260724053138',
+    estado: 'DEVUELTO',
+    resolucionActualId: '2026-02__2026-08__0604119016__r001__b184c016',
+    titulo1: 'Título 1',
+    titulo2: 'Título 2',
+    titulo3: 'Título 3'
+  }),
+  'Erika, un Artículo Académico histórico, está siendo clasificada como Trabajo de Titulación.'
+);
+assert(
+  esTrabajoTitulacion({
+    id: '2026-04__2026-09__1722963681__trabajo_titulacion',
+    periodoId: '2026-04__2026-09'
+  }),
+  'Un Trabajo de Titulación sin tipo explícito pero con ID estructural no se reconoce.'
+);
+assert(
+  esTrabajoTitulacion({
+    id: '2026-10__1752222404__trabajo_titulacion',
+    migradoDesde: 'envios_trabajo_titulacion'
+  }),
+  'Un Trabajo de Titulación migrado desde su colección específica no se reconoce.'
+);
+assert(
+  esTrabajoTitulacion({
+    id: '2026-04__2026-09__1313465294',
+    tipoTrabajo: 'TRABAJO_TITULACION'
+  }),
+  'Un Trabajo de Titulación con tipo explícito no se reconoce.'
 );
 assert(
   !esTrabajoTitulacion({
@@ -65,6 +101,17 @@ assert(
     migracionId: 'MIG_ARTICULO'
   }),
   'Un artículo con tipo explícito está siendo confundido con Trabajo de Titulación.'
+);
+assert(
+  !esTrabajoTitulacion({
+    id: '2026-02__2026-08__1722129705',
+    migracionId: 'MIG_20260724053138',
+    estado: 'DEVUELTO',
+    requiereRevision: true,
+    fechaResolucion: '2026-07-22T17:05:13.657Z',
+    resolucionActualId: '2026-02__2026-08__1722129705__r001__f34653da'
+  }),
+  'Jessica, un artículo histórico con devolución, está siendo convertida en Trabajo de Titulación.'
 );
 
 const historyBackend = read('functions/_lib/titulos-historial.js');
@@ -141,7 +188,8 @@ if (errors.length) {
 }
 
 console.log('[Compatibilidad histórica] Períodos e IDs históricos son legibles.');
-console.log('[Compatibilidad histórica] Trabajos migrados sin tipoTrabajo se reconocen sin pisar artículos explícitos.');
+console.log('[Compatibilidad histórica] Artículos históricos sin tipo no se confunden con Trabajo de Titulación.');
+console.log('[Compatibilidad histórica] Trabajo de Titulación se reconoce por tipo o evidencia estructural inequívoca.');
 console.log('[Compatibilidad histórica] Historial degrada sin bloquear la pantalla.');
 console.log('[Compatibilidad histórica] Lecturas auxiliares no bloquean el envío final.');
 console.log('[Compatibilidad histórica] Reenvíos conservan el envioId existente y tipifican los nuevos registros.');
