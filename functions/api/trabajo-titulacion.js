@@ -43,6 +43,8 @@ function estado(value, fallback = 'PENDIENTE_REVISION') {
 
 function limpiarTitulo(value) {
   let output = text(value).replace(/\s+/g, ' ');
+  const jsonish = output.match(/^(?:["']?titulo["']?)\s*:\s*["']([\s\S]*?)["']$/i);
+  if (jsonish) output = text(jsonish[1]);
   while (output.length >= 2 && (
     (output.startsWith('"') && output.endsWith('"')) ||
     (output.startsWith("'") && output.endsWith("'"))
@@ -144,11 +146,13 @@ async function buscarPorCedula(cedulaValue, periodoValue, env) {
   const cedula = cedulaEstricta(cedulaValue);
   if (!cedula) return null;
   await migrarTrabajosTitulacionLegados(env);
-  const [porCedula, porNumero] = await Promise.all([
+  const [porCedula, porNumero] = await Promise.allSettled([
     queryEqual('TITULOS', COLECCION_ENVIOS, 'cedula', cedula, 100, env),
     queryEqual('TITULOS', COLECCION_ENVIOS, 'numeroIdentificacion', cedula, 100, env)
   ]);
-  const rows = [...new Map([...porCedula, ...porNumero].map((row) => [row.id, row])).values()]
+  const rowsA = porCedula.status === 'fulfilled' ? porCedula.value : [];
+  const rowsB = porNumero.status === 'fulfilled' ? porNumero.value : [];
+  const rows = [...new Map([...rowsA, ...rowsB].map((row) => [row.id, row])).values()]
     .filter(esTrabajoTitulacion);
   const periodos = Array.isArray(periodoValue) ? periodoValue.filter(text) : [periodoValue].filter(text);
   const candidatos = periodos.length
@@ -224,7 +228,12 @@ async function guardarEnvio(payload, env) {
   }
 
   const id = previous && previous.id || idTrabajoTitulacion(periodoId, cedula);
-  const versiones = await queryEqual('TITULOS', COLECCION_VERSIONES, 'envioId', id, 1000, env);
+  const versionesResult = await Promise.allSettled([
+    queryEqual('TITULOS', COLECCION_VERSIONES, 'envioId', id, 1000, env),
+    queryEqual('TITULOS', COLECCION_RESOLUCIONES, 'envioId', id, 1000, env)
+  ]);
+  const versiones = versionesResult[0].status === 'fulfilled' ? versionesResult[0].value : [];
+  const resoluciones = versionesResult[1].status === 'fulfilled' ? versionesResult[1].value : [];
   const numeroVersion = versiones.reduce(
     (max, item) => Math.max(max, Number(item.numeroVersion || 0)),
     Number(previous && previous.versionActual || 0)
@@ -236,7 +245,10 @@ async function guardarEnvio(payload, env) {
   const nombres = text(student.nombres || student.Nombres || payload.nombres || payload.estudiante);
   const carrera = text(student.carrera || student.NombreCarrera || payload.carrera || payload.nombreCarrera);
   const carreraCodigo = text(student.codigoCarrera || student.CodigoCarrera || payload.codigoCarrera);
-  const revisionesPrevias = Number(previous && previous.numeroRevisiones || 0);
+  const revisionesPrevias = Math.max(
+    Number(previous && previous.numeroRevisiones || 0),
+    resoluciones.reduce((max, item) => Math.max(max, Number(item.numeroResolucion || 0)), 0)
+  );
   const ultimaResolucionId = text(previous && (previous.resolucionActualId || previous.ultimaResolucionId));
   const ultimoComentario = text(previous && (previous.observacion || previous.ultimoComentario));
   const ultimoCoordinador = text(previous && (previous.coordinador || previous.ultimoCoordinador));
@@ -253,7 +265,7 @@ async function guardarEnvio(payload, env) {
     carreraClave: claveCarrera(carrera || carreraCodigo),
     periodoId,
     periodoNombre: periodoNombre || periodoId,
-    telegram: text(payload.telegram || payload.telegramUser),
+    telegram: text(payload.telegram || payload.telegramUser || previous && previous.telegram),
     titulo1: propuestas[0].tituloFinal,
     titulo2: propuestas[1].tituloFinal,
     titulo3: propuestas[2].tituloFinal,
@@ -284,10 +296,12 @@ async function guardarEnvio(payload, env) {
       collection: COLECCION_ENVIOS,
       id,
       data: envioData,
-      merge: false,
+      merge: previous ? true : false,
       ...(previous && previous._updateTime
         ? { updateTime: previous._updateTime }
-        : { exists: false })
+        : previous
+          ? {}
+          : { exists: false })
     },
     {
       collection: COLECCION_VERSIONES,
@@ -321,7 +335,10 @@ async function guardarEnvio(payload, env) {
     numeroRevisiones: revisionesPrevias,
     estado: 'PENDIENTE_REVISION',
     tipoTrabajo: TIPO,
-    mensaje: 'Títulos de Trabajo de Titulación enviados correctamente para revisión.'
+    reutilizoEnvioHistorico: Boolean(previous),
+    mensaje: previous
+      ? 'Correcciones de Trabajo de Titulación reenviadas conservando el registro histórico.'
+      : 'Títulos de Trabajo de Titulación enviados correctamente para revisión.'
   };
 }
 
@@ -339,24 +356,27 @@ async function listar(payload, env) {
 
 async function guardarResolucion(payload, env) {
   const cedula = cedulaEstricta(payload.cedula || payload.numeroIdentificacion);
-  if (!cedula && !payload.envioId) throw new Error('La cédula debe contener exactamente 10 dígitos.');
+  if (!cedula) throw new Error('La cédula debe contener exactamente 10 dígitos.');
   const envio = payload.envioId
     ? await buscarPorId(payload.envioId, env)
     : await buscarPorCedula(cedula, [payload.periodoId, payload.periodoLabel, payload.periodo], env);
-  if (!envio) throw new Error('No se encontró el Trabajo de Titulación indicado.');
+  if (!envio) throw new Error('No se encontró el Trabajo de Titulación del estudiante.');
 
   const status = estado(payload.estadoFinal || payload.estado, 'APROBADO');
   if (!ESTADOS_RESOLUCION.has(status)) throw new Error('La resolución debe ser APROBADO, REEMPLAZADO o DEVUELTO.');
   const selected = limpiarTitulo(payload.tituloElegido || payload.preferido || envio.titulo1);
-  const corrected = limpiarTitulo(payload.tituloCorregido || payload.tituloFinal);
+  const corrected = limpiarTitulo(payload.tituloCorregido);
   const finalTitle = corrected || selected;
   const observation = text(payload.observacion || payload.comentario || payload.comentarioCoordinador);
   if (status === 'DEVUELTO' && observation.length < 4) throw new Error('La devolución necesita un comentario de al menos 4 caracteres.');
   if (status !== 'DEVUELTO' && !finalTitle) throw new Error('La aprobación necesita un título final.');
 
-  const resoluciones = await queryEqual('TITULOS', COLECCION_RESOLUCIONES, 'envioId', envio.id, 1000, env);
-  const numeroResolucion = resoluciones.reduce(
-    (max, item) => Math.max(max, Number(item.numeroResolucion || 0)),
+  const result = await Promise.allSettled([
+    queryEqual('TITULOS', COLECCION_RESOLUCIONES, 'envioId', envio.id, 1000, env)
+  ]);
+  const resoluciones = result[0].status === 'fulfilled' ? result[0].value : [];
+  const numeroResolucion = Math.max(
+    resoluciones.reduce((max, item) => Math.max(max, Number(item.numeroResolucion || 0)), 0),
     Number(envio.numeroRevisiones || 0)
   ) + 1;
   const resolucionId = eventoId(`${envio.id}__r${String(numeroResolucion).padStart(3, '0')}`);
@@ -368,6 +388,8 @@ async function guardarResolucion(payload, env) {
       collection: COLECCION_ENVIOS,
       id: envio.id,
       data: {
+        tipoTrabajo: TIPO,
+        tipoTrabajoLabel: 'Trabajo de Titulación',
         estado: status,
         tituloFinal: status === 'DEVUELTO' ? null : finalTitle,
         observacion: observation,
