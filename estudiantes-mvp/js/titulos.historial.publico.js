@@ -107,11 +107,10 @@
     var resends=Number(history.numeroReenvios||Math.max(0,sends-1));
     var reviews=Number(history.numeroRevisiones||0);
     if(history.historialDisponible===false&&!sends&&!reviews){
-      panel.hidden=true;
-      panel.setAttribute('data-history-loaded','true');
+      panel.innerHTML='<p class="public-history__empty">El historial detallado no está disponible temporalmente. El estado principal del proceso sigue funcionando.</p>'+
+        '<button type="button" class="public-history__retry" data-history-retry="true">Reintentar historial</button>';
       return;
     }
-    panel.hidden=false;
     panel.innerHTML=
       '<div class="public-history__head"><div><p class="public-history__eyebrow">Seguimiento del proceso</p><h4>Historial de envíos y revisiones</h4></div></div>'+
       '<div class="public-history__counts">'+
@@ -155,7 +154,6 @@
 
     panel.setAttribute('data-history-key',key);
     panel.setAttribute('data-history-loaded','false');
-    panel.hidden=false;
     panel.innerHTML='<p class="public-history__loading">Consultando el historial del proceso…</p>';
     inFlight[key]=true;
 
@@ -163,14 +161,13 @@
       .then(function(history){
         if(panel.getAttribute('data-history-key')!==key)return;
         render(panel,history);
-        panel.setAttribute('data-history-loaded','true');
+        panel.setAttribute('data-history-loaded',history.historialDisponible===false?'error':'true');
       })
       .catch(function(error){
         if(panel.getAttribute('data-history-key')!==key)return;
         panel.setAttribute('data-history-loaded','error');
-        panel.hidden=true;
-        panel.innerHTML='';
-        if(window.console&&console.warn)console.warn('[Historial títulos]',error&&error.message||error);
+        panel.innerHTML='<p class="public-history__empty">'+escapeHtml(error&&error.message||'No se pudo consultar el historial.')+'</p>'+
+          '<button type="button" class="public-history__retry" data-history-retry="true">Reintentar historial</button>';
       })
       .finally(function(){delete inFlight[key];});
   }
@@ -188,7 +185,15 @@
 
   new MutationObserver(schedule).observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['hidden','class']});
   document.addEventListener('submit',function(){window.setTimeout(schedule,100);},true);
-  document.addEventListener('click',function(){window.setTimeout(schedule,100);},true);
+  document.addEventListener('click',function(event){
+    var retry=event.target&&event.target.closest?event.target.closest('[data-history-retry]'):null;
+    var panel;
+    if(retry){
+      panel=retry.closest('.public-history');
+      if(panel)panel.setAttribute('data-history-loaded','false');
+    }
+    window.setTimeout(schedule,100);
+  },true);
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',schedule);
   else schedule();
 })(window,document);
