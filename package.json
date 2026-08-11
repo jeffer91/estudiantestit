@@ -21,7 +21,7 @@
     "deploy:administrador:preview": "npm run build:administrador && npx wrangler pages deploy .pages-administrador --project-name titulos-administrador --branch preview-administrador",
     "check:syntax": "node dev/verificar-sintaxis.mjs",
     "check:apps": "node dev/verificar-apps.mjs",
-    "check:compatibility": "node dev/verificar-compatibilidad-historial.mjs",
+    "check:compatibility": "node dev/verificar-compatibilidad-historial.mjs && node scripts/check-historical-compatibility.mjs",
     "check:quota": "node dev/verificar-cuota-firebase.mjs",
     "check:outlook": "node dev/verificar-correo-outlook.mjs",
     "check:architecture": "node dev/verificar-arquitectura.mjs",
