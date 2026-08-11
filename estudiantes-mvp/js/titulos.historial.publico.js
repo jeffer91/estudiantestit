@@ -60,6 +60,7 @@
       '.public-history__version{margin-top:9px;padding:10px;border-radius:10px;background:#fff}' +
       '.public-history__version ul{margin:8px 0 0;padding-left:20px}' +
       '.public-history__loading,.public-history__empty{margin:0;color:#65768d;font-size:13px}' +
+      '.public-history__retry{margin-top:10px;padding:8px 12px;border:1px solid #123b70;border-radius:999px;background:#fff;color:#123b70;font-weight:800;cursor:pointer}' +
       '@media(max-width:640px){.public-history__counts{grid-template-columns:1fr}.public-history__head,.public-history__item-head{display:block}}';
     document.head.appendChild(style);
   }
@@ -138,11 +139,12 @@
     var panelId=article?'historialTitulosArticulo':'historialTitulosTrabajo';
     var type=article?'ARTICULO_ACADEMICO':'TRABAJO_TITULACION';
     var key=[type,identification,period].join('|');
-    var panel;
+    var panel,loaded;
 
     if(!visible(container)||!identification)return;
     panel=ensurePanel(container,panelId);
-    if(panel.getAttribute('data-history-key')===key&&panel.getAttribute('data-history-loaded')==='true')return;
+    loaded=panel.getAttribute('data-history-loaded');
+    if(panel.getAttribute('data-history-key')===key&&(loaded==='true'||loaded==='error'))return;
     if(inFlight[key])return;
 
     panel.setAttribute('data-history-key',key);
@@ -158,7 +160,9 @@
       })
       .catch(function(error){
         if(panel.getAttribute('data-history-key')!==key)return;
-        panel.innerHTML='<p class="public-history__empty">'+escapeHtml(error&&error.message||'No se pudo consultar el historial.')+'</p>';
+        panel.setAttribute('data-history-loaded','error');
+        panel.innerHTML='<p class="public-history__empty">'+escapeHtml(error&&error.message||'No se pudo consultar el historial.')+'</p>'+
+          '<button type="button" class="public-history__retry" data-history-retry="true">Reintentar historial</button>';
       })
       .finally(function(){delete inFlight[key];});
   }
@@ -176,7 +180,15 @@
 
   new MutationObserver(schedule).observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['hidden','class']});
   document.addEventListener('submit',function(){window.setTimeout(schedule,100);},true);
-  document.addEventListener('click',function(){window.setTimeout(schedule,100);},true);
+  document.addEventListener('click',function(event){
+    var retry=event.target&&event.target.closest?event.target.closest('[data-history-retry]'):null;
+    var panel;
+    if(retry){
+      panel=retry.closest('.public-history');
+      if(panel)panel.setAttribute('data-history-loaded','false');
+    }
+    window.setTimeout(schedule,100);
+  },true);
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',schedule);
   else schedule();
 })(window,document);
