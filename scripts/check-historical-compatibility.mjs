@@ -89,8 +89,12 @@ assert(
 
 const publicHistory = read('estudiantes-mvp/js/titulos.historial.publico.js');
 assert(
-  /panel\.hidden=true/.test(publicHistory),
-  'El frontend del historial no se oculta de forma segura cuando el historial falla.'
+  /data-history-retry/.test(publicHistory) && /data-history-loaded','error'/.test(publicHistory),
+  'El frontend del historial no degrada con reintento manual controlado.'
+);
+assert(
+  /loaded==='true'\|\|loaded==='error'/.test(publicHistory),
+  'El MutationObserver puede volver a disparar reintentos infinitos después de un error.'
 );
 
 const titlesApi = read('functions/api/titulos.js');
