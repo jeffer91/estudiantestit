@@ -28,15 +28,36 @@ export async function onRequest({ request, env }) {
     ).replace(/\D/g, '');
 
     if (!hasId && !hasCedula) {
-      throw new Error('No se recibió un envío o una cédula para consultar el historial.');
+      return jsonReply(request, {
+        ok: true,
+        encontrado: false,
+        existe: false,
+        numeroEnvios: 0,
+        numeroReenvios: 0,
+        numeroRevisiones: 0,
+        versiones: [],
+        revisiones: []
+      });
     }
 
     const result = await consultarHistorialTitulos(payload, env);
     return jsonReply(request, result);
   } catch (error) {
+    /* El historial es informativo y nunca debe bloquear la pantalla principal
+       ni provocar reintentos agresivos. Devuelve una respuesta válida y deja
+       el diagnóstico en `advertencia` para que el estado principal pueda seguir
+       consultándose directamente desde `envios`. */
     return jsonReply(request, {
-      ok: false,
-      mensaje: error && error.message || 'No fue posible consultar el historial.'
-    }, 502);
+      ok: true,
+      encontrado: false,
+      existe: false,
+      numeroEnvios: 0,
+      numeroReenvios: 0,
+      numeroRevisiones: 0,
+      versiones: [],
+      revisiones: [],
+      historialDisponible: false,
+      advertencia: error && error.message || 'No fue posible consultar el historial.'
+    });
   }
 }
