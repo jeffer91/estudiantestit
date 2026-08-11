@@ -6,7 +6,7 @@ import {
   executeTitulosAction as executePrevious,
   publicTitleConfiguration
 } from './titulos-firebase-v9.js';
-import { queryEqual, text } from './firestore-fixed.js';
+import { listCollection, queryEqual, text } from './firestore-fixed.js';
 import {
   TIPO_TRABAJO_TITULACION,
   coincidePeriodoTrabajo,
@@ -86,6 +86,45 @@ function requestedPeriods(payload) {
     .filter(Boolean);
 }
 
+function rowPeriods(row) {
+  row = row || {};
+  return [row.periodoId, row.periodId, row.periodoNombre, row.periodoLabel, row.periodo]
+    .map(text)
+    .filter(Boolean);
+}
+
+function activeValue(value) {
+  if (value === undefined || value === null || value === '') return true;
+  if (value === false) return false;
+  return !['0', 'false', 'no', 'inactivo', 'desactivado', 'anulado']
+    .includes(text(value).toLowerCase());
+}
+
+function principalValue(row) {
+  return Boolean(row && (
+    row.principal === true || row.esPrincipal === true ||
+    text(row.tipo).toUpperCase() === 'PRINCIPAL'
+  ));
+}
+
+async function principalPeriods(env) {
+  try {
+    const periods = await listCollection('TITULOS', 'periodos', { maxDocuments: 500 }, env);
+    const active = periods.filter((item) => activeValue(
+      item.activo !== undefined ? item.activo : item.estado
+    ));
+    const selected = active.find(principalValue) || active[0] ||
+      periods.find(principalValue) || periods[0];
+    if (!selected) return [];
+    return [
+      selected.id, selected.periodoId, selected.periodId, selected.periodoCanonicoId,
+      selected.nombre, selected.label, selected.periodoNombre, selected.periodoLabel, selected.periodo
+    ].map(text).filter(Boolean);
+  } catch (_error) {
+    return [];
+  }
+}
+
 function decorate(row) {
   if (!row || typeof row !== 'object') return row;
   return {
@@ -113,7 +152,7 @@ function mergeRows(...groups) {
   return [...map.values()];
 }
 
-async function historicalWorkRows(payload, env) {
+async function historicalWorkRows(payload, existingRows, env) {
   const careers = splitList(payload.carreras || payload.carrera || payload.nombreCarrera);
   if (!careers.length) return [];
 
@@ -133,7 +172,9 @@ async function historicalWorkRows(payload, env) {
     result.value.forEach((row, index) => map.set(rowId(row, index), row));
   });
 
-  const periods = requestedPeriods(payload);
+  let periods = requestedPeriods(payload);
+  if (!periods.length) periods = [...new Set(existingRows.flatMap(rowPeriods))];
+  if (!periods.length) periods = await principalPeriods(env);
   const requestedState = normalizeStatus(payload.estado);
 
   return [...map.values()].filter((row) => {
@@ -149,10 +190,11 @@ async function recoverHistoricalWorkList(result, payload, env) {
   const type = text(payload.tipoTrabajo).toUpperCase();
   if (type !== TIPO_TRABAJO_TITULACION) return result;
 
-  const historical = await historicalWorkRows(payload, env);
+  const existing = extractRows(result);
+  const historical = await historicalWorkRows(payload, existing, env);
   if (!historical.length) return result;
 
-  const merged = mergeRows(extractRows(result), historical)
+  const merged = mergeRows(existing, historical)
     .map(decorate)
     .sort((left, right) => {
       const a = Date.parse(left.fechaResolucion || left.fechaEnvio || left._updateTime || '') || 0;
