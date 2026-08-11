@@ -3,6 +3,7 @@ import {
   listCollection,
   periodSignature,
   queryEqual,
+  samePeriod,
   setDocument,
   text
 } from './firestore-fixed.js';
@@ -33,10 +34,20 @@ function normalizarComparacion(value) {
     .trim();
 }
 
+function periodosDesdeId(value) {
+  const id = text(value).toLowerCase();
+  if (!id) return [];
+  const match = id.match(/^(20\d{2}-\d{2})(?:__(20\d{2}-\d{2}))?(?:__|$)/);
+  if (!match) return [];
+  return match[2]
+    ? [match[1], `${match[1]}__${match[2]}`]
+    : [match[1]];
+}
+
 function valoresPeriodo(value) {
   if (Array.isArray(value)) return value.flatMap(valoresPeriodo).filter(Boolean);
   if (value && typeof value === 'object') {
-    return [
+    const direct = [
       value.periodoId,
       value.periodId,
       value.periodoNombre,
@@ -45,9 +56,37 @@ function valoresPeriodo(value) {
       value.periodoCanonicoLabel,
       value.periodo
     ].map(text).filter(Boolean);
+    const id = text(value.id || value._id || value._docId || value.envioId || value.idRegistro);
+    return [...new Set([...direct, ...periodosDesdeId(id)])];
   }
   const direct = text(value);
   return direct ? [direct] : [];
+}
+
+function partesPeriodo(value) {
+  const signature = text(periodSignature(value));
+  return signature ? signature.split('__').filter(Boolean) : [];
+}
+
+function periodoCompatible(left, right) {
+  const a = text(left);
+  const b = text(right);
+  if (!a || !b) return false;
+  if (normalizarComparacion(a) === normalizarComparacion(b)) return true;
+  if (samePeriod(a, b)) return true;
+
+  const partsA = partesPeriodo(a);
+  const partsB = partesPeriodo(b);
+  if (!partsA.length || !partsB.length) return false;
+
+  /* Compatibilidad histórica: antes algunos documentos guardaban únicamente
+     el mes inicial (por ejemplo 2026-02) mientras otros guardaban el rango
+     completo (2026-02__2026-08). Solo se acepta como equivalencia cuando el
+     valor corto coincide con el inicio del rango; no se infieren códigos
+     institucionales que no estén presentes en los datos. */
+  if (partsA.length === 1 && partsB.length > 1 && partsA[0] === partsB[0]) return true;
+  if (partsB.length === 1 && partsA.length > 1 && partsB[0] === partsA[0]) return true;
+  return false;
 }
 
 function migrationEnabled(env, options = {}) {
@@ -76,13 +115,7 @@ export function coincidePeriodoTrabajo(rowOrValue, requested) {
   const left = valoresPeriodo(rowOrValue);
   const right = valoresPeriodo(requested);
   if (!left.length || !right.length) return false;
-
-  return left.some((a) => right.some((b) => {
-    if (normalizarComparacion(a) === normalizarComparacion(b)) return true;
-    const signatureA = periodSignature(a);
-    const signatureB = periodSignature(b);
-    return Boolean(signatureA && signatureB && signatureA === signatureB);
-  }));
+  return left.some((a) => right.some((b) => periodoCompatible(a, b)));
 }
 
 export function idTrabajoTitulacion(periodo, cedula) {
