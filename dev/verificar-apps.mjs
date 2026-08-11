@@ -75,7 +75,6 @@ const unifiedWork = read('functions/_lib/trabajo-titulacion-unificado.js');
 const titlesV6 = read('functions/_lib/titulos-firebase-v6.js');
 const titlesV7 = read('functions/_lib/titulos-firebase-v7.js');
 const adminGlobal = read('functions/_lib/admin-global-v6.js');
-const adminGlobalBase = read('functions/_lib/admin-global-v5.js');
 const adminApi = read('administrador/ad-js/ad-api.service.js');
 const adminPdf = read('administrador/ad-js/ad-pdf-firebase.js');
 const studentRequirements = read('estudiantes-mvp/js/requisitos.estudiantes.service.js');
@@ -117,15 +116,17 @@ assert(coincidePeriodoTrabajo(periodoPrueba, ['2026-10']), 'No coincide el códi
 assert(coincidePeriodoTrabajo(periodoPrueba, ['Octubre 2025 a Marzo 2026']), 'No coincide el nombre institucional del período.');
 assert(!coincidePeriodoTrabajo(periodoPrueba, ['Abril 2026 a Septiembre 2026']), 'Se confundieron dos períodos diferentes.');
 assert(/logo-itsqmet\.png/.test(workHtml), 'Trabajo de Titulación no usa el logo institucional.');
+assert(/\/api\/requisitos/.test(workScript) && /CONSULTAR_ESTUDIANTE_TITULACION/.test(workScript), 'Trabajo de Titulación no utiliza el lector académico compartido.');
+assert(/getStudentBasic/.test(workApi), 'Trabajo de Titulación no revalida al estudiante con Firebase UTET antes de guardar.');
 assert(/COLECCION_ENVIOS/.test(workApi) && /'envios'/.test(unifiedWork), 'Trabajo de Titulación no guarda en la colección envios.');
 assert(/envios_trabajo_titulacion/.test(unifiedWork) && /migrarTrabajosTitulacionLegados/.test(unifiedWork), 'No existe migración de los registros históricos de Trabajo de Titulación.');
-assert(/coincidePeriodoTrabajo/.test(workApi) && /coincidePeriodoTrabajo/.test(titlesV6) && /queryPeriodRows/.test(adminGlobalBase) && /samePeriod/.test(adminGlobalBase), 'La coincidencia de períodos no está aplicada en Estudiantes, Coordinadores y Administrador.');
+assert(/coincidePeriodoTrabajo/.test(workApi) && /coincidePeriodoTrabajo/.test(titlesV6) && /queryPeriodRows/.test(adminGlobal) && /samePeriod/.test(adminGlobal), 'La coincidencia de períodos no está aplicada en Trabajo de Titulación, Títulos y Administrador.');
 assert(/ENABLE_LEGACY_TITULOS_MIGRATION/.test(unifiedWork), 'La migración histórica no requiere una habilitación explícita.');
 assert(!/migrarTrabajosTitulacionLegados/.test(titlesV6), 'Firebase Títulos todavía ejecuta migraciones completas durante consultas normales.');
 assert(!/migrarTrabajosTitulacionLegados/.test(adminGlobal), 'Administrador todavía ejecuta migraciones completas durante consultas normales.');
 assert(!/listCollection\('TITULOS', 'resoluciones'/.test(titlesV7), 'El historial todavía descarga toda la colección resoluciones.');
 assert(/queryEqual\('TITULOS', 'resoluciones', 'envioId'/.test(titlesV7), 'El historial no se consulta por el envío específico.');
-assert(/segundaLecturaEnviosEliminada/.test(adminGlobal), 'Administrador no confirma la eliminación de la segunda lectura de envíos.');
+assert(/segundaLecturaEnviosEliminada:\s*true/.test(adminGlobal), 'Administrador no confirma la eliminación de la segunda lectura de envíos.');
 
 assert(/\/api\/acceso-estudiante/.test(read('estudiantes-mvp/js/estudiante.consulta.revision.js')), 'Estudiantes no usa la consulta unificada.');
 assert(/getStudentBasicFast/.test(studentAccess), 'La consulta unificada no usa la lectura rápida de Firebase UTET.');
@@ -135,8 +136,12 @@ assert(studentAccess.indexOf('lookupAcademic') < studentAccess.indexOf('queryTit
 assert(/CONSULTAR_ENVIO_CEDULA/.test(studentAccess) && /scope:\s*'period'/.test(studentAccess), 'Firebase Títulos no se consulta por cédula y período exactos.');
 assert(/GOOGLE_SHEETS_ESTUDIANTES/.test(studentAccess), 'La respuesta no identifica el respaldo institucional.');
 
-assert(/getDocument\('UTET', 'Estudiantes', canonical/.test(studentFirebaseFastCode), 'Firebase UTET no consulta el documento directo por cédula.');
-assert(!/queryEqual|EstudiantesPeriodo|listCollection\('TITULOS'/.test(studentFirebaseFastCode), 'La consulta rápida de UTET realiza lecturas adicionales.');
+assert(/getDocument\('UTET', 'Estudiante', id/.test(studentFirebaseFastCode), 'Firebase UTET no prioriza Estudiante/{cedula}.');
+assert(/getDocument\('UTET', 'Estudiantes', id/.test(studentFirebaseFastCode), 'No existe compatibilidad temporal con la colección Estudiantes.');
+assert(/queryField\('UTET', 'matriculas'/.test(studentFirebaseFastCode), 'La consulta académica no resuelve el período desde matriculas.');
+assert(/listCollection\('UTET', 'matriculas'/.test(studentFirebaseFastCode), 'La consulta académica no contempla matrículas con referencias o IDs compuestos.');
+assert(!/currentPeriod\s*\(/.test(studentFirebaseFastCode), 'La consulta académica todavía asigna un período global sin una matrícula del estudiante.');
+assert(/nombreCarreraActual/.test(studentFirebaseFast) && /codigoCarreraActual/.test(studentFirebaseFast), 'El lector de estudiantes no reconoce los campos vigentes de carrera.');
 assert(/payloadJson/.test(studentFirebaseFast), 'La consulta rápida no aprovecha payloadJson.');
 assert(/consultar_estudiante_rapido/.test(studentSheetsFallback), 'El respaldo no usa la acción rápida de Apps Script.');
 assert(/sheetName:\s*'Estudiantes'/.test(studentSheetsFallback), 'El respaldo no está limitado a la hoja Estudiantes.');
@@ -146,6 +151,13 @@ assert(/createTextFinder/.test(appsScriptFast), 'Apps Script no busca la cédula
 assert(!/ensureAllSheets_|handlePullBL2_/.test(appsScriptFast), 'La consulta rápida de Apps Script ejecuta procesos pesados.');
 assert(/VERSION\s*=\s*'2\.4\.4'/.test(studentBuild), 'El build de Estudiantes no usa la versión 2.4.4.');
 assert(/VERSION_ESTUDIANTES\s*=\s*'2\.4\.4'/.test(localBuild), 'El entorno local no usa Estudiantes 2.4.4.');
+
+assert(/currentEnrollments/.test(adminGlobal) && /queryPeriodRows\('UTET', 'matriculas'/.test(adminGlobal), 'Administrador no construye la población desde matriculas.');
+assert(/getDocument\('UTET', 'Estudiante'/.test(adminGlobal), 'Administrador no obtiene los datos maestros desde Estudiante.');
+assert(/nombreCarreraActual/.test(adminGlobal) && /codigoCarreraActual/.test(adminGlobal), 'Administrador no reconoce los campos actuales de carrera.');
+assert(/correoInstitucional/.test(adminGlobal) && /correoPersonal/.test(adminGlobal), 'Administrador no conserva los correos actuales para los recordatorios.');
+assert(/UTET_MATRICULAS_Y_ESTUDIANTE/.test(adminGlobal), 'Administrador no identifica la nueva fuente de población académica.');
+assert(/NO_ENVIADO/.test(adminGlobal) && /DEVUELTO/.test(adminGlobal) && /APROBADO/.test(adminGlobal), 'Administrador no cruza correctamente población y estados de Títulos.');
 
 assert(/\/api\/requisitos/.test(studentRequirements), 'Estudiantes debe conservar la API de Firebase UTET.');
 assert(/\/api\/titulos/.test(studentSheets), 'Estudiantes no utiliza Firebase Títulos para envíos.');
@@ -161,7 +173,7 @@ if (errors.length) {
   process.exit(1);
 }
 
-console.log('[Apps] Estudiantes: Firebase UTET directo, Google Sheets Estudiantes como respaldo y Firebase Títulos al final.');
-console.log('[Apps] Trabajo de Titulación: envíos unificados y migración histórica únicamente bajo ejecución explícita.');
-console.log('[Apps] Coordinadores: consulta filtrada por las carreras asignadas y detalle bajo demanda.');
-console.log('[Apps] Administrador: consultas por período sin segunda lectura de envíos.');
+console.log('[Apps] Estudiantes: Estudiante + matriculas en Firebase UTET, con Google Sheets como respaldo y Títulos al final.');
+console.log('[Apps] Trabajo de Titulación: comparte el lector académico de UTET y guarda envíos unificados.');
+console.log('[Apps] Coordinadores: permanece aislado de UTET y trabaja únicamente sobre Firebase Títulos.');
+console.log('[Apps] Administrador: población desde matriculas + Estudiante, cruzada con Títulos por período.');
