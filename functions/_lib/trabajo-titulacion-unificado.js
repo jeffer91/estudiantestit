@@ -79,11 +79,6 @@ function periodoCompatible(left, right) {
   const partsB = partesPeriodo(b);
   if (!partsA.length || !partsB.length) return false;
 
-  /* Compatibilidad histórica: antes algunos documentos guardaban únicamente
-     el mes inicial (por ejemplo 2026-02) mientras otros guardaban el rango
-     completo (2026-02__2026-08). Solo se acepta como equivalencia cuando el
-     valor corto coincide con el inicio del rango; no se infieren códigos
-     institucionales que no estén presentes en los datos. */
   if (partsA.length === 1 && partsB.length > 1 && partsA[0] === partsB[0]) return true;
   if (partsB.length === 1 && partsA.length > 1 && partsB[0] === partsA[0]) return true;
   return false;
@@ -100,10 +95,38 @@ export function cedulaEstricta(value) {
   return digits.length === 10 ? digits : '';
 }
 
+function legacyWorkEvidence(row) {
+  row = row || {};
+  const source = normalizarComparacion(
+    row.migradoDesde || row.origenColeccion || row.coleccionOrigen || row.fuenteOrigen
+  );
+  const migrationId = normalizarComparacion(row.migracionId);
+  const id = normalizarComparacion(row.id || row._id || row._docId || row.envioId || row.idRegistro);
+
+  if (source.includes('trabajo titulacion') || source.includes('trabajo_titulacion')) return true;
+  if (id.includes('trabajo titulacion') || id.includes('trabajo_titulacion')) return true;
+
+  /* Los primeros lotes migrados de Trabajo de Titulación quedaron en `envios`
+     sin `tipoTrabajo`, pero sí conservaron `migracionId`. Para no confundir
+     artículos modernos, esta compatibilidad solo se activa cuando faltan
+     explícitamente los campos de tipo y el documento tiene rasgos de resolución
+     del flujo antiguo de Trabajo de Titulación. */
+  const hasExplicitType = Boolean(text(row.tipoTrabajo || row.tipoTrabajoLabel));
+  const hasLegacyResolution = Boolean(
+    text(row.resolucionActualId) &&
+    (text(row.observacion) || text(row.fechaResolucion) || row.requiereRevision === true)
+  );
+  return !hasExplicitType && Boolean(migrationId) && hasLegacyResolution;
+}
+
 export function esTrabajoTitulacion(row) {
-  return text(row && row.tipoTrabajo).toUpperCase() === TIPO_TRABAJO_TITULACION ||
-    text(row && row.tipoTrabajoLabel).toLowerCase() === 'trabajo de titulación' ||
-    text(row && (row.id || row._id || row._docId)).toLowerCase().includes('trabajo_titulacion');
+  const type = text(row && row.tipoTrabajo).toUpperCase();
+  const label = normalizarComparacion(row && row.tipoTrabajoLabel);
+  if (type === TIPO_TRABAJO_TITULACION) return true;
+  if (type === 'ARTICULO_ACADEMICO') return false;
+  if (label === 'trabajo de titulacion') return true;
+  if (label === 'articulo academico') return false;
+  return legacyWorkEvidence(row);
 }
 
 export function periodoTrabajo(value) {
@@ -171,10 +194,6 @@ async function copiarColeccion(origen, destino, transform, env) {
 }
 
 export async function migrarTrabajosTitulacionLegados(env, options = {}) {
-  /* Nunca se ejecuta automáticamente durante consultas normales. Antes esta
-     función barría tres colecciones completas en cada solicitud, agotando la
-     cuota de Firestore. Para ejecutarla se debe habilitar explícitamente la
-     variable ENABLE_LEGACY_TITULOS_MIGRATION o usar { forzar: true }. */
   if (!migrationEnabled(env, options)) {
     return {
       ok: true,
@@ -258,9 +277,7 @@ export async function migrarTrabajosTitulacionLegados(env, options = {}) {
 }
 
 export async function listarTrabajosTitulacionUnificados(env) {
-  /* El listado normal se resuelve por el campo tipoTrabajo. Ya no recorre toda
-     la colección envios para filtrar en memoria. */
-  return queryEqual(
+  const direct = await queryEqual(
     'TITULOS',
     COLECCION_ENVIOS,
     'tipoTrabajo',
@@ -268,4 +285,15 @@ export async function listarTrabajosTitulacionUnificados(env) {
     1000,
     env
   );
+
+  /* Compatibilidad con documentos históricos que quedaron sin `tipoTrabajo`.
+     Se hace una lectura global solo para completar los legados y se deduplica
+     por ID; los documentos modernos siguen resolviéndose por consulta indexada. */
+  const all = await listCollection('TITULOS', COLECCION_ENVIOS, { maxDocuments: 10000 }, env);
+  const map = new Map();
+  [...direct, ...all.filter(esTrabajoTitulacion)].forEach((row) => {
+    const id = documentoId(row, COLECCION_ENVIOS);
+    if (id) map.set(id, row);
+  });
+  return [...map.values()];
 }
