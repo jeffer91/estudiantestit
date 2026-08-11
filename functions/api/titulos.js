@@ -502,11 +502,6 @@ async function executeAccess(env, payload, userRole) {
     12000
   );
 
-  /*
-    Algunas hojas antiguas guardaron las cédulas como números y eliminaron
-    el cero inicial. Si la consulta rápida no encuentra el registro, se usa
-    pull_bl2 una sola vez y se compara la forma de 10 y de 9 dígitos.
-  */
   if (!studentFound(base)) {
     try {
       const fallback = await lookupStudentFallback(env, cedula, requestedPeriod);
@@ -521,10 +516,6 @@ async function executeAccess(env, payload, userRole) {
 
   const student = base.estudiante || base.registro || {};
 
-  /*
-    Aunque Claves encuentre el índice, siempre se consulta TITULOS.
-    Así se recupera la resolución más reciente y el título final aprobado.
-  */
   let direct = await lookupEnvio(
     env,
     {
@@ -689,19 +680,10 @@ export async function onRequest({ request, env }) {
     delete payload.token;
     delete payload.acceso;
 
-    if (action === 'ENVIO_ESTUDIANTE') {
-      const previous = await lookupEnvio(env, payload, userRole);
-      if (directHasEnvio(previous) && !permiteReenvio(previous)) {
-        return jsonReply(request, {
-          ok: false,
-          duplicado: true,
-          tieneEnvio: true,
-          envio: extractEnvio(previous),
-          mensaje: 'Tus propuestas ya fueron enviadas y están siendo revisadas por coordinación.'
-        }, 409);
-      }
-    }
-
+    /* La escritura es la autoridad final. No hacemos una segunda consulta
+       obligatoria aquí antes de ENVIO_ESTUDIANTE: el servicio de Firebase
+       valida duplicados/reenvíos dentro de la misma ruta que va a guardar.
+       Esto evita que una falla temporal de lectura bloquee un envío válido. */
     let result;
     if (READ_BY_ID.has(action)) {
       result = await verifyWithCache(
@@ -728,6 +710,6 @@ export async function onRequest({ request, env }) {
       ok: false,
       servicio: 'TITULOS',
       mensaje: error.message || String(error)
-    }, 502);
+    }, error && error.duplicado ? 409 : 502);
   }
 }
