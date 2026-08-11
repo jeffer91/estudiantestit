@@ -1,11 +1,14 @@
-/* Consulta rápida de identidad académica desde Firebase UTET.
- * Máximo: dos lecturas directas en Estudiantes/{cedula}.
- * No consulta EstudiantesPeriodo, requisitos, notas ni Firebase Títulos.
+/* Consulta de identidad académica desde Firebase UTET.
+ * Fuente principal: Estudiante/{cedula}.
+ * El período se resuelve desde matriculas y periodos cuando ya no viene
+ * duplicado dentro del documento maestro del estudiante.
  */
 import {
   getDocument,
+  listCollection,
   normalizeCedula,
   periodSignature,
+  queryField,
   text
 } from './firestore-fixed.js';
 
@@ -46,19 +49,228 @@ function mergedDocument(document) {
   return { ...payload, ...(document || {}) };
 }
 
-function minimumStudent(document, cedula, includePhone) {
+function scalar(value, nestedNames = []) {
+  if (value === null || value === undefined) return '';
+  if (typeof value !== 'object') return text(value);
+  const nested = flexible(value, nestedNames.length ? nestedNames : [
+    'id', 'periodoId', 'codigo', 'nombre', 'label', 'periodoLabel', 'periodoNombre'
+  ]);
+  return nested === undefined ? '' : scalar(nested);
+}
+
+function referenceId(value) {
+  const raw = scalar(value);
+  if (!raw) return '';
+  const clean = raw.replace(/\/+$/, '');
+  return clean.includes('/') ? clean.split('/').pop() : clean;
+}
+
+function yes(value) {
+  return value === true || ['1', 'TRUE', 'SI', 'SÍ', 'YES', 'ACTIVO', 'ACTIVA'].includes(text(value).toUpperCase());
+}
+
+function active(row) {
+  if (!row || typeof row !== 'object') return false;
+  if (row.eliminado === true || yes(flexible(row, ['eliminado', 'deleted'])) && row.eliminado !== false) {
+    return false;
+  }
+  const status = text(flexible(row, [
+    'estadoMatricula', 'estado', 'Estado', 'status', 'activo'
+  ])).toUpperCase();
+  if (!status) return true;
+  return !['FALSE', '0', 'NO', 'INACTIVO', 'INACTIVA', 'RETIRADO', 'ANULADO', 'CANCELADO', 'ELIMINADO'].includes(status);
+}
+
+function principal(row) {
+  return Boolean(row && (
+    row.principal === true ||
+    row.esPrincipal === true ||
+    text(row.tipo).toUpperCase() === 'PRINCIPAL' ||
+    text(row.estado).toUpperCase() === 'PRINCIPAL'
+  ));
+}
+
+function periodInfo(row) {
+  row = row || {};
+  const idRaw = scalar(flexible(row, [
+    'periodoId', 'periodId', 'periodoAcademicoId', 'idPeriodo',
+    'codigoPeriodo', 'periodoCodigo', 'periodoCanonicoId'
+  ]), ['id', 'codigo', 'periodoId']);
+  const labelRaw = scalar(flexible(row, [
+    'periodoLabel', 'periodoNombre', 'nombrePeriodo', 'periodoAcademico',
+    'periodo', 'nombre', 'label'
+  ]), ['nombre', 'label', 'periodoLabel', 'periodoNombre', 'id']);
+  const reference = flexible(row, [
+    'periodoRef', 'periodoReferencia', 'periodoDocumento', 'periodoReference'
+  ]);
+  const refId = referenceId(reference);
+  const source = idRaw || labelRaw || refId;
+  const id = periodSignature(source);
+  return {
+    id,
+    label: labelRaw || idRaw || refId || id,
+    rawId: idRaw || refId
+  };
+}
+
+function eventTime(row) {
+  const fields = [
+    'updatedAt', 'actualizadoEn', 'ultimaSincronizacion', 'fechaActualizacion',
+    'fechaMatricula', 'createdAt', '_updateTime', '_createTime'
+  ];
+  for (const field of fields) {
+    const parsed = Date.parse(row && row[field] || '');
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return 0;
+}
+
+function dedupe(rows) {
+  const map = new Map();
+  (Array.isArray(rows) ? rows : []).forEach((row, index) => {
+    if (!row || typeof row !== 'object') return;
+    const key = text(row.id || row._id || row._docId) || `fila_${index}`;
+    if (!map.has(key)) map.set(key, row);
+  });
+  return [...map.values()];
+}
+
+function chooseEnrollment(rows) {
+  const all = dedupe(rows);
+  const enabled = all.filter(active);
+  const candidates = enabled.length ? enabled : all;
+  candidates.sort((left, right) => {
+    const periodLeft = periodInfo(left).id;
+    const periodRight = periodInfo(right).id;
+    if (periodLeft !== periodRight) {
+      return periodRight.localeCompare(periodLeft, 'es', { numeric: true });
+    }
+    return eventTime(right) - eventTime(left);
+  });
+  return candidates[0] || null;
+}
+
+async function directStudentDocument(cedula, env) {
+  const canonical = normalizeCedula(cedula);
+  if (!canonical) return null;
+
+  /* Estructura vigente. */
+  const current = await getDocument('UTET', 'Estudiante', canonical, env);
+  if (current) return current;
+
+  /* Compatibilidad con la colección anterior durante la transición. */
+  const legacy = await getDocument('UTET', 'Estudiantes', canonical, env);
+  if (legacy) return legacy;
+
+  if (canonical.startsWith('0')) {
+    const shortId = canonical.slice(1);
+    const currentShort = await getDocument('UTET', 'Estudiante', shortId, env);
+    if (currentShort) return currentShort;
+    return getDocument('UTET', 'Estudiantes', shortId, env);
+  }
+  return null;
+}
+
+async function enrollmentForStudent(cedula, env) {
+  const canonical = normalizeCedula(cedula);
+  if (!canonical) return null;
+  const variants = canonical.startsWith('0') ? [canonical, canonical.slice(1)] : [canonical];
+  const fields = [
+    'cedula', 'numeroIdentificacion', 'estudianteCedula', 'cedulaEstudiante',
+    'estudianteId', 'idEstudiante', 'firebaseDocumentId'
+  ];
+
+  for (const field of fields) {
+    const rows = [];
+    for (const value of variants) {
+      const found = await queryField('UTET', 'matriculas', field, value, 50, env);
+      rows.push(...found);
+    }
+    if (rows.length) return chooseEnrollment(rows);
+  }
+  return null;
+}
+
+async function periodDocumentById(id, env) {
+  const candidate = referenceId(id);
+  if (!candidate) return null;
+  const direct = await getDocument('UTET', 'periodos', candidate, env);
+  if (direct) return direct;
+
+  const rows = await listCollection('UTET', 'periodos', { maxDocuments: 300 }, env);
+  const signature = periodSignature(candidate);
+  return rows.find((row) => {
+    const info = periodInfo(row);
+    return text(row.id) === candidate ||
+      Boolean(signature && info.id && info.id === signature);
+  }) || null;
+}
+
+async function currentPeriod(env) {
+  const rows = await listCollection('UTET', 'periodos', { maxDocuments: 300 }, env);
+  const enabled = rows.filter(active);
+  const candidates = enabled.length ? enabled : rows;
+  candidates.sort((left, right) => {
+    if (principal(left) !== principal(right)) return principal(right) ? 1 : -1;
+    const a = periodInfo(left).id;
+    const b = periodInfo(right).id;
+    if (a !== b) return b.localeCompare(a, 'es', { numeric: true });
+    return eventTime(right) - eventTime(left);
+  });
+  return candidates[0] || null;
+}
+
+async function resolvePeriod(document, cedula, env) {
+  const direct = periodInfo(mergedDocument(document));
+  if (direct.id) return { ...direct, source: 'ESTUDIANTE' };
+
+  const enrollment = await enrollmentForStudent(cedula, env);
+  if (enrollment) {
+    let info = periodInfo(enrollment);
+    if (info.rawId) {
+      const periodDocument = await periodDocumentById(info.rawId, env);
+      if (periodDocument) {
+        const detailed = periodInfo(periodDocument);
+        info = {
+          id: detailed.id || info.id,
+          label: detailed.label || info.label,
+          rawId: info.rawId
+        };
+      }
+    }
+    if (info.id) return { ...info, source: 'MATRICULAS_UTET' };
+  }
+
+  const fallback = await currentPeriod(env);
+  const fallbackInfo = periodInfo(fallback);
+  return { ...fallbackInfo, source: fallbackInfo.id ? 'PERIODOS_UTET' : '' };
+}
+
+function minimumStudent(document, cedula, periodOrIncludePhone, includePhone) {
   const row = mergedDocument(document);
-  const names = text(flexible(row, ['Nombres', 'nombres', 'nombreCompleto', 'Nombre']));
-  const career = text(flexible(row, ['NombreCarrera', 'nombreCarrera', 'carrera', 'Carrera']));
-  const rawPeriodId = text(flexible(row, [
-    'periodoId', 'periodId', 'periodoCanonicoId', 'ultimoPeriodoId'
+  let period = periodOrIncludePhone;
+  let phoneRequested = includePhone === true;
+
+  /* Compatibilidad con la firma anterior minimumStudent(doc, cedula, boolean). */
+  if (typeof periodOrIncludePhone === 'boolean' || periodOrIncludePhone === undefined) {
+    phoneRequested = periodOrIncludePhone === true;
+    const directPeriod = periodInfo(row);
+    period = { ...directPeriod, source: directPeriod.id ? 'ESTUDIANTE' : '' };
+  }
+
+  const names = text(flexible(row, ['nombres', 'Nombres', 'nombreCompleto', 'Nombre']));
+  const career = text(flexible(row, [
+    'nombreCarreraActual', 'NombreCarreraActual',
+    'NombreCarrera', 'nombreCarrera', 'carrera', 'Carrera'
   ]));
-  const rawPeriodLabel = text(flexible(row, [
-    'periodoLabel', 'periodoCanonicoLabel', 'PeriodoLabel', 'periodo'
+  const careerCode = text(flexible(row, [
+    'codigoCarreraActual', 'CodigoCarreraActual',
+    'CodigoCarrera', 'codigoCarrera', 'carreraCodigo'
   ]));
-  const periodId = periodSignature(rawPeriodId || rawPeriodLabel);
-  const periodLabel = rawPeriodLabel || rawPeriodId || periodId;
-  const phone = text(flexible(row, ['Celular', 'celular', 'telefono', 'Teléfono']));
+  const phone = text(flexible(row, ['celular', 'Celular', 'telefono', 'Teléfono']));
+  const sede = text(flexible(row, ['sede', 'Sede']));
+  const periodId = text(period && period.id);
+  const periodLabel = text(period && period.label) || periodId;
 
   const student = {
     id: cedula,
@@ -72,14 +284,19 @@ function minimumStudent(document, cedula, includePhone) {
     carrera: career,
     nombreCarrera: career,
     NombreCarrera: career,
+    codigoCarrera: careerCode,
+    CodigoCarrera: careerCode,
     periodoId: periodId,
     periodId,
     periodoLabel: periodLabel,
     periodo: periodLabel,
-    fuente: 'FIREBASE_UTET'
+    sede,
+    Sede: sede,
+    fuente: 'FIREBASE_UTET',
+    fuentePeriodo: text(period && period.source)
   };
 
-  if (includePhone === true) {
+  if (phoneRequested) {
     student.celular = phone;
     student.Celular = phone;
   }
@@ -88,17 +305,6 @@ function minimumStudent(document, cedula, includePhone) {
     student,
     complete: Boolean(names && career && periodId)
   };
-}
-
-async function directStudentDocument(cedula, env) {
-  const canonical = normalizeCedula(cedula);
-  if (!canonical) return null;
-  const direct = await getDocument('UTET', 'Estudiantes', canonical, env);
-  if (direct) return direct;
-  if (canonical.startsWith('0')) {
-    return getDocument('UTET', 'Estudiantes', canonical.slice(1), env);
-  }
-  return null;
 }
 
 export async function getStudentBasicFast(cedula, options = {}, env) {
@@ -116,7 +322,7 @@ export async function getStudentBasicFast(cedula, options = {}, env) {
   }
 
   const document = await directStudentDocument(canonical, env);
-  if (!document) {
+  if (!document || document.eliminado === true) {
     return {
       ok: true,
       encontrado: false,
@@ -124,13 +330,14 @@ export async function getStudentBasicFast(cedula, options = {}, env) {
       datosCompletos: false,
       cedula: canonical,
       numeroIdentificacion: canonical,
-      mensaje: 'No encontramos un estudiante con esa cédula en Firebase UTET.',
+      mensaje: 'No encontramos un estudiante activo con esa cédula en Firebase UTET.',
       fuente: 'FIREBASE_UTET',
       lecturaDirecta: true
     };
   }
 
-  const normalized = minimumStudent(document, canonical, options.includePhone === true);
+  const period = await resolvePeriod(document, canonical, env);
+  const normalized = minimumStudent(document, canonical, period, options.includePhone === true);
   return {
     ok: true,
     encontrado: true,
@@ -144,6 +351,7 @@ export async function getStudentBasicFast(cedula, options = {}, env) {
     periodoLabel: normalized.student.periodoLabel,
     coincidencias: 1,
     fuente: 'FIREBASE_UTET',
+    fuentePeriodo: normalized.student.fuentePeriodo,
     lecturaDirecta: true,
     mensaje: normalized.complete
       ? 'Estudiante encontrado correctamente en Firebase UTET.'
@@ -153,5 +361,7 @@ export async function getStudentBasicFast(cedula, options = {}, env) {
 
 export const __test = Object.freeze({
   parsePayload,
-  minimumStudent
+  minimumStudent,
+  periodInfo,
+  chooseEnrollment
 });
