@@ -74,7 +74,7 @@
           var fallo = new Error(json.mensaje || json.message || json.error || ('Error HTTP ' + response.status));
           fallo.status = response.status;
           fallo.respuesta = json;
-          fallo.duplicado = json.duplicado === true;
+          fallo.duplicado = json.duplicado === true || response.status === 409;
           throw fallo;
         }
         return json;
@@ -192,9 +192,6 @@
         mensaje: result.mensaje || ''
       };
 
-      /* Antes de permitir el avance, consultar siempre Envios cuando el
-         resumen no entregó el registro completo. Así también se recuperan
-         aprobaciones recientes y períodos con formatos diferentes. */
       if (!salida.envio) {
         return consultarEnvioPorCedula(id, salida.periodoLabel || salida.periodoId)
           .then(function (directo) {
@@ -348,13 +345,11 @@
     var data = construirPayloadSheets(payload);
     var periodo = data.periodo || data.periodoLabel || data.periodoId;
 
+    /* La consulta previa mejora la UX, pero no es requisito para escribir.
+       Si falla por red/lectura, se continúa hacia el endpoint de escritura,
+       cuya validación de duplicados es la autoridad final. */
     return consultarEnvioPorCedula(data.cedula, periodo).then(function (previo) {
-      if (!previo.ok) {
-        throw previo.error || new Error(
-          previo.mensaje || 'No se pudo verificar si ya existe un envío.'
-        );
-      }
-      if (previo.encontrado && !previo.permiteReenvio) {
+      if (previo.ok && previo.encontrado && !previo.permiteReenvio) {
         var duplicado = new Error(
           'Tus propuestas ya fueron enviadas y están siendo revisadas por coordinación.'
         );
