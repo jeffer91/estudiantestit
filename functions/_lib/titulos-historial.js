@@ -2,12 +2,12 @@ import {
   getDocument,
   normalizeCedula,
   queryEqual,
-  samePeriod,
   setDocument,
   text
 } from './firestore-fixed.js';
 import {
   TIPO_TRABAJO_TITULACION,
+  coincidePeriodoTrabajo,
   esTrabajoTitulacion
 } from './trabajo-titulacion-unificado.js';
 
@@ -22,7 +22,16 @@ function normalizeStatus(value) {
 }
 
 function cleanTitle(value) {
-  return text(value).replace(/\s+/g, ' ');
+  let output = text(value).replace(/\s+/g, ' ');
+  if (!output) return '';
+  const jsonish = output.match(/^(?:["']?titulo["']?)\s*:\s*["']([\s\S]*?)["']$/i);
+  if (jsonish) output = text(jsonish[1]);
+  while (
+    output.length >= 2 &&
+    ((output.startsWith('"') && output.endsWith('"')) ||
+      (output.startsWith("'") && output.endsWith("'")))
+  ) output = output.slice(1, -1).trim();
+  return output;
 }
 
 function rowId(row) {
@@ -34,17 +43,11 @@ function rowType(row) {
   return esTrabajoTitulacion(row) ? TIPO_TRABAJO_TITULACION : 'ARTICULO_ACADEMICO';
 }
 
-function periodValue(row) {
-  row = row || {};
-  return text(
-    row.periodoId || row.periodId || row.periodoCanonicoId ||
-    row.periodoNombre || row.periodoLabel || row.periodo
-  );
-}
-
 function eventTime(row, fields) {
   for (const field of fields) {
-    const value = Date.parse(row && row[field] || '');
+    const raw = row && row[field];
+    if (raw && typeof raw === 'object') continue;
+    const value = Date.parse(raw || '');
     if (Number.isFinite(value)) return value;
   }
   return 0;
@@ -67,6 +70,20 @@ function dedupe(rows) {
   return [...map.values()];
 }
 
+async function queryEnviosByCedula(variants, env) {
+  const results = [];
+  for (const value of variants) {
+    const settled = await Promise.allSettled([
+      queryEqual('TITULOS', 'envios', 'cedula', value, 100, env),
+      queryEqual('TITULOS', 'envios', 'numeroIdentificacion', value, 100, env)
+    ]);
+    settled.forEach((result) => {
+      if (result.status === 'fulfilled') results.push(...result.value);
+    });
+  }
+  return dedupe(results);
+}
+
 async function findEnvio(payload, env) {
   const requestedId = text(payload.envioId || payload.idRegistro || payload.tituloId || payload.id);
   if (requestedId) {
@@ -79,20 +96,28 @@ async function findEnvio(payload, env) {
   );
   if (!variants.length) return null;
 
-  const results = [];
-  for (const value of variants) {
-    const [byCedula, byIdentification] = await Promise.all([
-      queryEqual('TITULOS', 'envios', 'cedula', value, 100, env),
-      queryEqual('TITULOS', 'envios', 'numeroIdentificacion', value, 100, env)
-    ]);
-    results.push(...byCedula, ...byIdentification);
-  }
-
-  const requestedPeriod = text(payload.periodoId || payload.periodoLabel || payload.periodo);
+  const requestedPeriods = [
+    payload.periodoId,
+    payload.periodId,
+    payload.periodoCanonicoId,
+    payload.periodoLabel,
+    payload.periodoNombre,
+    payload.periodo
+  ].map(text).filter(Boolean);
   const requestedType = text(payload.tipoTrabajo).toUpperCase();
-  const candidates = dedupe(results)
-    .filter((row) => !requestedPeriod || samePeriod(periodValue(row), requestedPeriod))
+  const typed = (await queryEnviosByCedula(variants, env))
     .filter((row) => !requestedType || rowType(row) === requestedType);
+
+  let candidates = requestedPeriods.length
+    ? typed.filter((row) => coincidePeriodoTrabajo(row, requestedPeriods))
+    : typed;
+
+  /* Algunos registros migrados solo conservan un código de período antiguo.
+     Si para la cédula y el tipo existe un único registro histórico, es más
+     seguro reutilizarlo que declarar que no existe y crear un duplicado. */
+  if (!candidates.length && requestedPeriods.length && typed.length === 1) {
+    candidates = typed;
+  }
 
   candidates.sort((left, right) => {
     const a = eventTime(left, ['fechaResolucion', 'fechaEnvio', 'actualizadoEn', '_updateTime']);
@@ -185,10 +210,10 @@ function legacyResolution(envio) {
     envioId: rowId(envio),
     numeroResolucion: Number(envio.numeroRevisiones || 1),
     estado: status,
-    coordinador,
+    coordinador: coordinator,
     observacion: observation,
     fechaResolucion: date,
-    tituloElegido: envio.tituloPreferidoTexto,
+    tituloElegido: envio.tituloPreferidoTexto || envio.tituloElegido,
     tituloCorregido: envio.tituloFinal || envio.tituloAprobado,
     legado: true
   }, 0);
@@ -310,14 +335,18 @@ export async function consultarHistorialTitulos(payload = {}, env) {
   }
 
   const id = rowId(envio);
-  const [versionRows, resolutionRows] = await Promise.all([
+  const settled = await Promise.allSettled([
     queryEqual('TITULOS', 'versiones_envio', 'envioId', id, 1000, env),
     queryEqual('TITULOS', 'resoluciones', 'envioId', id, 1000, env)
   ]);
+  const versionRows = settled[0].status === 'fulfilled' ? settled[0].value : [];
+  const resolutionRows = settled[1].status === 'fulfilled' ? settled[1].value : [];
 
   let versions = sortVersions(dedupe(versionRows).map(publicVersion));
   let resolutions = sortResolutions(dedupe(resolutionRows).map(publicResolution));
 
+  /* Aunque una colección auxiliar esté incompleta, el documento principal de
+     envios contiene suficiente información para reconstruir el estado actual. */
   versions = ensureCurrentVersion(versions, envio);
   resolutions = ensureCurrentResolution(resolutions, envio);
 
@@ -351,6 +380,7 @@ export async function consultarHistorialTitulos(payload = {}, env) {
     versiones: versions,
     revisiones: resolutions,
     historialDisponible: versions.length > 0 || resolutions.length > 0,
+    historialParcial: settled.some((item) => item.status === 'rejected'),
     registroLegado: versions.some((item) => item.legado) || resolutions.some((item) => item.legado),
     historialRecuperado: versions.some((item) => item.recuperadoDesdeEnvio) ||
       resolutions.some((item) => item.recuperadoDesdeEnvio)
