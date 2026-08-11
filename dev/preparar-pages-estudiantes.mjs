@@ -8,8 +8,10 @@ const workSource = path.join(root, 'trabajo-titulacion-mvp');
 const output = path.join(root, '.pages-estudiantes');
 const publicStudent = path.join(output, 'estudiantes');
 const publicWork = path.join(output, 'trabajo-titulacion');
-const VERSION = '2.4.4';
+const VERSION = '2.4.5';
 const HISTORY_FILE = 'js/titulos.historial.publico.js';
+const WORK_ROUTE_FILE = 'js/estudiante.trabajo-titulacion.route.js';
+const WORK_PREFILL_FILE = 'js/trabajo-titulacion.prefill.js';
 const LEGACY_SCRIPTS = [
   'estudiante.consulta.optimizada.js',
   'estudiante.devolucion.runtime.js',
@@ -40,7 +42,7 @@ fs.cpSync(workSource, publicWork, { recursive: true, force: true });
 function injectScript(html, sourcePath) {
   if (html.includes(sourcePath)) return html;
   const script = `  <script src="${sourcePath}?v=${VERSION}"></script>\n`;
-  if (!html.includes('</body>')) throw new Error('No se encontró </body> para insertar el historial.');
+  if (!html.includes('</body>')) throw new Error('No se encontró </body> para insertar un script requerido.');
   return html.replace('</body>', script + '</body>');
 }
 
@@ -59,11 +61,13 @@ if (!studentHtml.includes('estudiante.consulta.revision.js')) {
 
 studentHtml = studentHtml.replace(/\?v=\d+\.\d+\.\d+/g, `?v=${VERSION}`);
 studentHtml = injectScript(studentHtml, HISTORY_FILE);
+studentHtml = injectScript(studentHtml, WORK_ROUTE_FILE);
 fs.writeFileSync(copiedEntry, studentHtml, 'utf8');
 
 const copiedWorkEntry = path.join(publicWork, 'index.html');
 let workHtml = fs.readFileSync(copiedWorkEntry, 'utf8');
 workHtml = injectScript(workHtml, '/estudiantes/' + HISTORY_FILE);
+workHtml = injectScript(workHtml, WORK_PREFILL_FILE);
 fs.writeFileSync(copiedWorkEntry, workHtml, 'utf8');
 
 const indexHtml = `<!doctype html>
@@ -113,9 +117,11 @@ fs.writeFileSync(path.join(output, '_headers'), headers, 'utf8');
 const required = [
   path.join(publicStudent, 'estudiante.html'),
   path.join(publicStudent, HISTORY_FILE),
+  path.join(publicStudent, WORK_ROUTE_FILE),
   path.join(publicWork, 'index.html'),
   path.join(publicWork, 'css', 'trabajo-titulacion.css'),
-  path.join(publicWork, 'js', 'trabajo-titulacion.js')
+  path.join(publicWork, 'js', 'trabajo-titulacion.js'),
+  path.join(publicWork, WORK_PREFILL_FILE)
 ];
 for (const file of required) {
   if (!fs.existsSync(file)) {
@@ -133,7 +139,7 @@ for (const directory of ['coordinadores-mvp', 'administrador']) {
 console.log('[Pages estudiantes] Carpeta preparada en .pages-estudiantes.');
 console.log('[Pages estudiantes] Artículos: /estudiantes/estudiante');
 console.log('[Pages estudiantes] Trabajo de Titulación: /trabajo-titulacion/');
-console.log(`[Pages estudiantes] Consulta secuencial e historial activos (${VERSION}).`);
+console.log(`[Pages estudiantes] Consulta secuencial, historial y enrutamiento por tipo activos (${VERSION}).`);
 console.log('[Pages estudiantes] Firebase UTET → Google Sheets Estudiantes → Firebase Títulos.');
 console.log('[Pages estudiantes] Coordinadores y administrador no fueron copiados.');
 console.log('[Pages estudiantes] La carpeta functions permanece en la raíz para habilitar /api/*.');
