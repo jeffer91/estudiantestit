@@ -40,6 +40,13 @@ export async function queryEqual(project, collectionName, fieldPath, value, limi
   return rows.map((row) => enrichRow(project, collectionName, row));
 }
 
+/* Alias semántico para consultas puntuales por campo. Mantiene la misma
+   implementación de queryEqual, pero deja más claro el propósito en lectores
+   que solo buscan una matrícula concreta. */
+export async function queryField(project, collectionName, fieldPath, value, limit = 200, env) {
+  return queryEqual(project, collectionName, fieldPath, value, limit, env);
+}
+
 const MONTHS = Object.freeze({
   enero: '01', febrero: '02', marzo: '03', abril: '04', mayo: '05', junio: '06',
   julio: '07', agosto: '08', septiembre: '09', setiembre: '09', octubre: '10',
@@ -94,8 +101,16 @@ export function samePeriod(left, right) {
 
 export async function pingProject(project, env) {
   const key = text(project).toUpperCase();
-  const collection = key === 'TITULOS' ? 'configuracion' : 'Estudiantes';
-  await base.listCollection(key, collection, { pageSize: 1, maxDocuments: 1 }, env);
+  if (key === 'TITULOS') {
+    await base.listCollection(key, 'configuracion', { pageSize: 1, maxDocuments: 1 }, env);
+  } else {
+    try {
+      await base.listCollection(key, 'Estudiante', { pageSize: 1, maxDocuments: 1 }, env);
+    } catch (_error) {
+      /* Compatibilidad temporal con la estructura anterior. */
+      await base.listCollection(key, 'Estudiantes', { pageSize: 1, maxDocuments: 1 }, env);
+    }
+  }
   return {
     ok: true,
     projectId: base.FIREBASE_PROJECTS[key] && base.FIREBASE_PROJECTS[key].projectId || '',
