@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
-import { coincidePeriodoTrabajo } from '../functions/_lib/trabajo-titulacion-unificado.js';
+import { coincidePeriodoTrabajo, esTrabajoTitulacion } from '../functions/_lib/trabajo-titulacion-unificado.js';
 
 const root = process.cwd();
 const errors = [];
@@ -46,6 +46,39 @@ assert(
     'Abril 2026 a Septiembre 2026'
   ),
   'La compatibilidad de períodos está mezclando períodos distintos.'
+);
+
+/* Regla real de Firebase Títulos: migración/resolución no define el tipo. */
+assert(
+  !esTrabajoTitulacion({
+    id: '2026-02__2026-08__1723533988',
+    migracionId: 'MIG_20260724053138',
+    estado: 'DEVUELTO',
+    resolucionActualId: '2026-02__2026-08__1723533988__r001__da588d97',
+    observacion: 'Se debe delimitar el título y estructurarlo bien'
+  }),
+  'Un Artículo Académico histórico devuelto está siendo confundido con Trabajo de Titulación.'
+);
+assert(
+  esTrabajoTitulacion({
+    id: '2026-04__2026-09__1722963681__trabajo_titulacion'
+  }),
+  'No se reconoce Trabajo de Titulación por su ID estructural.'
+);
+assert(
+  esTrabajoTitulacion({
+    id: '2026-10__1752222404',
+    migradoDesde: 'envios_trabajo_titulacion'
+  }),
+  'No se reconoce Trabajo de Titulación por su colección de origen.'
+);
+assert(
+  !esTrabajoTitulacion({
+    id: '2026-02__2026-08__0105566293',
+    tipoTrabajo: 'ARTICULO_ACADEMICO',
+    migracionId: 'MIG_ARTICULO'
+  }),
+  'Un artículo con tipo explícito está siendo confundido con Trabajo de Titulación.'
 );
 
 const historyBackend = read('functions/_lib/titulos-historial.js');
@@ -98,5 +131,6 @@ if (errors.length) {
 }
 
 console.log('[Compatibilidad histórica] IDs cortos, rangos completos y Trabajo de Titulación son legibles.');
+console.log('[Compatibilidad histórica] Artículos históricos devueltos no se confunden con Trabajo de Titulación.');
 console.log('[Compatibilidad histórica] Historial tolera datos parciales y no entra en reintentos infinitos.');
 console.log('[Compatibilidad histórica] Reenvíos conservan el envioId existente.');
