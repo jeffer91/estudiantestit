@@ -1,7 +1,7 @@
 /* Consulta de identidad académica desde Firebase UTET.
  * Fuente principal: Estudiante/{cedula}.
- * El período se resuelve desde matriculas y periodos cuando ya no viene
- * duplicado dentro del documento maestro del estudiante.
+ * El período se resuelve desde matriculas y periodos.
+ * La colección Estudiantes se conserva únicamente como respaldo temporal.
  */
 import {
   getDocument,
@@ -53,7 +53,8 @@ function scalar(value, nestedNames = []) {
   if (value === null || value === undefined) return '';
   if (typeof value !== 'object') return text(value);
   const nested = flexible(value, nestedNames.length ? nestedNames : [
-    'id', 'periodoId', 'codigo', 'nombre', 'label', 'periodoLabel', 'periodoNombre'
+    'id', 'cedula', 'numeroIdentificacion', 'periodoId', 'codigo', 'nombre',
+    'label', 'periodoLabel', 'periodoNombre', 'path', 'reference'
   ]);
   return nested === undefined ? '' : scalar(nested);
 }
@@ -71,14 +72,16 @@ function yes(value) {
 
 function active(row) {
   if (!row || typeof row !== 'object') return false;
-  if (row.eliminado === true || yes(flexible(row, ['eliminado', 'deleted'])) && row.eliminado !== false) {
-    return false;
-  }
+  const deleted = flexible(row, ['eliminado', 'deleted']);
+  if (deleted === true || (yes(deleted) && deleted !== false)) return false;
   const status = text(flexible(row, [
     'estadoMatricula', 'estado', 'Estado', 'status', 'activo'
   ])).toUpperCase();
   if (!status) return true;
-  return !['FALSE', '0', 'NO', 'INACTIVO', 'INACTIVA', 'RETIRADO', 'ANULADO', 'CANCELADO', 'ELIMINADO'].includes(status);
+  return ![
+    'FALSE', '0', 'NO', 'INACTIVO', 'INACTIVA', 'RETIRADO', 'RETIRADA',
+    'ANULADO', 'ANULADA', 'CANCELADO', 'CANCELADA', 'ELIMINADO', 'ELIMINADA'
+  ].includes(status);
 }
 
 function principal(row) {
@@ -94,11 +97,12 @@ function periodInfo(row) {
   row = row || {};
   const idRaw = scalar(flexible(row, [
     'periodoId', 'periodId', 'periodoAcademicoId', 'idPeriodo',
-    'codigoPeriodo', 'periodoCodigo', 'periodoCanonicoId'
-  ]), ['id', 'codigo', 'periodoId']);
+    'codigoPeriodo', 'periodoCodigo', 'periodoCanonicoId',
+    'periodoActualId', 'periodoAcademicoCodigo'
+  ]), ['id', 'codigo', 'periodoId', 'periodId']);
   const labelRaw = scalar(flexible(row, [
     'periodoLabel', 'periodoNombre', 'nombrePeriodo', 'periodoAcademico',
-    'periodo', 'nombre', 'label'
+    'periodo', 'nombre', 'label', 'periodoActual'
   ]), ['nombre', 'label', 'periodoLabel', 'periodoNombre', 'id']);
   const reference = flexible(row, [
     'periodoRef', 'periodoReferencia', 'periodoDocumento', 'periodoReference'
@@ -119,17 +123,36 @@ function eventTime(row) {
     'fechaMatricula', 'createdAt', '_updateTime', '_createTime'
   ];
   for (const field of fields) {
-    const parsed = Date.parse(row && row[field] || '');
+    const raw = row && row[field];
+    if (raw && typeof raw === 'object') continue;
+    const parsed = Date.parse(raw || '');
     if (Number.isFinite(parsed)) return parsed;
   }
   return 0;
+}
+
+function rowDocumentId(row) {
+  return text(row && (row.id || row._id || row._docId));
+}
+
+function studentIdFromEnrollment(row) {
+  if (!row || typeof row !== 'object') return '';
+  const direct = scalar(flexible(row, [
+    'cedula', 'numeroIdentificacion', 'estudianteCedula', 'cedulaEstudiante',
+    'estudianteId', 'idEstudiante', 'firebaseDocumentId',
+    'estudiante', 'estudianteRef', 'estudianteReferencia'
+  ]), ['cedula', 'numeroIdentificacion', 'id', 'firebaseDocumentId']);
+  const canonical = normalizeCedula(referenceId(direct));
+  if (canonical) return canonical;
+  const match = rowDocumentId(row).match(/\d{9,10}/);
+  return match ? normalizeCedula(match[0]) : '';
 }
 
 function dedupe(rows) {
   const map = new Map();
   (Array.isArray(rows) ? rows : []).forEach((row, index) => {
     if (!row || typeof row !== 'object') return;
-    const key = text(row.id || row._id || row._docId) || `fila_${index}`;
+    const key = rowDocumentId(row) || `fila_${index}`;
     if (!map.has(key)) map.set(key, row);
   });
   return [...map.values()];
@@ -154,19 +177,17 @@ async function directStudentDocument(cedula, env) {
   const canonical = normalizeCedula(cedula);
   if (!canonical) return null;
 
-  /* Estructura vigente. */
-  const current = await getDocument('UTET', 'Estudiante', canonical, env);
-  if (current) return current;
+  const variants = canonical.startsWith('0') ? [canonical, canonical.slice(1)] : [canonical];
 
-  /* Compatibilidad con la colección anterior durante la transición. */
-  const legacy = await getDocument('UTET', 'Estudiantes', canonical, env);
-  if (legacy) return legacy;
+  for (const id of variants) {
+    const current = await getDocument('UTET', 'Estudiante', id, env);
+    if (current) return current;
+  }
 
-  if (canonical.startsWith('0')) {
-    const shortId = canonical.slice(1);
-    const currentShort = await getDocument('UTET', 'Estudiante', shortId, env);
-    if (currentShort) return currentShort;
-    return getDocument('UTET', 'Estudiantes', shortId, env);
+  /* Compatibilidad temporal con la colección anterior. */
+  for (const id of variants) {
+    const legacy = await getDocument('UTET', 'Estudiantes', id, env);
+    if (legacy) return legacy;
   }
   return null;
 }
@@ -188,7 +209,12 @@ async function enrollmentForStudent(cedula, env) {
     }
     if (rows.length) return chooseEnrollment(rows);
   }
-  return null;
+
+  /* Respaldo para matrículas que guardan referencias o IDs compuestos.
+     Solo se usa cuando las consultas puntuales no encontraron coincidencias. */
+  const scanned = await listCollection('UTET', 'matriculas', { maxDocuments: 10000 }, env);
+  const matches = scanned.filter((row) => studentIdFromEnrollment(row) === canonical);
+  return chooseEnrollment(matches);
 }
 
 async function periodDocumentById(id, env) {
@@ -197,7 +223,7 @@ async function periodDocumentById(id, env) {
   const direct = await getDocument('UTET', 'periodos', candidate, env);
   if (direct) return direct;
 
-  const rows = await listCollection('UTET', 'periodos', { maxDocuments: 300 }, env);
+  const rows = await listCollection('UTET', 'periodos', { maxDocuments: 500 }, env);
   const signature = periodSignature(candidate);
   return rows.find((row) => {
     const info = periodInfo(row);
@@ -206,44 +232,30 @@ async function periodDocumentById(id, env) {
   }) || null;
 }
 
-async function currentPeriod(env) {
-  const rows = await listCollection('UTET', 'periodos', { maxDocuments: 300 }, env);
-  const enabled = rows.filter(active);
-  const candidates = enabled.length ? enabled : rows;
-  candidates.sort((left, right) => {
-    if (principal(left) !== principal(right)) return principal(right) ? 1 : -1;
-    const a = periodInfo(left).id;
-    const b = periodInfo(right).id;
-    if (a !== b) return b.localeCompare(a, 'es', { numeric: true });
-    return eventTime(right) - eventTime(left);
-  });
-  return candidates[0] || null;
-}
-
 async function resolvePeriod(document, cedula, env) {
   const direct = periodInfo(mergedDocument(document));
   if (direct.id) return { ...direct, source: 'ESTUDIANTE' };
 
   const enrollment = await enrollmentForStudent(cedula, env);
-  if (enrollment) {
-    let info = periodInfo(enrollment);
-    if (info.rawId) {
-      const periodDocument = await periodDocumentById(info.rawId, env);
-      if (periodDocument) {
-        const detailed = periodInfo(periodDocument);
-        info = {
-          id: detailed.id || info.id,
-          label: detailed.label || info.label,
-          rawId: info.rawId
-        };
-      }
+  if (!enrollment) return { id: '', label: '', rawId: '', source: '' };
+
+  let info = periodInfo(enrollment);
+  if (info.rawId) {
+    const periodDocument = await periodDocumentById(info.rawId, env);
+    if (periodDocument) {
+      const detailed = periodInfo(periodDocument);
+      info = {
+        id: detailed.id || info.id,
+        label: detailed.label || info.label,
+        rawId: info.rawId
+      };
     }
-    if (info.id) return { ...info, source: 'MATRICULAS_UTET' };
   }
 
-  const fallback = await currentPeriod(env);
-  const fallbackInfo = periodInfo(fallback);
-  return { ...fallbackInfo, source: fallbackInfo.id ? 'PERIODOS_UTET' : '' };
+  return {
+    ...info,
+    source: info.id ? 'MATRICULAS_UTET' : ''
+  };
 }
 
 function minimumStudent(document, cedula, periodOrIncludePhone, includePhone) {
@@ -278,7 +290,6 @@ function minimumStudent(document, cedula, periodOrIncludePhone, includePhone) {
     studentId: cedula,
     cedula,
     numeroIdentificacion: cedula,
-    NumeroIdentificacion: cedula,
     nombres: names,
     Nombres: names,
     carrera: career,
@@ -355,7 +366,7 @@ export async function getStudentBasicFast(cedula, options = {}, env) {
     lecturaDirecta: true,
     mensaje: normalized.complete
       ? 'Estudiante encontrado correctamente en Firebase UTET.'
-      : 'El estudiante existe en Firebase UTET, pero sus datos académicos están incompletos.'
+      : 'El estudiante existe en Firebase UTET, pero no se encontró una matrícula/período académico válido.'
   };
 }
 
@@ -363,5 +374,6 @@ export const __test = Object.freeze({
   parsePayload,
   minimumStudent,
   periodInfo,
-  chooseEnrollment
+  chooseEnrollment,
+  studentIdFromEnrollment
 });
