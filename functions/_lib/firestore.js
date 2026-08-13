@@ -309,6 +309,47 @@ export async function getDocument(project, collectionName, documentId, env) {
   return decodeDocument(await parseResponse(response, 'Firestore'));
 }
 
+/* Firestore batchGet accepts document names from the same database in a
+   single request. Keeping the chunks sequential is intentional: it reduces
+   Worker subrequests without opening many simultaneous connections. */
+export async function batchGetDocuments(project, references, env) {
+  const unique = new Map();
+  for (const reference of Array.isArray(references) ? references : []) {
+    const collectionName = text(reference && (reference.collectionName || reference.collection));
+    const documentId = text(reference && (reference.documentId || reference.id));
+    if (!collectionName || !documentId) continue;
+    const name = documentName(project, collectionName, documentId);
+    unique.set(name, { name, collectionName });
+  }
+
+  const pending = [...unique.values()];
+  const documents = [];
+  const chunkSize = 500;
+
+  for (let offset = 0; offset < pending.length; offset += chunkSize) {
+    const chunk = pending.slice(offset, offset + chunkSize);
+    const response = await firestoreFetch(project, `${apiBase(project)}/documents:batchGet`, {
+      method: 'POST',
+      cache: 'no-store',
+      body: JSON.stringify({ documents: chunk.map((item) => item.name) })
+    }, env);
+    const data = await parseResponse(response, 'Firestore');
+    if (!Array.isArray(data)) throw new Error('Firestore batchGet respondió en un formato no válido.');
+
+    for (const item of data) {
+      const decoded = decodeDocument(item && item.found);
+      if (!decoded) continue;
+      const match = unique.get(item.found.name);
+      documents.push({
+        ...decoded,
+        _collection: match && match.collectionName || ''
+      });
+    }
+  }
+
+  return documents;
+}
+
 export async function listCollection(project, collectionName, options = {}, env) {
   const pageSize = Math.min(300, Math.max(1, Number(options.pageSize || 300)));
   const maxDocuments = Math.min(10000, Math.max(1, Number(options.maxDocuments || 5000)));
@@ -355,6 +396,50 @@ export async function queryEqual(project, collectionName, fieldPath, value, limi
   return (Array.isArray(data) ? data : [])
     .map((item) => decodeDocument(item.document))
     .filter(Boolean);
+}
+
+export async function queryIn(project, collectionName, fieldPath, values, limit = 200, env) {
+  const uniqueValues = [...new Map(
+    (Array.isArray(values) ? values : [values])
+      .filter((value) => value !== undefined && value !== null && text(value))
+      .map((value) => [JSON.stringify(encodeValue(value)), value])
+  ).values()];
+  if (!uniqueValues.length) return [];
+  if (uniqueValues.length === 1) {
+    return queryEqual(project, collectionName, fieldPath, uniqueValues[0], limit, env);
+  }
+
+  const maximum = Math.min(1000, Math.max(1, Number(limit || 200)));
+  const rows = new Map();
+  const chunkSize = 30;
+
+  for (let offset = 0; offset < uniqueValues.length && rows.size < maximum; offset += chunkSize) {
+    const chunk = uniqueValues.slice(offset, offset + chunkSize);
+    const response = await firestoreFetch(project, `${apiBase(project)}/documents:runQuery`, {
+      method: 'POST',
+      cache: 'no-store',
+      body: JSON.stringify({
+        structuredQuery: {
+          from: [{ collectionId: collectionName }],
+          where: {
+            fieldFilter: {
+              field: { fieldPath },
+              op: 'IN',
+              value: { arrayValue: { values: chunk.map(encodeValue) } }
+            }
+          },
+          limit: maximum - rows.size
+        }
+      })
+    }, env);
+    const data = await parseResponse(response, 'Firestore');
+    for (const item of Array.isArray(data) ? data : []) {
+      const decoded = decodeDocument(item.document);
+      if (decoded) rows.set(decoded.id, decoded);
+    }
+  }
+
+  return [...rows.values()];
 }
 
 export async function setDocument(project, collectionName, documentId, data, options = {}, env) {

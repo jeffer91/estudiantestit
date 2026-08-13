@@ -153,7 +153,13 @@ assert(/VERSION\s*=\s*'2\.4\.4'/.test(studentBuild), 'El build de Estudiantes no
 assert(/VERSION_ESTUDIANTES\s*=\s*'2\.4\.4'/.test(localBuild), 'El entorno local no usa Estudiantes 2.4.4.');
 
 assert(/currentEnrollments/.test(adminGlobal) && /queryPeriodRows\('UTET', 'matriculas'/.test(adminGlobal), 'Administrador no construye la población desde matriculas.');
-assert(/getDocument\('UTET', 'Estudiante'/.test(adminGlobal), 'Administrador no obtiene los datos maestros desde Estudiante.');
+assert(
+  /batchGetDocuments\('UTET'/.test(adminGlobal) &&
+  /collectionName: 'Estudiante'/.test(adminGlobal) &&
+  /collectionName: 'Estudiantes'/.test(adminGlobal),
+  'Administrador no agrupa los datos maestros de Estudiante con compatibilidad temporal.'
+);
+assert(!/getDocument\('UTET', 'Estudiante'/.test(adminGlobal), 'Administrador volvió a consultar un documento por estudiante.');
 assert(/nombreCarreraActual/.test(adminGlobal) && /codigoCarreraActual/.test(adminGlobal), 'Administrador no reconoce los campos actuales de carrera.');
 assert(/correoInstitucional/.test(adminGlobal) && /correoPersonal/.test(adminGlobal), 'Administrador no conserva los correos actuales para los recordatorios.');
 assert(/UTET_MATRICULAS_Y_ESTUDIANTE/.test(adminGlobal), 'Administrador no identifica la nueva fuente de población académica.');

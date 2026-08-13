@@ -59,6 +59,7 @@ const files = [
   'dev/preparar-pages-estudiantes.mjs',
   'dev/preparar-pages-coordinadores.mjs',
   'dev/preparar-pages-administrador.mjs',
+  'dev/verificar-batch-firestore.mjs',
   'dev/verificar-apps.mjs',
   'dev/verificar-correo-outlook.mjs',
   'dev/verificar-arquitectura.mjs',

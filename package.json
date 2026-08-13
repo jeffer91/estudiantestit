@@ -1,7 +1,7 @@
 {
   "name": "estudiantestit",
   "private": true,
-  "version": "3.4.6",
+  "version": "3.4.7",
   "type": "module",
   "main": "electron/administrador/main.cjs",
   "scripts": {
@@ -22,7 +22,7 @@
     "check:syntax": "node dev/verificar-sintaxis.mjs",
     "check:apps": "node dev/verificar-apps.mjs",
     "check:compatibility": "node dev/verificar-compatibilidad-historial.mjs && node scripts/check-historical-compatibility.mjs && node scripts/check-returned-student-flow.mjs",
-    "check:quota": "node dev/verificar-cuota-firebase.mjs",
+    "check:quota": "node dev/verificar-cuota-firebase.mjs && node dev/verificar-batch-firestore.mjs",
     "check:outlook": "node dev/verificar-correo-outlook.mjs",
     "check:architecture": "node dev/verificar-arquitectura.mjs",
     "check:firebase-auth": "node dev/verificar-firebase-auth.mjs",

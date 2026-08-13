@@ -10,12 +10,12 @@ import {
   saveAdminPeriod
 } from './admin-global-v5.js';
 import {
-  getDocument,
+  batchGetDocuments,
   latestBy,
   listCollection,
   normalizeCedula,
   periodSignature,
-  queryEqual,
+  queryIn,
   samePeriod,
   text
 } from './firestore-fixed.js';
@@ -225,13 +225,7 @@ function publicEnvio(row) {
 }
 
 async function queryValues(project, collectionName, field, values, limit, env) {
-  const map = new Map();
-  for (const value of values) {
-    if (!text(value)) continue;
-    const rows = await queryEqual(project, collectionName, field, value, limit, env);
-    rows.forEach((row) => map.set(row.id, row));
-  }
-  return [...map.values()];
+  return queryIn(project, collectionName, field, values, limit, env);
 }
 
 function periodValues(payload) {
@@ -271,41 +265,55 @@ async function currentEnrollments(payload, requestedPeriod, env) {
   return { rows, source: rows.length ? 'EstudiantesPeriodo' : 'matriculas' };
 }
 
-async function studentDocument(id, env) {
+function studentDocumentVariants(id) {
   const canonical = normalizeCedula(id);
-  if (!canonical) return null;
-  const variants = canonical.startsWith('0') ? [canonical, canonical.slice(1)] : [canonical];
+  if (!canonical) return [];
+  return canonical.startsWith('0') ? [canonical, canonical.slice(1)] : [canonical];
+}
 
-  for (const value of variants) {
-    const current = await getDocument('UTET', 'Estudiante', value, env);
-    if (current && rowActive(current)) return current;
-  }
+function completeEnrollmentProfile(row) {
+  return Boolean(
+    names(row) && career(row) && phone(row) &&
+    (institutionalEmail(row) || personalEmail(row))
+  );
+}
 
-  for (const value of variants) {
-    const legacy = await getDocument('UTET', 'Estudiantes', value, env);
-    if (legacy && rowActive(legacy)) return legacy;
+function studentFromBatch(id, index) {
+  const variants = studentDocumentVariants(id);
+  for (const collectionName of ['Estudiante', 'Estudiantes']) {
+    for (const value of variants) {
+      const current = index.get(`${collectionName}/${value}`);
+      if (current && rowActive(current)) return current;
+    }
   }
   return null;
 }
 
-async function mapLimited(items, limit, worker) {
-  const output = new Array(items.length);
-  let cursor = 0;
-  async function run() {
-    while (cursor < items.length) {
-      const index = cursor;
-      cursor += 1;
-      output[index] = await worker(items[index], index);
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, items.length || 1) }, run));
-  return output;
-}
-
 async function baseStudentsForEnrollments(rows, env) {
-  const ids = [...new Set(rows.map(cedulaFrom).filter(Boolean))];
-  const documents = await mapLimited(ids, 16, async (id) => [id, await studentDocument(id, env)]);
-  return new Map(documents.filter((item) => item[1]));
+  const enrollmentsById = new Map();
+  rows.forEach((row) => {
+    const id = cedulaFrom(row);
+    if (id && !enrollmentsById.has(id)) enrollmentsById.set(id, row);
+  });
+
+  const ids = [...enrollmentsById.keys()];
+  const idsToFetch = ids.filter((id) => !completeEnrollmentProfile(enrollmentsById.get(id)));
+  const references = [];
+  idsToFetch.forEach((id) => {
+    studentDocumentVariants(id).forEach((documentId) => {
+      references.push({ collectionName: 'Estudiante', documentId });
+      references.push({ collectionName: 'Estudiantes', documentId });
+    });
+  });
+
+  const documents = await batchGetDocuments('UTET', references, env);
+  const index = new Map(documents.map((row) => [`${row._collection}/${row.id}`, row]));
+  const output = new Map();
+  ids.forEach((id) => {
+    const enrollment = enrollmentsById.get(id);
+    output.set(id, studentFromBatch(id, index) || enrollment);
+  });
+  return output;
 }
 
 function mergeStudent(base, enrollment, id, byCode, byName, requestedPeriod) {
@@ -343,7 +351,6 @@ export async function buildAdminGlobalList(payload = {}, env) {
   const envios = enviosInitial.length
     ? enviosInitial
     : await scanPeriodRows('TITULOS', 'envios', requestedPeriod, env);
-  const baseStudents = await baseStudentsForEnrollments(enrollments, env);
 
   const byCode = new Map();
   const byName = new Map();
@@ -352,8 +359,19 @@ export async function buildAdminGlobalList(payload = {}, env) {
     if (item.nombre) byName.set(normalized(item.nombre), item);
   });
 
+  const relevantEnrollments = requestedCareer
+    ? enrollments.filter((enrollment) => {
+      const rawCode = careerCode(enrollment);
+      const rawCareer = career(enrollment);
+      const canonical = byCode.get(normalized(rawCode)) || byName.get(normalized(rawCareer));
+      const knownCareer = canonical && canonical.nombre || rawCareer;
+      return !knownCareer || normalized(knownCareer) === normalized(requestedCareer);
+    })
+    : enrollments;
+  const baseStudents = await baseStudentsForEnrollments(relevantEnrollments, env);
+
   const expectedById = new Map();
-  enrollments.forEach((enrollment) => {
+  relevantEnrollments.forEach((enrollment) => {
     const id = cedulaFrom(enrollment);
     if (!id) return;
     const base = baseStudents.get(id);
@@ -439,6 +457,7 @@ export async function buildAdminGlobalList(payload = {}, env) {
       ? 'UTET_MATRICULAS_Y_ESTUDIANTE'
       : 'UTET_LEGACY',
     consultaOptimizada: true,
+    lecturaEstudiantesAgrupada: true,
     segundaLecturaEnviosEliminada: true,
     mensaje: records.length
       ? `Lista global cargada: ${records.length} estudiantes, ${enviosById.size} con envío y ${workCount} Trabajo(s) de Titulación.`

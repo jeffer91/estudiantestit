@@ -11,6 +11,7 @@ export const encodeFields = base.encodeFields;
 export const decodeValue = base.decodeValue;
 export const decodeFields = base.decodeFields;
 export const getDocument = base.getDocument;
+export const batchGetDocuments = base.batchGetDocuments;
 export const setDocument = base.setDocument;
 export const deleteDocument = base.deleteDocument;
 export const commitDocuments = base.commitDocuments;
@@ -37,6 +38,11 @@ export async function listCollection(project, collectionName, options = {}, env)
 
 export async function queryEqual(project, collectionName, fieldPath, value, limit = 200, env) {
   const rows = await base.queryEqual(project, collectionName, fieldPath, value, limit, env);
+  return rows.map((row) => enrichRow(project, collectionName, row));
+}
+
+export async function queryIn(project, collectionName, fieldPath, values, limit = 200, env) {
+  const rows = await base.queryIn(project, collectionName, fieldPath, values, limit, env);
   return rows.map((row) => enrichRow(project, collectionName, row));
 }
 

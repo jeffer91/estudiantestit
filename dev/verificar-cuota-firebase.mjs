@@ -142,6 +142,18 @@ assert(
   /segundaLecturaEnviosEliminada:\s*true/.test(adminGlobalV6),
   'La capa final del Administrador no confirma la eliminación de la segunda lectura de envíos.'
 );
+assert(
+  /batchGetDocuments\('UTET'/.test(adminGlobalV6) && /lecturaEstudiantesAgrupada:\s*true/.test(adminGlobalV6),
+  'La capa final del Administrador no agrupa las lecturas de estudiantes.'
+);
+assert(
+  /return queryIn\(project, collectionName, field, values, limit, env\)/.test(adminGlobalV6),
+  'Las variantes de período vuelven a ejecutar una consulta por cada valor.'
+);
+assert(
+  !/mapLimited\(ids[\s\S]{0,160}studentDocument/.test(adminGlobalV6),
+  'La capa final del Administrador volvió al patrón de una petición por estudiante.'
+);
 
 assert(
   /coordinador\.bootstrap\.independiente\.js/.test(coordinatorHtml) &&
