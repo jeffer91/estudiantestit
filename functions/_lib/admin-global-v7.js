@@ -291,6 +291,36 @@ function periodValues(payload) {
   return [...new Set([...raw, ...canonical])];
 }
 
+function rowPeriodValues(row) {
+  const raw = referenceId(periodRaw(row));
+  const label = periodLabel(row);
+  const key = periodKey(row);
+  return [...new Set([
+    raw,
+    label,
+    key,
+    periodSignature(raw),
+    periodSignature(label)
+  ].map(text).filter(Boolean))];
+}
+
+function periodValueMatches(left, right) {
+  const a = text(left);
+  const b = text(right);
+  if (!a || !b) return false;
+  return normalized(a) === normalized(b) || samePeriod(a, b);
+}
+
+function matchesRequestedPeriod(row, payload, requestedPeriod) {
+  const wanted = [...new Set([
+    ...periodValues(payload),
+    text(requestedPeriod)
+  ].filter(Boolean))];
+  return rowPeriodValues(row).some((left) =>
+    wanted.some((right) => periodValueMatches(left, right))
+  );
+}
+
 function periodFields(collectionName) {
   return PERIOD_FIELDS[collectionName] || PERIOD_FIELDS.envios;
 }
@@ -330,11 +360,15 @@ async function queryPeriodRows(project, collectionName, payload, env) {
 
 async function currentEnrollments(payload, requestedPeriod, env) {
   let rows = await queryPeriodRows('UTET', 'matriculas', payload, env);
-  rows = rows.filter((row) => rowActive(row) && samePeriod(periodKey(row), requestedPeriod));
+  rows = rows.filter((row) =>
+    rowActive(row) && matchesRequestedPeriod(row, payload, requestedPeriod)
+  );
   if (rows.length) return { rows, source: 'matriculas' };
 
   rows = await queryPeriodRows('UTET', 'EstudiantesPeriodo', payload, env);
-  rows = rows.filter((row) => rowActive(row) && samePeriod(periodKey(row), requestedPeriod));
+  rows = rows.filter((row) =>
+    rowActive(row) && matchesRequestedPeriod(row, payload, requestedPeriod)
+  );
   return {
     rows,
     source: rows.length ? 'EstudiantesPeriodo' : 'matriculas'
@@ -462,8 +496,8 @@ export async function buildAdminGlobalList(payload = {}, env) {
   ]);
 
   const enrollments = enrollmentResult.rows;
-  const envios = enviosInitial.filter(
-    (row) => samePeriod(periodKey(row), requestedPeriod)
+  const envios = enviosInitial.filter((row) =>
+    matchesRequestedPeriod(row, payload, requestedPeriod)
   );
 
   const byCode = new Map();
