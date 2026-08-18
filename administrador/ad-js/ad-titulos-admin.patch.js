@@ -1,15 +1,15 @@
 /* Ajustes de Títulos del Administrador:
  * - "Aprobados" agrupa APROBADO + REEMPLAZADO, igual que Coordinadores.
  * - Permite corregir el título final desde Administrador conservando historial.
+ * - Evita ciclos de observación al abrir registros pendientes o devueltos.
  */
 (function(window,document){
   'use strict';
 
-  if(window.ADAdminTitlesPatchV1)return;
-  window.ADAdminTitlesPatchV1=true;
+  if(window.ADAdminTitlesPatchV2)return;
+  window.ADAdminTitlesPatchV2=true;
 
   var syncPending=false;
-  var observer=null;
   var saving=false;
 
   function $(id){return document.getElementById(id);}
@@ -20,12 +20,14 @@
   function isApproved(value){var current=status(value);return current==='APROBADO'||current==='REEMPLAZADO';}
   function statusLabel(value){var current=status(value);if(current==='REEMPLAZADO')return'Aprobado con corrección';if(current==='APROBADO')return'Aprobado';if(current==='DEVUELTO')return'Devuelto';if(current==='NO_ENVIADO')return'No enviado';return'Pendiente de revisión';}
   function statusClass(value){var current=status(value);if(current==='APROBADO'||current==='REEMPLAZADO')return'ad-badge-success';if(current==='NO_ENVIADO'||current==='DEVUELTO')return'ad-badge-warning';return'ad-badge-info';}
+  function setHidden(element,hidden){if(element&&element.hidden!==Boolean(hidden))element.hidden=Boolean(hidden);}
   function selectedPeriodLabel(){var select=$('ad-v2-title-period');if(!select||select.selectedIndex<0)return'';return text(select.options[select.selectedIndex]&&select.options[select.selectedIndex].textContent).replace(/\s+·\s+Inactivo$/i,'');}
   function selectedPeriodId(){var select=$('ad-v2-title-period');return select?text(select.value):'';}
   function selectedCareer(){var select=$('ad-v2-title-career');return select?text(select.value):'';}
   function selectedSearch(){var input=$('ad-v2-title-search');return input?normal(input.value):'';}
   function globalRows(){var data=window.ADAdminGlobalLast||{};return Array.isArray(data.registros)?data.registros:[];}
   function studentByCedula(value){var target=text(value).replace(/\D/g,'');return globalRows().find(function(item){return text(item&&item.cedula).replace(/\D/g,'')===target;})||null;}
+
   function currentTitle(student){
     if(!student)return'';
     var finalTitle=text(student.tituloFinal);
@@ -53,8 +55,8 @@
     if(!select)return false;
     var approved=select.querySelector('option[value="APROBADO"]');
     var corrected=select.querySelector('option[value="REEMPLAZADO"]');
-    var correctedSelected=corrected&&corrected.selected;
-    if(approved)approved.textContent='Aprobados';
+    var correctedSelected=Boolean(corrected&&corrected.selected);
+    if(approved&&approved.textContent!=='Aprobados')approved.textContent='Aprobados';
     if(corrected)corrected.remove();
     if(correctedSelected&&approved)select.value='APROBADO';
     return true;
@@ -82,8 +84,7 @@
     var select=$('ad-v2-title-state');
     var body=$('ad-v2-title-body');
     if(!select||!body||select.value!=='APROBADO')return;
-    var rows=approvedRows();
-    var html=rows.map(rowHtml).join('')||'<tr><td colspan="6" class="ad-empty">No hay estudiantes aprobados que coincidan con los filtros.</td></tr>';
+    var html=approvedRows().map(rowHtml).join('')||'<tr><td colspan="6" class="ad-empty">No hay estudiantes aprobados que coincidan con los filtros.</td></tr>';
     if(body.innerHTML!==html)body.innerHTML=html;
   }
 
@@ -104,7 +105,7 @@
         '<strong>Corrección administrativa del título</strong>'+
         '<p class="ad-admin-title-current"><span>Título actual:</span><br><strong id="ad-admin-title-current">-</strong></p>'+
         '<label><span>Nuevo título final</span><textarea id="ad-admin-title-corrected" maxlength="600" placeholder="Escribe el título corregido"></textarea></label>'+
-        '<small>Al guardar, el título anterior no se elimina: quedará registrado en el historial de resoluciones y el estado pasará a “Aprobado con corrección”.</small>'+
+        '<small>Al guardar, el título anterior no se elimina: queda registrado en el historial de resoluciones y el estado pasa a “Aprobado con corrección”.</small>'+
         '<button class="ad-btn ad-btn-primary" type="button" data-admin-title-action="save-correction">Guardar corrección</button>';
       card.insertBefore(panel,returnBlock);
     }
@@ -128,19 +129,24 @@
     var button=$('ad-admin-title-toggle');
     var panel=$('ad-admin-title-correction');
     if(!modal||!button||!panel||modal.hidden)return;
+
     var student=studentByCedula(text($('ad-v2-detail-id')&&$('ad-v2-detail-id').textContent));
     var allowed=Boolean(student&&isApproved(student.estado)&&currentTitle(student));
-    button.hidden=!allowed;
-    if(!allowed){panel.hidden=true;panel.removeAttribute('data-cedula');return;}
+    setHidden(button,!allowed);
+    if(!allowed){
+      setHidden(panel,true);
+      panel.removeAttribute('data-cedula');
+      return;
+    }
 
     var current=currentTitle(student);
     var cedula=text(student.cedula);
     var currentLabel=$('ad-admin-title-current');
     var input=$('ad-admin-title-corrected');
-    if(currentLabel)currentLabel.textContent=current;
+    if(currentLabel&&currentLabel.textContent!==current)currentLabel.textContent=current;
     if(panel.getAttribute('data-cedula')!==cedula){
       panel.setAttribute('data-cedula',cedula);
-      panel.hidden=true;
+      setHidden(panel,true);
       if(input)input.value=current;
     }
   }
@@ -150,7 +156,7 @@
     var panel=$('ad-admin-title-correction');
     var input=$('ad-admin-title-corrected');
     if(!panel)return;
-    panel.hidden=!panel.hidden;
+    setHidden(panel,!panel.hidden);
     if(!panel.hidden&&input){input.focus();input.setSelectionRange(input.value.length,input.value.length);}
   }
 
@@ -169,14 +175,16 @@
       attempts+=1;
       var updated=studentByCedula(cedula);
       var ready=updated&&status(updated.estado)==='REEMPLAZADO'&&normal(currentTitle(updated))===normal(corrected);
-      if(!ready&&attempts<24)return;
+      if(!ready&&attempts<32)return;
       window.clearInterval(timer);
       renderApprovedGroup();
-      var statPeriod=$('ad-v2-stat-period');
-      if(statPeriod){
-        var period=selectedPeriodId();
-        if(period)statPeriod.value=period;
-        statPeriod.dispatchEvent(new Event('change',{bubbles:true}));
+      if(ready){
+        var statPeriod=$('ad-v2-stat-period');
+        if(statPeriod){
+          var period=selectedPeriodId();
+          if(period)statPeriod.value=period;
+          statPeriod.dispatchEvent(new Event('change',{bubbles:true}));
+        }
       }
     },250);
   }
@@ -189,11 +197,13 @@
       setDetailStatus('Solo se puede corregir un título que ya esté aprobado.','danger');
       return;
     }
+
     var current=currentTitle(student);
     var input=$('ad-admin-title-corrected');
     var corrected=text(input&&input.value).replace(/\s+/g,' ');
     if(corrected.length<10){setDetailStatus('Escribe un título corregido válido.','danger');return;}
     if(normal(corrected)===normal(current)){setDetailStatus('El título corregido es igual al título actual. No hay cambios para guardar.','danger');return;}
+    if(!text(student.envioId)){setDetailStatus('No se identificó el envío exacto que se va a corregir. Actualiza la lista e inténtalo nuevamente.','danger');return;}
     if(!window.confirm('¿Guardar la corrección del título de '+(student.nombres||student.cedula)+'? El título anterior quedará en el historial.'))return;
 
     var api=window.ADAPIService;
@@ -208,6 +218,7 @@
     setDetailStatus('Guardando corrección del título...','info');
     var periodId=selectedPeriodId();
     var periodLabel=selectedPeriodLabel();
+
     Promise.resolve(api.devolverTitulo({
       envioId:student.envioId,
       cedula:student.cedula,
@@ -233,7 +244,10 @@
       var close=($('ad-v2-detail-modal')||document).querySelector('[data-v2-action="close-detail"]');
       if(close)close.click();
       var titleStatus=$('ad-v2-title-status');
-      if(titleStatus){titleStatus.textContent=result&&result.mensaje||'Título corregido correctamente.';titleStatus.className='ad-result-box ad-status-success';}
+      if(titleStatus){
+        titleStatus.textContent=result&&result.mensaje||'Título corregido correctamente.';
+        titleStatus.className='ad-result-box ad-status-success';
+      }
       refreshAfterCorrection(student.cedula,corrected);
     }).catch(function(error){
       setDetailStatus(text(error&&error.message||error)||'No se pudo guardar la corrección del título.','danger');
@@ -278,7 +292,10 @@
 
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',scheduleSync,{once:true});else scheduleSync();
   window.addEventListener('load',scheduleSync,{once:true});
-  observer=new MutationObserver(scheduleSync);
-  observer.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['hidden']});
+
+  /* Solo observamos cambios de estructura. No observamos el atributo hidden:
+     así el propio parche no puede entrar en un ciclo al ocultar/mostrar controles. */
+  var observer=new MutationObserver(scheduleSync);
+  observer.observe(document.documentElement,{childList:true,subtree:true});
   [100,300,600,1000,1800,3000].forEach(function(delay){window.setTimeout(scheduleSync,delay);});
 })(window,document);
