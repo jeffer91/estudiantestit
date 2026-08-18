@@ -1,18 +1,20 @@
-/* Datos sanitizados para el reporte PDF de Firebase Títulos. */
+/* Datos sanitizados para el reporte PDF de Firebase Títulos.
+ * El reporte es estrictamente de lectura y usa límites por colección para no
+ * agotar subrequests de Cloudflare en una sola invocación.
+ */
 import { listCollection, nowIso, text } from './firestore-fixed.js';
-import { migrarTrabajosTitulacionLegados } from './trabajo-titulacion-unificado.js';
 
 const COLLECTIONS = Object.freeze([
-  ['periodos', 1000],
-  ['carreras', 2000],
-  ['coordinadores', 1000],
-  ['envios', 10000],
-  ['versiones_envio', 10000],
-  ['resoluciones', 10000],
-  ['ia', 1000],
-  ['servicios', 1000],
-  ['configuracion', 1000],
-  ['migraciones', 3000]
+  ['periodos', 500],
+  ['carreras', 500],
+  ['coordinadores', 500],
+  ['envios', 900],
+  ['versiones_envio', 900],
+  ['resoluciones', 900],
+  ['ia', 300],
+  ['servicios', 300],
+  ['configuracion', 300],
+  ['migraciones', 300]
 ]);
 
 function normalizedKey(value) {
@@ -40,23 +42,40 @@ function sanitize(value, key = '', depth = 0) {
 }
 
 export async function buildFirebaseTitlesReport(env) {
-  await migrarTrabajosTitulacionLegados(env);
-  const results = await Promise.all(COLLECTIONS.map(async ([name, maxDocuments]) => {
-    const rows = await listCollection('TITULOS', name, { maxDocuments }, env);
-    return [name, rows.map((row) => sanitize(row))];
-  }));
-  const collections = Object.fromEntries(results);
-  const summary = Object.entries(collections).map(([collection, rows]) => ({
-    coleccion: collection,
-    documentos: Array.isArray(rows) ? rows.length : 0
-  }));
+  const collections = {};
+  const summary = [];
+  const truncatedCollections = [];
 
+  /* Secuencial a propósito: evita abrir demasiadas conexiones externas en
+     paralelo dentro de la misma invocación del Worker. Se lee un registro
+     adicional para saber si la colección supera el límite del reporte. */
+  for (const [name, limit] of COLLECTIONS) {
+    const rows = await listCollection('TITULOS', name, {
+      maxDocuments: limit + 1
+    }, env);
+    const truncated = rows.length > limit;
+    const visible = truncated ? rows.slice(0, limit) : rows;
+    collections[name] = visible.map((row) => sanitize(row));
+    summary.push({
+      coleccion: name,
+      documentos: visible.length,
+      limite: limit,
+      truncado: truncated
+    });
+    if (truncated) truncatedCollections.push(name);
+  }
+
+  const complete = truncatedCollections.length === 0;
   return {
     ok: true,
     proyecto: 'titulos-ec2fa',
     generadoEn: nowIso(),
     resumen: summary,
     colecciones: collections,
-    nota: 'Las credenciales, tokens y secretos se excluyeron del reporte.'
+    completo: complete,
+    coleccionesTruncadas: truncatedCollections,
+    nota: complete
+      ? 'Las credenciales, tokens y secretos se excluyeron del reporte.'
+      : 'Reporte parcial para proteger los límites del servidor. Se alcanzó el máximo seguro en: ' + truncatedCollections.join(', ') + '. Las credenciales, tokens y secretos se excluyeron.'
   };
 }
