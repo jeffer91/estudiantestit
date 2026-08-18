@@ -72,6 +72,7 @@ for (const required of [
   path.join(output, 'ad-js', 'ad-administracion-global.js'),
   path.join(output, 'ad-js', 'ad-performance.patch.js'),
   path.join(output, 'ad-js', 'ad-trabajo-titulacion-admin.patch.js'),
+  path.join(output, 'ad-js', 'ad-titulos-admin.patch.js'),
   path.join(output, 'ad-js', 'ad-correo-outlook.js'),
   path.join(output, 'ad-js', 'ad-pdf-firebase.js'),
   path.join(output, 'ad-js', 'ad-version.js')
@@ -94,6 +95,6 @@ console.log('[Pages administrador] Carpeta preparada en .pages-administrador.');
 console.log(`[Pages administrador] Versión ${VERSION_ADMIN}.`);
 console.log('[Pages administrador] Ruta pública principal: /.');
 console.log('[Pages administrador] Web y Electron cargan los mismos complementos desde ad-servicios.app.js.');
-console.log('[Pages administrador] Incluye períodos, carreras, lista global, estadísticas, WhatsApp, Outlook, PDF y acciones administrativas para Trabajo de Titulación.');
+console.log('[Pages administrador] Incluye períodos, carreras, lista global, estadísticas, corrección administrativa de títulos, WhatsApp, Outlook, PDF y acciones administrativas para Trabajo de Titulación.');
 console.log('[Pages administrador] La carpeta functions permanece en la raíz para habilitar /api/*.');
 console.log('[Pages administrador] Protege este proyecto con Cloudflare Access antes de usarlo en producción.');
