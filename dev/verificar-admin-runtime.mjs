@@ -106,9 +106,34 @@ assert.match(
   'La corrección administrativa debe enviar el nuevo título como tituloCorregido.'
 );
 assert.match(
+  titleAdmin,
+  /envioId:student\.envioId/,
+  'La corrección administrativa debe enviar el ID exacto del envío mostrado.'
+);
+assert.match(
+  titleAdmin,
+  /observer\.observe\(document\.documentElement,\{childList:true,subtree:true\}\)/,
+  'El observador del Administrador debe limitarse a cambios de estructura.'
+);
+assert.doesNotMatch(
+  titleAdmin,
+  /attributeFilter:\['hidden'\]/,
+  'El parche no debe observar hidden porque puede provocarse a sí mismo ciclos de actualización.'
+);
+assert.match(
   resolutionCore,
   /RESOLUTION_STATES = new Set\(\['APROBADO', 'REEMPLAZADO', 'DEVUELTO'\]\)/,
   'El backend no admite REEMPLAZADO como resolución válida.'
+);
+assert.match(
+  resolutionCore,
+  /getDocument\('TITULOS', 'envios', explicitId, env\)/,
+  'El backend debe priorizar el envío exacto recibido desde la interfaz.'
+);
+assert.match(
+  resolutionCore,
+  /exactCedula !== cedula/,
+  'El backend debe impedir que un envioId de otro estudiante sea modificado.'
 );
 assert.match(
   resolutionCore,
@@ -136,4 +161,4 @@ assert.match(
   'El PDF debe informar si una colección excede el límite seguro.'
 );
 
-console.log('[Administrador runtime] Aprobados agrupados, corrección de títulos con historial, complementos compartidos y reporte seguro.');
+console.log('[Administrador runtime] Aprobados agrupados, corrección exacta con historial, observador estable, complementos compartidos y reporte seguro.');
