@@ -27,20 +27,8 @@ function actualizarVersionHtml(file) {
   fs.writeFileSync(file, html, 'utf8');
 }
 
-function instalarComplementosAdministrador(file) {
-  let html = fs.readFileSync(file, 'utf8');
-  const performance = `  <script src="./ad-js/ad-performance.patch.js?v=${VERSION_ADMIN}"></script>\n`;
-  const work = `  <script src="./ad-js/ad-trabajo-titulacion-admin.patch.js?v=${VERSION_ADMIN}"></script>\n`;
-  let scripts = '';
-  if (!html.includes('ad-performance.patch.js')) scripts += performance;
-  if (!html.includes('ad-trabajo-titulacion-admin.patch.js')) scripts += work;
-  if (scripts) html = html.replace('</body>', `${scripts}</body>`);
-  fs.writeFileSync(file, html, 'utf8');
-}
-
 const adminOutputEntry = path.join(output, 'ad-index.html');
 actualizarVersionHtml(adminOutputEntry);
-instalarComplementosAdministrador(adminOutputEntry);
 fs.copyFileSync(adminOutputEntry, path.join(output, 'index.html'));
 
 const notFoundHtml = `<!doctype html>
@@ -80,6 +68,7 @@ for (const required of [
   path.join(output, 'ad-css', 'ad-titulos-estadisticas.css'),
   path.join(output, 'ad-js', 'ad-api.service.js'),
   path.join(output, 'ad-js', 'ad-google-sheets.app.js'),
+  path.join(output, 'ad-js', 'ad-servicios.app.js'),
   path.join(output, 'ad-js', 'ad-administracion-global.js'),
   path.join(output, 'ad-js', 'ad-performance.patch.js'),
   path.join(output, 'ad-js', 'ad-trabajo-titulacion-admin.patch.js'),
@@ -104,6 +93,7 @@ for (const directory of [
 console.log('[Pages administrador] Carpeta preparada en .pages-administrador.');
 console.log(`[Pages administrador] Versión ${VERSION_ADMIN}.`);
 console.log('[Pages administrador] Ruta pública principal: /.');
+console.log('[Pages administrador] Web y Electron cargan los mismos complementos desde ad-servicios.app.js.');
 console.log('[Pages administrador] Incluye períodos, carreras, lista global, estadísticas, WhatsApp, Outlook, PDF y acciones administrativas para Trabajo de Titulación.');
 console.log('[Pages administrador] La carpeta functions permanece en la raíz para habilitar /api/*.');
 console.log('[Pages administrador] Protege este proyecto con Cloudflare Access antes de usarlo en producción.');
