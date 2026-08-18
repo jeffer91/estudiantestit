@@ -1,4 +1,4 @@
-/* Evita reconstruir en el servidor las estadísticas cuando la lista global ya está cargada. */
+/* Reutiliza la lista global y estabiliza errores de carga del Administrador. */
 (function(window){
   'use strict';
 
@@ -17,6 +17,22 @@
     if(!requested)return true;
     return requested===texto(data&&data.periodoId)||
       requested===texto(data&&data.periodo);
+  }
+
+  function errorAmigable(error){
+    var raw=texto(error&&error.message||error)||'No se pudo completar la consulta.';
+    var key=raw.toLowerCase();
+    if(key.indexOf('too many subrequests')>=0||
+       (key.indexOf('subrequest')>=0&&key.indexOf('limit')>=0)){
+      return new Error('No se pudo cargar la lista completa porque la consulta superó temporalmente el límite del servidor. Vuelve a actualizar; si persiste, revisa Diagnóstico.');
+    }
+    if(key.indexOf('resource_exhausted')>=0||key.indexOf('quota')>=0||key.indexOf('429')>=0){
+      return new Error('El servicio alcanzó temporalmente su límite de consultas. Espera unos segundos y vuelve a actualizar.');
+    }
+    if(key.indexOf('failed to fetch')>=0||key.indexOf('networkerror')>=0){
+      return new Error('No se pudo conectar con el servidor. Verifica la conexión y vuelve a actualizar.');
+    }
+    return error instanceof Error?error:new Error(raw);
   }
 
   function calcular(data,filtros){
@@ -98,6 +114,17 @@
     var wrapper={};
     Object.keys(original).forEach(function(key){wrapper[key]=original[key];});
     wrapper.__adminPerformanceV1=true;
+
+    if(typeof original.listarTitulosGlobal==='function'){
+      wrapper.listarTitulosGlobal=function(filtros){
+        return Promise.resolve(original.listarTitulosGlobal(filtros)).catch(function(error){
+          window.ADAdminGlobalLast=null;
+          window.ADAdminStatisticsLast=null;
+          throw errorAmigable(error);
+        });
+      };
+    }
+
     wrapper.obtenerEstadisticas=function(filtros){
       var global=window.ADAdminGlobalLast;
       if(global&&Array.isArray(global.registros)&&mismoPeriodo(global,filtros)){
@@ -105,8 +132,12 @@
         window.ADAdminStatisticsLast=result;
         return Promise.resolve(result);
       }
-      return original.obtenerEstadisticas(filtros);
+      return Promise.resolve(original.obtenerEstadisticas(filtros)).catch(function(error){
+        window.ADAdminStatisticsLast=null;
+        throw errorAmigable(error);
+      });
     };
+
     window.ADAPIService=Object.freeze(wrapper);
   }
 
