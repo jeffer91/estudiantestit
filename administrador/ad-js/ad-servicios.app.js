@@ -1,7 +1,8 @@
-/* Estado de los servicios Firebase configurados mediante Cloudflare Pages. */
+/* Estado de los servicios Firebase y carga común de complementos del Administrador. */
 (function(window,document){
   'use strict';
 
+  var VERSION='3.5.0';
   var servicios=[];
   function api(){return window.ADAPIService||null;}
   function $(id){return document.getElementById(id);}
@@ -13,6 +14,22 @@
     var tipo=texto(servicio.tipo).toLowerCase();
     if(tipo.indexOf('service')>=0||tipo.indexOf('iam')>=0)return'Cuenta de servicio / IAM';
     return'Configuración web / REST';
+  }
+
+  function cargarComplemento(ruta,atributo){
+    if(document.querySelector('script['+atributo+'="true"]'))return;
+    var script=document.createElement('script');
+    script.src=ruta+'?v='+VERSION;
+    script.async=false;
+    script.setAttribute(atributo,'true');
+    document.head.appendChild(script);
+  }
+
+  function cargarComplementosComunes(){
+    /* Se cargan desde la interfaz base, no desde el build de Cloudflare, para
+       que navegador y Electron ejecuten exactamente los mismos complementos. */
+    cargarComplemento('./ad-js/ad-performance.patch.js','data-ad-performance');
+    cargarComplemento('./ad-js/ad-trabajo-titulacion-admin.patch.js','data-ad-trabajo-titulacion-admin');
   }
 
   function asegurarInterfaz(){
@@ -74,6 +91,7 @@
 
   function init(){
     asegurarInterfaz();
+    cargarComplementosComunes();
     document.addEventListener('click',function(event){
       var button=event.target&&event.target.closest?event.target.closest('[data-action]'):null;
       if(button&&button.getAttribute('data-action')==='refrescar-servicios')cargar();
