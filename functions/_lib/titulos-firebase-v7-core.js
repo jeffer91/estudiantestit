@@ -5,6 +5,7 @@ import {
 } from './titulos-firebase-v6.js';
 import {
   commitDocuments,
+  getDocument,
   normalizeCedula,
   nowIso,
   queryEqual,
@@ -55,6 +56,22 @@ function uniqueEventId(prefix) {
 
 async function currentEnvio(payload, env) {
   const cedula = normalizeCedula(payload.cedula || payload.numeroIdentificacion);
+  const explicitId = text(payload.envioId || payload.idEnvio || payload.idRegistro);
+
+  /* Cuando Administrador o Coordinadores envían el ID del registro que están
+     viendo, se usa ese documento exacto. Esto evita corregir por accidente
+     otra versión del mismo estudiante en el mismo período. */
+  if (explicitId) {
+    const exact = await getDocument('TITULOS', 'envios', explicitId, env);
+    if (exact) {
+      const exactCedula = normalizeCedula(exact.cedula || exact.numeroIdentificacion);
+      if (cedula && exactCedula && exactCedula !== cedula) {
+        throw new Error('El envío seleccionado no pertenece al estudiante indicado.');
+      }
+      return exact;
+    }
+  }
+
   const result = await executePrevious('VERIFICAR_ENVIO', {
     cedula,
     numeroIdentificacion: cedula,
