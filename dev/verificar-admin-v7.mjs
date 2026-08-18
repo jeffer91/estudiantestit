@@ -5,6 +5,7 @@ import { enrichAdminPeriodPayload } from '../functions/_lib/estadisticas-admin.j
 
 const originalFetch = globalThis.fetch;
 const calls = [];
+let scenario = 'canonical';
 
 function responseJson(value, status = 200) {
   return new Response(JSON.stringify(value), {
@@ -37,6 +38,39 @@ globalThis.fetch = async (url, options = {}) => {
     const collection = query.from && query.from[0] && query.from[0].collectionId;
     const filter = query.where && query.where.fieldFilter || {};
     const field = filter.field && filter.field.fieldPath;
+
+    if (scenario === 'alias') {
+      if (collection === 'matriculas' && field === 'periodoId') {
+        return responseJson([{
+          document: doc(
+            'projects/utet-4387a/databases/(default)/documents/matriculas/a1',
+            {
+              cedula: '1700000099',
+              periodoId: '2026-10',
+              nombreCarreraActual: 'Carrera Uno',
+              estadoMatricula: 'ACTIVO'
+            }
+          )
+        }]);
+      }
+      if (collection === 'envios' && field === 'periodoId') {
+        return responseJson([{
+          document: doc(
+            'projects/titulos-ec2fa/databases/(default)/documents/envios/ae1',
+            {
+              cedula: '1700000099',
+              periodoId: '2026-10',
+              estado: 'APROBADO',
+              titulo1: 'Tema institucional uno',
+              titulo2: 'Tema institucional dos',
+              titulo3: 'Tema institucional tres',
+              fechaEnvio: '2026-03-01T12:00:00.000Z'
+            }
+          )
+        }]);
+      }
+      return responseJson([]);
+    }
 
     if (collection === 'matriculas' && field === 'periodoId') {
       return responseJson([
@@ -169,6 +203,26 @@ try {
     runQueries.length <= 12,
     `La lista administrativa usó demasiadas consultas de período: ${runQueries.length}`
   );
+
+  calls.length = 0;
+  scenario = 'alias';
+  const aliasResult = await buildAdminGlobalList({
+    periodoId: '2025-10__2026-03',
+    periodoLabel: 'Octubre 2025 a Marzo 2026',
+    periodo: '2026-10'
+  }, {});
+
+  assert.equal(
+    aliasResult.total,
+    1,
+    'Un código institucional de período no debe descartarse por diferir de la firma de fechas.'
+  );
+  assert.equal(
+    aliasResult.totalEnviosPeriodo,
+    1,
+    'Los envíos guardados con el código institucional deben permanecer asociados al período.'
+  );
+  assert.equal(aliasResult.registros[0].estado, 'APROBADO');
 } finally {
   globalThis.fetch = originalFetch;
 }
@@ -219,4 +273,4 @@ assert(
   'Las estadísticas deben reutilizar la lista global cuando ya está disponible.'
 );
 
-console.log('[Administrador v7] Consultas acotadas, alias de período y estado de error verificados.');
+console.log('[Administrador v7] Consultas acotadas, alias institucionales y estado de error verificados.');
