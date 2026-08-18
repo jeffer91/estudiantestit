@@ -1,16 +1,16 @@
-/* Fachada administrativa v7 con resolución de alias del catálogo de períodos.
- * El frontend trabaja con un ID canónico, pero los datos históricos pueden
- * conservar además un ID institucional y/o el nombre legible del período.
- * Antes de construir la lista se completan esas variantes desde `periodos`.
+/* Fachada administrativa v8 con resolución flexible de alias del catálogo.
+ * El frontend puede enviar el ID canónico y el nombre legible, mientras los
+ * registros históricos conservan un ID institucional corto. Antes de consultar
+ * se añaden todas esas variantes para que ninguna quede fuera del cruce.
  */
 import {
   assignCareerCoordinator,
-  buildAdminGlobalList as buildAdminGlobalListV7,
-  buildAdminStatistics as buildAdminStatisticsV7,
+  buildAdminGlobalList as buildAdminGlobalListV8,
+  buildAdminStatistics as buildAdminStatisticsV8,
   listAdminCareers,
   listAdminPeriodsCatalog,
   saveAdminPeriod
-} from './admin-global-v7.js';
+} from './admin-global-v8.js';
 import { samePeriod, text } from './firestore-fixed.js';
 
 export {
@@ -49,15 +49,15 @@ export function enrichAdminPeriodPayload(payload = {}, catalog = {}) {
   const label = text(target.label || target.periodoLabel);
   const documentId = text(target.documentId);
   const existingPeriod = text(input.periodo);
-  const periodAlias = !existingPeriod || existingPeriod === requested
-    ? documentId || label || requested
-    : existingPeriod;
 
   return {
     ...input,
     periodoId: text(input.periodoId) || canonical,
     periodoLabel: text(input.periodoLabel) || label,
-    periodo: periodAlias
+    /* El ID del documento es el alias más importante para datos antiguos,
+       por ejemplo 2026-02. Se conserva además de periodoId y periodoLabel. */
+    periodo: documentId || existingPeriod || label || requested,
+    documentId: text(input.documentId) || documentId
   };
 }
 
@@ -66,28 +66,27 @@ async function resolveAdminPeriodPayload(payload, env) {
   const requested = text(
     input.periodoId || input.periodoLabel || input.periodo || input.documentId
   );
-  if (!requested || text(input.periodoLabel)) return input;
+  if (!requested) return input;
 
   try {
     const catalog = await listAdminPeriodsCatalog(env);
     return enrichAdminPeriodPayload(input, catalog);
   } catch (_error) {
-    /* La lista global todavía puede resolverse con los datos recibidos si el
-       catálogo no está disponible temporalmente. No convertimos una lectura
-       auxiliar en un bloqueo de toda la pantalla. */
+    /* Si el catálogo falla, la lista todavía puede intentar resolver con los
+       valores recibidos. No convertimos una lectura auxiliar en un bloqueo. */
     return input;
   }
 }
 
 export async function buildAdminGlobalList(payload = {}, env) {
-  return buildAdminGlobalListV7(
+  return buildAdminGlobalListV8(
     await resolveAdminPeriodPayload(payload, env),
     env
   );
 }
 
 export async function buildAdminStatistics(payload = {}, env) {
-  return buildAdminStatisticsV7(
+  return buildAdminStatisticsV8(
     await resolveAdminPeriodPayload(payload, env),
     env
   );
