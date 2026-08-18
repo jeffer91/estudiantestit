@@ -27,18 +27,20 @@ function actualizarVersionHtml(file) {
   fs.writeFileSync(file, html, 'utf8');
 }
 
-function instalarAccionesTrabajoTitulacion(file) {
+function instalarComplementosAdministrador(file) {
   let html = fs.readFileSync(file, 'utf8');
-  const script = `  <script src="./ad-js/ad-trabajo-titulacion-admin.patch.js?v=${VERSION_ADMIN}"></script>\n`;
-  if (!html.includes('ad-trabajo-titulacion-admin.patch.js')) {
-    html = html.replace('</body>', `${script}</body>`);
-  }
+  const performance = `  <script src="./ad-js/ad-performance.patch.js?v=${VERSION_ADMIN}"></script>\n`;
+  const work = `  <script src="./ad-js/ad-trabajo-titulacion-admin.patch.js?v=${VERSION_ADMIN}"></script>\n`;
+  let scripts = '';
+  if (!html.includes('ad-performance.patch.js')) scripts += performance;
+  if (!html.includes('ad-trabajo-titulacion-admin.patch.js')) scripts += work;
+  if (scripts) html = html.replace('</body>', `${scripts}</body>`);
   fs.writeFileSync(file, html, 'utf8');
 }
 
 const adminOutputEntry = path.join(output, 'ad-index.html');
 actualizarVersionHtml(adminOutputEntry);
-instalarAccionesTrabajoTitulacion(adminOutputEntry);
+instalarComplementosAdministrador(adminOutputEntry);
 fs.copyFileSync(adminOutputEntry, path.join(output, 'index.html'));
 
 const notFoundHtml = `<!doctype html>
@@ -79,6 +81,7 @@ for (const required of [
   path.join(output, 'ad-js', 'ad-api.service.js'),
   path.join(output, 'ad-js', 'ad-google-sheets.app.js'),
   path.join(output, 'ad-js', 'ad-administracion-global.js'),
+  path.join(output, 'ad-js', 'ad-performance.patch.js'),
   path.join(output, 'ad-js', 'ad-trabajo-titulacion-admin.patch.js'),
   path.join(output, 'ad-js', 'ad-correo-outlook.js'),
   path.join(output, 'ad-js', 'ad-pdf-firebase.js'),
