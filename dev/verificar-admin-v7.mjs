@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { buildAdminGlobalList } from '../functions/_lib/admin-global-v7.js';
+import { enrichAdminPeriodPayload } from '../functions/_lib/estadisticas-admin.js';
 
 const originalFetch = globalThis.fetch;
 const calls = [];
@@ -171,4 +173,50 @@ try {
   globalThis.fetch = originalFetch;
 }
 
-console.log('[Administrador v7] Períodos mixtos unidos sin barridos completos.');
+const enriched = enrichAdminPeriodPayload(
+  {
+    periodoId: '2025-10__2026-03',
+    periodo: '2025-10__2026-03'
+  },
+  {
+    periodos: [{
+      id: '2025-10__2026-03',
+      periodoId: '2025-10__2026-03',
+      documentId: '2026-10',
+      label: 'Octubre 2025 a Marzo 2026',
+      periodoLabel: 'Octubre 2025 a Marzo 2026'
+    }]
+  }
+);
+
+assert.equal(
+  enriched.periodoLabel,
+  'Octubre 2025 a Marzo 2026',
+  'La API administrativa debe conservar el nombre legible del período.'
+);
+assert.equal(
+  enriched.periodo,
+  '2026-10',
+  'La API administrativa debe incluir el ID institucional como alias de consulta.'
+);
+assert.equal(
+  enriched.periodoId,
+  '2025-10__2026-03',
+  'El ID canónico del período debe permanecer estable.'
+);
+
+const performance = fs.readFileSync('administrador/ad-js/ad-performance.patch.js', 'utf8');
+assert(
+  /ADAdminGlobalLast=null/.test(performance),
+  'Un error de carga debe descartar la lista global anterior para no mostrar falsos ceros.'
+);
+assert(
+  /too many subrequests/i.test(performance) && /límite del servidor/i.test(performance),
+  'El Administrador debe convertir el error técnico de subrequests en un mensaje comprensible.'
+);
+assert(
+  /estadisticasDesdeListaGlobal:true/.test(performance),
+  'Las estadísticas deben reutilizar la lista global cuando ya está disponible.'
+);
+
+console.log('[Administrador v7] Consultas acotadas, alias de período y estado de error verificados.');
