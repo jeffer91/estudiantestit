@@ -9,6 +9,7 @@ function read(path) {
 const services = read('administrador/ad-js/ad-servicios.app.js');
 const performance = read('administrador/ad-js/ad-performance.patch.js');
 const workAdmin = read('administrador/ad-js/ad-trabajo-titulacion-admin.patch.js');
+const report = read('functions/_lib/firebase-titulos-report.js');
 const build = read('dev/preparar-pages-administrador.mjs');
 const electron = read('electron/administrador/main.cjs');
 
@@ -57,5 +58,25 @@ assert.match(
   /ADMIN_QUITAR_ENVIO_TRABAJO_TITULACION/,
   'Las acciones administrativas de Trabajo de Titulación no están disponibles.'
 );
+assert.doesNotMatch(
+  report,
+  /migrarTrabajosTitulacionLegados/,
+  'Generar el PDF no debe ejecutar migraciones ni escrituras.'
+);
+assert.doesNotMatch(
+  report,
+  /Promise\.all\(COLLECTIONS/,
+  'El PDF no debe abrir todas las lecturas de Firebase en paralelo.'
+);
+assert.match(
+  report,
+  /for \(const \[name, limit\] of COLLECTIONS\)/,
+  'El PDF debe leer las colecciones de forma secuencial.'
+);
+assert.match(
+  report,
+  /coleccionesTruncadas/,
+  'El PDF debe informar si una colección excede el límite seguro.'
+);
 
-console.log('[Administrador runtime] Web y Electron comparten los mismos complementos sin duplicarlos.');
+console.log('[Administrador runtime] Web y Electron comparten complementos; el reporte es de solo lectura y acotado.');
