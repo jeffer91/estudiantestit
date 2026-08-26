@@ -5,7 +5,7 @@ import process from 'node:process';
 const root = process.cwd();
 const source = path.join(root, 'administrador');
 const output = path.join(root, '.pages-administrador');
-const VERSION_ADMIN = '3.5.0';
+const VERSION_ADMIN = '3.5.1';
 
 if (!fs.existsSync(source) || !fs.statSync(source).isDirectory()) {
   throw new Error('No se encontró la carpeta administrador.');
@@ -73,6 +73,7 @@ for (const required of [
   path.join(output, 'ad-js', 'ad-performance.patch.js'),
   path.join(output, 'ad-js', 'ad-trabajo-titulacion-admin.patch.js'),
   path.join(output, 'ad-js', 'ad-titulos-admin.patch.js'),
+  path.join(output, 'ad-js', 'ad-estadisticas-control.patch.js'),
   path.join(output, 'ad-js', 'ad-correo-outlook.js'),
   path.join(output, 'ad-js', 'ad-pdf-firebase.js'),
   path.join(output, 'ad-js', 'ad-version.js')
