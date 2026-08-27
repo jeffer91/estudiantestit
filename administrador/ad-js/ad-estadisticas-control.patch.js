@@ -317,6 +317,7 @@
       tipoTrabajo:type||'TODOS',
       tipoFiltrado:typeFiltered,
       periodosIncluidos:included.map(function(p){return{id:p.id||p.periodoId,label:p.label||p.periodoLabel||p.id,activo:p.activo===true,principal:p.principal===true};}),
+      registros:rows,
       resumen:summary,
       carreras:careers,
       coordinadores:coords,
