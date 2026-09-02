@@ -263,14 +263,22 @@ export async function buildAdminGlobalList(payload = {}, env) {
 
 export async function buildAdminStatistics(payload = {}, env) {
   const global = await buildAdminGlobalList(payload, env);
-  const buckets = new Map();
+  const careerBuckets = new Map();
+  const coordinatorBuckets = new Map();
 
   global.registros.forEach((student) => {
-    const bucketKey = normalized(student.codigoCarrera || student.carrera) || 'sin carrera';
-    if (!buckets.has(bucketKey)) {
-      buckets.set(bucketKey, {
+    const state = normalizeStatus(student.estado);
+    const careerKey = normalized(student.codigoCarrera || student.carrera) || 'sin carrera';
+    const coordinatorId = text(student.coordinadorResponsableId);
+    const coordinatorName = text(student.coordinadorResponsable) || 'Sin coordinador';
+    const coordinatorKey = coordinatorId || '__SIN_COORDINADOR__';
+
+    if (!careerBuckets.has(careerKey)) {
+      careerBuckets.set(careerKey, {
         codigoCarrera: student.codigoCarrera || '',
         carrera: student.carrera || 'SIN CARRERA',
+        coordinadorId,
+        coordinador: coordinatorName,
         esperados: 0,
         enviados: 0,
         faltan: 0,
@@ -282,19 +290,40 @@ export async function buildAdminStatistics(payload = {}, env) {
       });
     }
 
-    const item = buckets.get(bucketKey);
-    item.esperados += 1;
-    if (student.estado === 'NO_ENVIADO') item.faltan += 1;
-    else {
-      item.enviados += 1;
-      if (student.estado === 'APROBADO') item.aprobados += 1;
-      else if (student.estado === 'REEMPLAZADO') item.reemplazados += 1;
-      else if (student.estado === 'DEVUELTO') item.devueltos += 1;
-      else item.pendientes += 1;
+    const career = careerBuckets.get(careerKey);
+    career.esperados += 1;
+    if (state === 'NO_ENVIADO') {
+      career.faltan += 1;
+    } else {
+      career.enviados += 1;
+      if (state === 'APROBADO') career.aprobados += 1;
+      else if (state === 'REEMPLAZADO') career.reemplazados += 1;
+      else if (state === 'DEVUELTO') career.devueltos += 1;
+      else career.pendientes += 1;
     }
+
+    if (!coordinatorBuckets.has(coordinatorKey)) {
+      coordinatorBuckets.set(coordinatorKey, {
+        coordinadorKey,
+        coordinadorId,
+        coordinador: coordinatorName,
+        carreras: new Set(),
+        estudiantes: 0,
+        enviados: 0,
+        faltan: 0,
+        pendientesRevision: 0
+      });
+    }
+
+    const coordinator = coordinatorBuckets.get(coordinatorKey);
+    coordinator.estudiantes += 1;
+    if (student.carrera) coordinator.carreras.add(student.carrera);
+    if (state === 'NO_ENVIADO') coordinator.faltan += 1;
+    else coordinator.enviados += 1;
+    if (state === 'PENDIENTE_REVISION') coordinator.pendientesRevision += 1;
   });
 
-  const carreras = [...buckets.values()].map((item) => ({
+  const carreras = [...careerBuckets.values()].map((item) => ({
     ...item,
     avance: item.esperados
       ? Number(((item.enviados / item.esperados) * 100).toFixed(1))
@@ -318,14 +347,33 @@ export async function buildAdminStatistics(payload = {}, env) {
   resumen.avance = resumen.esperados
     ? Number(((resumen.enviados / resumen.esperados) * 100).toFixed(1))
     : 0;
+  resumen.totalEstudiantes = resumen.esperados;
+  resumen.enviaron = resumen.enviados;
+  resumen.porRevisar = resumen.pendientes;
   resumen.enviosFirebase = global.totalEnviosPeriodo || 0;
   resumen.trabajosTitulacion = global.totalTrabajosTitulacion || 0;
   resumen.fueraPoblacion = (global.fueraPoblacion || []).length;
+
+  const coordinadores = [...coordinatorBuckets.values()].map((item) => ({
+    ...item,
+    carreras: [...item.carreras].sort((a, b) => a.localeCompare(b, 'es'))
+  })).sort((a, b) =>
+    b.pendientesRevision - a.pendientesRevision ||
+    a.coordinador.localeCompare(b.coordinador, 'es')
+  );
+
+  const pendientesRevision = global.registros.filter(
+    (item) => normalizeStatus(item.estado) === 'PENDIENTE_REVISION'
+  );
 
   return {
     ...global,
     resumen,
     carreras,
-    mensaje: `Estadísticas calculadas para ${resumen.esperados} estudiantes.`
+    coordinadores,
+    pendientesRevision,
+    mensaje:
+      `Estadísticas calculadas para ${resumen.esperados} estudiantes: ` +
+      `${resumen.enviados} enviaron y ${resumen.faltan} faltan por enviar.`
   };
 }

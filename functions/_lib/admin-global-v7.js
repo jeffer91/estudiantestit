@@ -466,6 +466,8 @@ function mergeStudent(base, enrollment, id, byCode, byName, requestedPeriod) {
     nombres: names(enrollment) || names(base),
     codigoCarrera: canonical && canonical.codigo || rawCode,
     carrera: canonical && canonical.nombre || rawCareer,
+    coordinadorResponsableId: canonical && canonical.coordinadorId || '',
+    coordinadorResponsable: canonical && canonical.coordinadorNombre || '',
     celular: phone(base) || phone(enrollment),
     correoInstitucional: institutionalEmail(base) || institutionalEmail(enrollment),
     correoPersonal: personalEmail(base) || personalEmail(enrollment),

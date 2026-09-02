@@ -8,7 +8,7 @@
   <link rel="icon" href="data:," />
   <link rel="stylesheet" href="./ad-css/ad-admin.css?v=3.3.3" />
   <link rel="stylesheet" href="./ad-css/ad-google-sheets.css?v=3.3.3" />
-  <link rel="stylesheet" href="./ad-css/ad-titulos-estadisticas.css?v=3.3.3" />
+  <link rel="stylesheet" href="./ad-css/ad-titulos-estadisticas.css?v=3.5.2" />
 </head>
 <body>
   <div id="ad-loading" class="ad-loading" hidden>Procesando...</div>
@@ -122,7 +122,13 @@
       </section>
 
       <section id="ad-seccion-estadisticas" class="ad-view" data-ad-view hidden>
-        <div class="ad-section-head"><div><p class="ad-eyebrow">UTET + Firebase Títulos</p><h3>Estadísticas por carrera</h3><p class="ad-muted">Compara estudiantes activos del período con quienes ya registraron sus propuestas.</p></div></div>
+        <div class="ad-section-head">
+          <div>
+            <p class="ad-eyebrow">UTET + Firebase Títulos</p>
+            <h3>Estadísticas de titulación</h3>
+            <p class="ad-muted">Controla cuántos estudiantes enviaron, cuántos faltan y la carga pendiente de revisión de cada coordinador.</p>
+          </div>
+        </div>
         <div class="ad-card">
           <div class="ad-filter-grid ad-filter-grid--stats">
             <label><span>Período</span><select id="ad-estadisticas-periodo" data-periodo-select></select></label>
@@ -130,14 +136,36 @@
             <button class="ad-btn ad-btn-primary" type="button" data-action="cargar-estadisticas">Actualizar estadísticas</button>
           </div>
           <pre id="ad-estado-estadisticas" class="ad-result-box">Selecciona un período para calcular enviados y faltantes.</pre>
+
           <div class="ad-stat-grid">
-            <article class="ad-stat-card"><span>Esperados</span><strong id="ad-stat-esperados">0</strong></article>
-            <article class="ad-stat-card"><span>Enviados</span><strong id="ad-stat-enviados">0</strong></article>
-            <article class="ad-stat-card"><span>Faltan</span><strong id="ad-stat-faltan">0</strong></article>
-            <article class="ad-stat-card"><span>Aprobados</span><strong id="ad-stat-aprobados">0</strong></article>
-            <article class="ad-stat-card"><span>Avance</span><strong id="ad-stat-avance">0 %</strong></article>
+            <article class="ad-stat-card"><span>Total estudiantes</span><strong id="ad-stat-esperados">0</strong></article>
+            <article class="ad-stat-card"><span>Han enviado</span><strong id="ad-stat-enviados">0</strong></article>
+            <article class="ad-stat-card"><span>Faltan enviar</span><strong id="ad-stat-faltan">0</strong></article>
           </div>
-          <div class="ad-table-wrap"><table class="ad-table"><thead><tr><th>Carrera</th><th>Esperados</th><th>Enviados</th><th>Faltan</th><th>Pendientes</th><th>Aprobados</th><th>Devueltos</th><th>Avance</th></tr></thead><tbody id="ad-tabla-estadisticas"><tr><td colspan="8" class="ad-empty">Estadísticas pendientes.</td></tr></tbody></table></div>
+
+          <section class="ad-stats-section">
+            <div class="ad-section-head ad-section-head-compact">
+              <div><p class="ad-eyebrow">Cumplimiento</p><h4>Por carrera</h4></div>
+            </div>
+            <div class="ad-table-wrap">
+              <table class="ad-table">
+                <thead><tr><th>Carrera</th><th>Total</th><th>Enviaron</th><th>Faltan</th><th>Avance</th></tr></thead>
+                <tbody id="ad-tabla-estadisticas"><tr><td colspan="5" class="ad-empty">Estadísticas pendientes.</td></tr></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="ad-stats-section">
+            <div class="ad-section-head ad-section-head-compact">
+              <div><p class="ad-eyebrow">Coordinación</p><h4>Pendientes de revisión por coordinador</h4></div>
+            </div>
+            <div class="ad-table-wrap">
+              <table class="ad-table">
+                <thead><tr><th>Coordinador</th><th>Carreras</th><th>Enviados</th><th>Por revisar</th></tr></thead>
+                <tbody id="ad-tabla-estadisticas-coordinadores"><tr><td colspan="4" class="ad-empty">Estadísticas pendientes.</td></tr></tbody>
+              </table>
+            </div>
+          </section>
         </div>
       </section>
 
@@ -226,7 +254,26 @@
     </div>
   </section>
 
+  <section class="ad-modal" id="ad-modal-revision-coordinador" hidden role="dialog" aria-modal="true" aria-labelledby="ad-modal-revision-coordinador-titulo">
+    <div class="ad-modal__backdrop" data-action="cerrar-modal-revision-coordinador"></div>
+    <div class="ad-modal__card ad-modal__card--wide">
+      <header class="ad-modal__header">
+        <div><p class="ad-eyebrow">Coordinación</p><h3 id="ad-modal-revision-coordinador-titulo">Pendientes de revisión</h3></div>
+        <button class="ad-modal__close" type="button" data-action="cerrar-modal-revision-coordinador" aria-label="Cerrar">×</button>
+      </header>
+      <div class="ad-modal__body">
+        <div class="ad-table-wrap">
+          <table class="ad-table ad-modal-table">
+            <thead><tr><th>Cédula</th><th>Estudiante</th><th>Carrera</th><th>Estado</th></tr></thead>
+            <tbody id="ad-tabla-revision-coordinador"><tr><td colspan="4" class="ad-empty">Sin datos.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <footer class="ad-modal__footer"><button class="ad-btn ad-btn-secondary" type="button" data-action="cerrar-modal-revision-coordinador">Cerrar</button></footer>
+    </div>
+  </section>
+
   <script src="./ad-js/ad-api.service.js?v=3.3.3"></script>
-  <script src="./ad-js/ad-google-sheets.app.js?v=3.3.3"></script>
+  <script src="./ad-js/ad-google-sheets.app.js?v=3.5.2"></script>
 </body>
 </html>

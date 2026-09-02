@@ -2,7 +2,7 @@
 (function(window,document){
   'use strict';
 
-  var VERSION='3.2.1';
+  var VERSION='3.5.2';
   var state={
     periodos:[],principal:null,carreras:[],coordinadores:[],titulos:[],proveedores:[],
     periodoId:'',coordinadorEdicion:null,proveedorEdicion:null,tituloActual:null,estadisticas:null
@@ -113,17 +113,71 @@
   }
 
   function renderEstadisticas(){
-    var data=state.estadisticas||{};var r=data.resumen||{};setTexto('ad-stat-esperados',String(r.esperados||0));setTexto('ad-stat-enviados',String(r.enviados||0));setTexto('ad-stat-faltan',String(r.faltan||0));setTexto('ad-stat-aprobados',String((r.aprobados||0)+(r.reemplazados||0)));setTexto('ad-stat-avance',String(r.avance||0)+' %');
-    var filas=(data.carreras||[]).map(function(item){var approved=(item.aprobados||0)+(item.reemplazados||0);return '<tr><td>'+esc(item.carrera)+'</td><td>'+Number(item.esperados||0)+'</td><td>'+Number(item.enviados||0)+'</td><td><button class="ad-count-btn" type="button" data-action="mostrar-faltantes" data-carrera="'+esc(item.carrera)+'" '+(Number(item.faltan||0)?'':'disabled')+'>'+Number(item.faltan||0)+'</button></td><td>'+Number(item.pendientes||0)+'</td><td>'+approved+'</td><td>'+Number(item.devueltos||0)+'</td><td><div class="ad-progress"><div class="ad-progress__track"><div class="ad-progress__bar" style="width:'+Math.max(0,Math.min(100,Number(item.avance||0)))+'%"></div></div><small>'+Number(item.avance||0)+' %</small></div></td></tr>';});
-    setHtml('ad-tabla-estadisticas',filas.length?filas.join(''):'<tr><td colspan="8" class="ad-empty">No hay datos para el período y la carrera seleccionados.</td></tr>');
-    estadoBox('ad-estado-estadisticas',data.mensaje||'Estadísticas calculadas correctamente.',(r.esperados||0)?'success':'warning');
+    var data=state.estadisticas||{};
+    var r=data.resumen||{};
+    setTexto('ad-stat-esperados',String(r.esperados||0));
+    setTexto('ad-stat-enviados',String(r.enviados||0));
+    setTexto('ad-stat-faltan',String(r.faltan||0));
+
+    var filasCarreras=(data.carreras||[]).map(function(item){
+      var faltan=Number(item.faltan||0);
+      var avance=Number(item.avance||0);
+      return '<tr>'+
+        '<td><strong>'+esc(item.carrera)+'</strong></td>'+
+        '<td>'+Number(item.esperados||0)+'</td>'+
+        '<td>'+Number(item.enviados||0)+'</td>'+
+        '<td><button class="ad-count-btn" type="button" data-action="mostrar-faltantes" data-carrera="'+esc(item.carrera)+'" '+(faltan?'':'disabled')+'>'+faltan+'</button></td>'+
+        '<td><div class="ad-progress"><div class="ad-progress__track"><div class="ad-progress__bar" style="width:'+Math.max(0,Math.min(100,avance))+'%"></div></div><small>'+avance.toFixed(1).replace('.',',')+' %</small></div></td>'+
+      '</tr>';
+    });
+    setHtml('ad-tabla-estadisticas',filasCarreras.length?filasCarreras.join(''):'<tr><td colspan="5" class="ad-empty">No hay datos para el período y la carrera seleccionados.</td></tr>');
+
+    var filasCoordinadores=(data.coordinadores||[]).map(function(item){
+      var pendientes=Number(item.pendientesRevision||0);
+      var key=texto(item.coordinadorKey||item.coordinadorId||'__SIN_COORDINADOR__');
+      var nombre=texto(item.coordinador)||'Sin coordinador';
+      return '<tr>'+
+        '<td><strong>'+esc(nombre)+'</strong></td>'+
+        '<td>'+esc((item.carreras||[]).join(' · ')||'-')+'</td>'+
+        '<td>'+Number(item.enviados||0)+'</td>'+
+        '<td><button class="ad-count-btn ad-count-btn--review" type="button" data-action="mostrar-pendientes-coordinador" data-coordinador-key="'+esc(key)+'" data-coordinador="'+esc(nombre)+'" '+(pendientes?'':'disabled')+'>'+pendientes+'</button></td>'+
+      '</tr>';
+    });
+    setHtml('ad-tabla-estadisticas-coordinadores',filasCoordinadores.length?filasCoordinadores.join(''):'<tr><td colspan="4" class="ad-empty">No hay coordinadores para esta selección.</td></tr>');
+
+    estadoBox(
+      'ad-estado-estadisticas',
+      data.mensaje||('Total: '+Number(r.esperados||0)+'. Enviaron: '+Number(r.enviados||0)+'. Faltan: '+Number(r.faltan||0)+'.'),
+      (r.esperados||0)?'success':'warning'
+    );
   }
 
   function abrirFaltantes(carrera){
-    if(!state.estadisticas)return;var list=(state.estadisticas.faltantes||[]).filter(function(item){return !carrera||normal(item.carrera)===normal(carrera);});
-    setTexto('ad-modal-faltantes-titulo',carrera?'Faltantes: '+carrera:'Estudiantes que no han enviado');
-    var filas=list.map(function(item){return '<tr><td>'+esc(item.cedula)+'</td><td>'+esc(item.nombres||'Sin nombre')+'</td><td>'+esc(item.carrera||'-')+'</td><td>'+esc(item.celular||'Sin celular')+'</td><td><button class="ad-icon-btn ad-icon-btn--whatsapp" type="button" data-action="whatsapp-faltante" data-cedula="'+esc(item.cedula)+'" title="Enviar recordatorio por WhatsApp" aria-label="Enviar recordatorio por WhatsApp" '+(texto(item.celular)?'':'disabled')+'>💬</button></td></tr>';});
-    setHtml('ad-tabla-faltantes',filas.length?filas.join(''):'<tr><td colspan="5" class="ad-empty">No hay estudiantes faltantes para esta selección.</td></tr>');abrirModal('ad-modal-faltantes');
+    if(!state.estadisticas)return;
+    var list=(state.estadisticas.faltantes||[]).filter(function(item){
+      return !carrera||normal(item.carrera)===normal(carrera);
+    });
+    setTexto('ad-modal-faltantes-titulo',carrera?'Faltan enviar: '+carrera:'Estudiantes que no han enviado');
+    var filas=list.map(function(item){
+      return '<tr><td>'+esc(item.cedula)+'</td><td>'+esc(item.nombres||'Sin nombre')+'</td><td>'+esc(item.carrera||'-')+'</td><td>'+esc(item.celular||'Sin celular')+'</td><td><button class="ad-icon-btn ad-icon-btn--whatsapp" type="button" data-action="whatsapp-faltante" data-cedula="'+esc(item.cedula)+'" title="Enviar recordatorio por WhatsApp" aria-label="Enviar recordatorio por WhatsApp" '+(texto(item.celular)?'':'disabled')+'>💬</button></td></tr>';
+    });
+    setHtml('ad-tabla-faltantes',filas.length?filas.join(''):'<tr><td colspan="5" class="ad-empty">No hay estudiantes faltantes para esta selección.</td></tr>');
+    abrirModal('ad-modal-faltantes');
+  }
+
+  function abrirPendientesCoordinador(key,nombre){
+    if(!state.estadisticas)return;
+    var target=texto(key)||'__SIN_COORDINADOR__';
+    var list=(state.estadisticas.pendientesRevision||[]).filter(function(item){
+      var itemKey=texto(item.coordinadorResponsableId)||'__SIN_COORDINADOR__';
+      return itemKey===target;
+    });
+    setTexto('ad-modal-revision-coordinador-titulo','Por revisar: '+(texto(nombre)||'Sin coordinador'));
+    var filas=list.map(function(item){
+      return '<tr><td>'+esc(item.cedula)+'</td><td><strong>'+esc(item.nombres||'Sin nombre')+'</strong></td><td>'+esc(item.carrera||'-')+'</td><td><span class="ad-badge ad-badge-info">Pendiente de revisión</span></td></tr>';
+    });
+    setHtml('ad-tabla-revision-coordinador',filas.length?filas.join(''):'<tr><td colspan="4" class="ad-empty">No hay estudiantes pendientes de revisión para este coordinador.</td></tr>');
+    abrirModal('ad-modal-revision-coordinador');
   }
 
   function whatsapp(cedulaValue){
@@ -170,7 +224,7 @@
     document.addEventListener('click',function(event){
       var link=event.target.closest('[data-ad-view-target]');if(link){event.preventDefault();mostrarVista(link.getAttribute('data-ad-view-target'));return;}
       var b=event.target.closest('[data-action]');if(!b)return;var a=b.getAttribute('data-action'),title;
-      if(a==='refrescar')refrescarTodo();else if(a==='diagnosticar')diagnosticar();else if(a==='editar-coordinador')editarCoordinador(b.getAttribute('data-id'));else if(a==='toggle-coordinador')toggleCoordinador(b.getAttribute('data-id'),b.getAttribute('data-activo')==='true');else if(a==='detalle-titulo'){title=buscarTitulo(b.getAttribute('data-id'));abrirDetalle(title);}else if(a==='eliminar-titulo'){title=buscarTitulo(b.getAttribute('data-id'));eliminarTitulo(title,false);}else if(a==='cerrar-modal-titulo')cerrarModal('ad-modal-titulo');else if(a==='devolver-titulo-modal')devolverTituloActual();else if(a==='eliminar-titulo-modal')eliminarTitulo(state.tituloActual,true);else if(a==='cargar-estadisticas')cargarEstadisticas();else if(a==='mostrar-faltantes')abrirFaltantes(b.getAttribute('data-carrera'));else if(a==='cerrar-modal-faltantes')cerrarModal('ad-modal-faltantes');else if(a==='whatsapp-faltante')whatsapp(b.getAttribute('data-cedula'));else if(a==='editar-ia')editarIA(b.getAttribute('data-id'));else if(a==='toggle-ia')toggleIA(b.getAttribute('data-id'),b.getAttribute('data-activo')==='true');else if(a==='probar-ia')probarIA(b.getAttribute('data-id'));
+      if(a==='refrescar')refrescarTodo();else if(a==='diagnosticar')diagnosticar();else if(a==='editar-coordinador')editarCoordinador(b.getAttribute('data-id'));else if(a==='toggle-coordinador')toggleCoordinador(b.getAttribute('data-id'),b.getAttribute('data-activo')==='true');else if(a==='detalle-titulo'){title=buscarTitulo(b.getAttribute('data-id'));abrirDetalle(title);}else if(a==='eliminar-titulo'){title=buscarTitulo(b.getAttribute('data-id'));eliminarTitulo(title,false);}else if(a==='cerrar-modal-titulo')cerrarModal('ad-modal-titulo');else if(a==='devolver-titulo-modal')devolverTituloActual();else if(a==='eliminar-titulo-modal')eliminarTitulo(state.tituloActual,true);else if(a==='cargar-estadisticas')cargarEstadisticas();else if(a==='mostrar-faltantes')abrirFaltantes(b.getAttribute('data-carrera'));else if(a==='cerrar-modal-faltantes')cerrarModal('ad-modal-faltantes');else if(a==='mostrar-pendientes-coordinador')abrirPendientesCoordinador(b.getAttribute('data-coordinador-key'),b.getAttribute('data-coordinador'));else if(a==='cerrar-modal-revision-coordinador')cerrarModal('ad-modal-revision-coordinador');else if(a==='whatsapp-faltante')whatsapp(b.getAttribute('data-cedula'));else if(a==='editar-ia')editarIA(b.getAttribute('data-id'));else if(a==='toggle-ia')toggleIA(b.getAttribute('data-id'),b.getAttribute('data-activo')==='true');else if(a==='probar-ia')probarIA(b.getAttribute('data-id'));
     });
     var formCoordinator=$('ad-form-coordinador');if(formCoordinator)formCoordinator.addEventListener('submit',guardarCoordinador);
     var formAssignment=$('ad-form-asignacion');if(formAssignment)formAssignment.addEventListener('submit',asignarCarreras);
@@ -181,7 +235,7 @@
     var titlePeriod=$('ad-filtro-titulo-periodo');if(titlePeriod)titlePeriod.addEventListener('change',function(){busy(true,'Cargando títulos del período...');cargarTitulos(this.value).catch(function(error){estadoBox('ad-estado-titulos',mensaje(error),'danger');}).finally(function(){busy(false);});});
     var periodSelect=$('ad-periodo-select');if(periodSelect)periodSelect.addEventListener('change',function(){state.periodoId=texto(this.value);busy(true,'Cargando carreras...');cargarCarreras().catch(function(error){estadoBox('ad-estado-carreras',mensaje(error),'danger');}).finally(function(){busy(false);});});
     var coordinatorSelect=$('ad-asignar-coordinador');if(coordinatorSelect)coordinatorSelect.addEventListener('change',function(){var c=state.coordinadores.find(function(x){return x.id===texto(coordinatorSelect.value);});$('ad-asignar-carreras').value=c?c.carreras.join(' | '):'';});
-    document.addEventListener('keydown',function(event){if(event.key==='Escape'){cerrarModal('ad-modal-titulo');cerrarModal('ad-modal-faltantes');}});
+    document.addEventListener('keydown',function(event){if(event.key==='Escape'){cerrarModal('ad-modal-titulo');cerrarModal('ad-modal-faltantes');cerrarModal('ad-modal-revision-coordinador');}});
   }
 
   function init(){setTexto('ad-badge-version','v'+VERSION);setTexto('ad-footer-version','Versión '+VERSION);enlazar();var hash=texto(window.location.hash).replace(/^#/,'');mostrarVista(document.getElementById(hash)?hash:'ad-seccion-estado');refrescarTodo();}
