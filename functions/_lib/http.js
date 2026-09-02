@@ -5,6 +5,7 @@ export const ALLOWED_ORIGINS = new Set([
   'https://titulos.pages.dev',
   'https://titulos-administrador.pages.dev',
   'https://titulos-coordinadores.pages.dev',
+  'https://titulos-investigadores.pages.dev',
   'https://coordinadores.pages.dev',
   'http://127.0.0.1:5500',
   'http://localhost:5500',
@@ -50,6 +51,7 @@ export function originAllowed(originValue) {
       isPagesHost(url.hostname.toLowerCase(), 'titulos.pages.dev') ||
       isPagesHost(url.hostname.toLowerCase(), 'titulos-administrador.pages.dev') ||
       isPagesHost(url.hostname.toLowerCase(), 'titulos-coordinadores.pages.dev') ||
+      isPagesHost(url.hostname.toLowerCase(), 'titulos-investigadores.pages.dev') ||
       isPagesHost(url.hostname.toLowerCase(), 'coordinadores.pages.dev')
     );
   } catch (_error) {
@@ -67,6 +69,7 @@ export function role(request) {
   ) {
     return 'coordinator';
   }
+  if (isPagesHost(host, 'titulos-investigadores.pages.dev')) return 'investigator';
   if (isPagesHost(host, 'titulos.pages.dev')) return 'student';
 
   if (['localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]'].includes(host)) {
@@ -74,6 +77,9 @@ export function role(request) {
     if (app === 'administrador' || app === 'admin') return 'admin';
     if (app === 'coordinadores' || app === 'coordinador' || app === 'coordinator') {
       return 'coordinator';
+    }
+    if (app === 'investigadores' || app === 'investigador' || app === 'investigator') {
+      return 'investigator';
     }
   }
 

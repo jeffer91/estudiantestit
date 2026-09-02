@@ -33,6 +33,7 @@ jobs:
         run: |
           npm run build:estudiantes
           npm run build:coordinadores
+          npm run build:investigadores
           npm run build:administrador
 
   publicar:
@@ -79,6 +80,14 @@ jobs:
         if: steps.cloudflare.outputs.enabled == 'true'
         run: npx --yes wrangler@4 pages deploy .pages-coordinadores --project-name titulos-coordinadores --branch main --commit-dirty=true
 
+      - name: Construir Investigadores
+        if: steps.cloudflare.outputs.enabled == 'true'
+        run: npm run build:investigadores
+
+      - name: Publicar Investigadores
+        if: steps.cloudflare.outputs.enabled == 'true'
+        run: npx --yes wrangler@4 pages deploy .pages-investigadores --project-name titulos-investigadores --branch main --commit-dirty=true
+
       - name: Construir Administrador
         if: steps.cloudflare.outputs.enabled == 'true'
         run: npm run build:administrador
@@ -95,6 +104,7 @@ jobs:
             echo "https://titulos.pages.dev/estudiantes/estudiante"
             echo "https://titulos.pages.dev/trabajo-titulacion/"
             echo "https://titulos-coordinadores.pages.dev/"
+            echo "https://titulos-investigadores.pages.dev/"
             echo "https://titulos-administrador.pages.dev/"
           else
             echo "Código verificado y compilado correctamente."
