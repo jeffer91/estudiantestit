@@ -14,6 +14,8 @@ function expect(condition, message) {
 }
 
 const titles = read('functions/api/titulos.js');
+const titlesFirebase = read('functions/_lib/titulos-firebase.js');
+const requirementsFast = read('functions/_lib/requisitos-firebase-fast.js');
 const work = read('functions/api/trabajo-titulacion.js');
 const history = read('functions/api/historial-titulos.js');
 const historyLib = read('functions/_lib/titulos-historial.js');
@@ -39,6 +41,10 @@ expect(/PENDIENTE_INVESTIGADOR/.test(titles) && /registerCoordinatorValidation/.
   'Artículo Académico no envía la validación de Coordinación a Investigación.');
 expect(/registerStudentSubmission/.test(titles) && /PENDIENTE_COORDINADOR/.test(titles),
   'Artículo Académico no reinicia el flujo en Coordinación al reenviar.');
+expect(/getStudentBasicFast/.test(titlesFirebase) && !/import \{ getStudentBasic, listTitleCareers/.test(titlesFirebase),
+  'El envío del estudiante volvió a usar la validación antigua de Estudiantes/EstudiantesPeriodo.');
+expect(/chooseEnrollmentForPeriod/.test(requirementsFast) && /requestedPeriod/.test(requirementsFast),
+  'La validación UTET no respeta el período histórico solicitado por el estudiante.');
 expect(/registerReturnToStudent/.test(titles) && /requiereAccionDe:\s*'ESTUDIANTE'/.test(titles),
   'Artículo Académico no consolida la devolución al estudiante en el estado global.');
 expect(/PENDIENTE_INVESTIGADOR/.test(work) && /APROBADO_FINAL/.test(work),
