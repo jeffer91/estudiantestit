@@ -251,7 +251,7 @@
     setValor('tituloFinalInput',titulo);
     actualizarSeleccionVisual(numero,false);
     guardarBorradorActual();
-    mostrarEstado('Título '+numero+' seleccionado. Puedes aprobarlo o editar el texto final sin perder la selección.','success');
+    mostrarEstado('Título '+numero+' seleccionado. Puedes validarlo o editar el texto final antes de enviarlo a Investigación.','success');
     return true;
   }
 
@@ -332,7 +332,7 @@
     guardando=activo===true;
     var pendiente=Boolean(envioActual&&esPendiente(envioActual)&&tieneTitulosCompletos(envioActual));
     var aprobar=$('btnAprobarEnvio'),devolver=$('btnDevolverEnvio'),finalInput=$('tituloFinalInput'),comentario=$('comentarioCoordinadorInput');
-    if(aprobar){aprobar.disabled=guardando;aprobar.textContent=guardando?'Guardando...':'Aprobar título';}
+    if(aprobar){aprobar.disabled=guardando;aprobar.textContent=guardando?'Guardando...':'Validar y enviar a Investigación';}
     if(devolver){devolver.disabled=guardando;devolver.textContent=guardando?'Guardando...':'Devolver';}
     if(finalInput)finalInput.readOnly=guardando||!pendiente;
     if(comentario)comentario.readOnly=guardando||!pendiente;

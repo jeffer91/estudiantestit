@@ -18,7 +18,7 @@
   var CONFIG = Object.freeze({
     app: Object.freeze({
       nombre: 'Coordinadores MVP',
-      version: '1.0.1',
+      version: '3.0.0',
       entorno: 'pruebas',
       origen: 'coordinadores-mvp',
       modoDiagnostico: true
@@ -78,6 +78,9 @@
 
     estados: Object.freeze({
       pendiente: 'PENDIENTE_REVISION',
+      pendienteCoordinador: 'PENDIENTE_COORDINADOR',
+      pendienteInvestigador: 'PENDIENTE_INVESTIGADOR',
+      aprobadoFinal: 'APROBADO_FINAL',
       aprobado: 'APROBADO',
       devuelto: 'DEVUELTO',
       reemplazado: 'REEMPLAZADO'
@@ -92,12 +95,20 @@
         descripcion: 'Estos estudiantes tienen títulos enviados y esperan revisión del coordinador.'
       }),
 
+      validados: Object.freeze({
+        id: 'validados',
+        label: 'Validados',
+        estado: 'PENDIENTE_INVESTIGADOR',
+        titulo: 'Validados por Coordinación',
+        descripcion: 'Estos títulos ya pasaron Coordinación y esperan la validación de Investigación.'
+      }),
+
       aprobados: Object.freeze({
         id: 'aprobados',
         label: 'Aprobados',
-        estado: 'APROBADO',
-        titulo: 'Estudiantes aprobados',
-        descripcion: 'Estos estudiantes ya tienen un título aprobado por coordinación.'
+        estado: 'APROBADO_FINAL',
+        titulo: 'Estudiantes con aprobación final',
+        descripcion: 'Estos títulos completaron Coordinación e Investigación.'
       }),
 
       devueltos: Object.freeze({
@@ -115,7 +126,7 @@
       textoSinRegistros: 'No hay estudiantes para mostrar en esta vista.',
       textoCargandoCoordinadores: 'Cargando coordinadores...',
       textoCargandoEnvios: 'Cargando estudiantes...',
-      textoGuardandoRevision: 'Guardando revisión...',
+      textoGuardandoRevision: 'Guardando validación...',
       textoConexionOk: 'Conexión correcta con Google Sheets.',
       textoConexionError: 'No se pudo conectar con Google Sheets.'
     }),
@@ -479,7 +490,7 @@
       tituloApp: 'Revisión de Títulos Académicos',
       subtituloApp: 'Panel independiente para coordinadores.',
 
-      aprobarOk: 'Título aprobado correctamente.',
+      aprobarOk: 'Título validado y enviado a Investigación.',
       devolverOk: 'Registro devuelto correctamente.',
       errorGeneral: 'No se pudo completar la acción.',
 
