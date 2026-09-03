@@ -27,7 +27,9 @@ function eventId(prefix) {
 }
 
 function currentStatus(row) {
-  const value = text(row && (row.estado || row.estadoFinal)).toUpperCase();
+  const value = text(row && (row.estadoProceso || row.estado || row.estadoFinal)).toUpperCase();
+  if (value === 'APROBADO_FINAL') return 'APROBADO_FINAL';
+  if (value === 'PENDIENTE_INVESTIGADOR') return 'PENDIENTE_INVESTIGADOR';
   if (value.includes('REEMPLAZ')) return 'REEMPLAZADO';
   if (value.includes('APROBAD')) return 'APROBADO';
   if (value.includes('DEVUEL')) return 'DEVUELTO';
@@ -101,7 +103,7 @@ async function editComment(payload, env) {
 async function reopenReview(payload, env) {
   const envio = await getWork(payload, env);
   const status = currentStatus(envio);
-  if (!['APROBADO', 'REEMPLAZADO', 'DEVUELTO'].includes(status)) {
+  if (!['APROBADO_FINAL', 'PENDIENTE_INVESTIGADOR', 'APROBADO', 'REEMPLAZADO', 'DEVUELTO'].includes(status)) {
     throw new Error('Este Trabajo de Titulación ya está pendiente de revisión del coordinador.');
   }
   const reason = 'Devuelto al coordinador por el administrador.';
@@ -114,7 +116,17 @@ async function reopenReview(payload, env) {
       id: envio.id,
       data: {
         estado: 'PENDIENTE_REVISION',
+        estadoProceso: 'PENDIENTE_COORDINADOR',
+        requiereAccionDe: 'COORDINACION',
+        permitirReenvio: false,
+        devueltoPor: '',
         tituloFinal: null,
+        tituloFinalInvestigacion: null,
+        resultadoInvestigacion: null,
+        observacionInvestigacion: null,
+        fechaResolucionInvestigacion: null,
+        investigacionRevisionId: null,
+        validadoCoordinador: false,
         observacion: null,
         coordinador: null,
         fechaResolucion: null,
@@ -138,6 +150,26 @@ async function reopenReview(payload, env) {
       }),
       merge: false,
       exists: false
+    },
+    {
+      collection: 'workflow_eventos',
+      id: eventId(`${envio.id}__admin_reapertura_workflow`),
+      data: {
+        envioId: envio.id,
+        rol: 'ADMINISTRADOR',
+        revisorId: 'ADMIN',
+        revisorNombre: 'Administrador',
+        accion: 'REABRIR_COORDINACION',
+        resultado: 'PENDIENTE_COORDINADOR',
+        estadoAnterior: status,
+        estadoNuevo: 'PENDIENTE_COORDINADOR',
+        tituloAntes: text(envio.tituloFinal || envio.tituloCoordinador),
+        tituloDespues: '',
+        observacion: reason,
+        fecha
+      },
+      merge: false,
+      exists: false
     }
   ], env);
 
@@ -145,6 +177,7 @@ async function reopenReview(payload, env) {
     ok: true,
     envioId: envio.id,
     estado: 'PENDIENTE_REVISION',
+    estadoProceso: 'PENDIENTE_COORDINADOR',
     mensaje: 'Devuelto al coordinador. Puede volver a revisar, comentar, aprobar o devolver.'
   };
 }
@@ -170,8 +203,14 @@ async function returnWork(payload, env) {
       id: envio.id,
       data: {
         estado: 'DEVUELTO',
+        estadoProceso: 'DEVUELTO',
+        requiereAccionDe: 'ESTUDIANTE',
+        permitirReenvio: true,
+        devueltoPor: 'ADMINISTRADOR',
         tituloFinal: null,
+        tituloFinalInvestigacion: null,
         observacion: comment,
+        observacionDevolucion: comment,
         coordinador: 'Administrador',
         fechaResolucion: fecha,
         resolucionActualId: resolutionId,
@@ -198,6 +237,26 @@ async function returnWork(payload, env) {
       }),
       merge: false,
       exists: false
+    },
+    {
+      collection: 'workflow_eventos',
+      id: eventId(`${envio.id}__admin_devuelto_workflow`),
+      data: {
+        envioId: envio.id,
+        rol: 'ADMINISTRADOR',
+        revisorId: 'ADMIN',
+        revisorNombre: 'Administrador',
+        accion: 'DEVOLVER_ESTUDIANTE',
+        resultado: 'DEVUELTO',
+        estadoAnterior: currentStatus(envio),
+        estadoNuevo: 'DEVUELTO',
+        tituloAntes: text(envio.tituloFinal || envio.tituloCoordinador),
+        tituloDespues: '',
+        observacion: comment,
+        fecha
+      },
+      merge: false,
+      exists: false
     }
   ], env);
 
@@ -205,6 +264,7 @@ async function returnWork(payload, env) {
     ok: true,
     envioId: envio.id,
     estado: 'DEVUELTO',
+    estadoProceso: 'DEVUELTO',
     mensaje: alreadyReturned
       ? 'Devolución al estudiante confirmada.'
       : 'Trabajo de Titulación devuelto al estudiante.'
