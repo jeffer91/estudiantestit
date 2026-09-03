@@ -29,6 +29,27 @@ assert.equal(accessTest.completeAcademic({
   estudiante: normalizedFirebase.student
 }), true);
 
+const historicalEnrollment = firebaseTest.chooseEnrollmentForPeriod([
+  {
+    id: 'matricula_actual',
+    cedula,
+    periodoId: '2026-02__2026-08',
+    periodoLabel: 'Febrero 2026 a Agosto 2026',
+    estado: 'ACTIVO',
+    actualizadoEn: '2026-08-01T12:00:00.000Z'
+  },
+  {
+    id: 'matricula_titulacion',
+    cedula,
+    periodoId: '2025-10__2026-03',
+    periodoLabel: 'Octubre 2025 a Marzo 2026',
+    estado: 'ACTIVO',
+    actualizadoEn: '2026-03-01T12:00:00.000Z'
+  }
+], 'Octubre 2025 a Marzo 2026');
+
+assert.equal(historicalEnrollment.periodoId, '2025-10__2026-03');
+
 const normalizedSheets = sheetsTest.normalizeFastStudent({
   ok: true,
   encontrado: true,
