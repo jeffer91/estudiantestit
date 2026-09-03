@@ -34,6 +34,9 @@ const ESTADOS_RESOLUCION = new Set(['APROBADO', 'REEMPLAZADO', 'DEVUELTO']);
 function estado(value, fallback = 'PENDIENTE_REVISION') {
   const normalized = text(value).toUpperCase().replace(/[^A-Z0-9]+/g, '_');
   if (!normalized) return fallback;
+  if (normalized === 'PENDIENTE_INVESTIGADOR') return 'PENDIENTE_INVESTIGADOR';
+  if (normalized === 'APROBADO_FINAL') return 'APROBADO_FINAL';
+  if (normalized === 'PENDIENTE_COORDINADOR') return 'PENDIENTE_REVISION';
   if (normalized.includes('DEVUEL')) return 'DEVUELTO';
   if (normalized.includes('REEMPLAZ')) return 'REEMPLAZADO';
   if (normalized.includes('APROBAD')) return 'APROBADO';
@@ -104,7 +107,7 @@ function publico(row) {
     return item;
   });
   const preferido = Number(row.tituloPreferidoNumero || row.preferido || 0);
-  const status = estado(row.estado || row.estadoFinal);
+  const status = estado(row.estadoProceso || row.estado || row.estadoFinal);
   const cedula = cedulaEstricta(row.cedula || row.numeroIdentificacion);
   return {
     ...row,
@@ -132,9 +135,13 @@ function publico(row) {
     preferido,
     tituloPreferidoTexto: preferido >= 1 && preferido <= 3 ? propuestas[preferido - 1].tituloFinal : '',
     estado: status,
+    estadoProceso: status,
     estadoFinal: status,
     tituloFinal: limpiarTitulo(row.tituloFinal),
-    tituloAprobado: limpiarTitulo(row.tituloFinal),
+    tituloCoordinador: limpiarTitulo(row.tituloCoordinador || row.tituloValidadoCoordinador),
+    tituloAprobado: limpiarTitulo(row.tituloFinal || row.tituloCoordinador || row.tituloValidadoCoordinador),
+    resultadoCoordinador: text(row.resultadoCoordinador),
+    resultadoInvestigacion: text(row.resultadoInvestigacion),
     comentarioCoordinador: text(row.observacion || row.comentarioCoordinador),
     observacion: text(row.observacion || row.comentarioCoordinador),
     fechaRevision: text(row.fechaResolucion),
@@ -192,7 +199,11 @@ async function consultar(payload, env) {
     registro: envio,
     mensaje: envio.estado === 'DEVUELTO'
       ? 'El Trabajo de Titulación fue devuelto y puede corregirse.'
-      : 'Trabajo de Titulación encontrado correctamente.'
+      : envio.estado === 'PENDIENTE_INVESTIGADOR'
+        ? 'Validado por Coordinación. Pendiente de Investigación.'
+        : envio.estado === 'APROBADO_FINAL'
+          ? 'Trabajo de Titulación aprobado definitivamente.'
+          : 'Trabajo de Titulación encontrado correctamente.'
   };
 }
 
@@ -272,7 +283,17 @@ async function guardarEnvio(payload, env) {
     propuestasDetalle: propuestas,
     tituloPreferidoNumero: favorito,
     tituloFinal: null,
+    tituloCoordinador: null,
+    tituloCoordinadorAntes: null,
+    resultadoCoordinador: null,
+    resultadoInvestigacion: null,
+    observacionInvestigacion: null,
+    fechaResolucionInvestigacion: null,
+    investigacionRevisionId: null,
     estado: 'PENDIENTE_REVISION',
+    estadoProceso: 'PENDIENTE_COORDINADOR',
+    requiereAccionDe: 'COORDINACION',
+    devueltoPor: '',
     observacion: null,
     coordinador: null,
     fechaEnvio: fecha,
@@ -354,7 +375,7 @@ async function listar(payload, env) {
   return { ok: true, envios: rows.map(publico), tipoTrabajo: TIPO, total: rows.length };
 }
 
-async function guardarResolucion(payload, env) {
+async function guardarResolucion(payload, env, userRole) {
   const cedula = cedulaEstricta(payload.cedula || payload.numeroIdentificacion);
   if (!cedula) throw new Error('La cédula debe contener exactamente 10 dígitos.');
   const envio = payload.envioId
@@ -382,6 +403,12 @@ async function guardarResolucion(payload, env) {
   const resolucionId = eventoId(`${envio.id}__r${String(numeroResolucion).padStart(3, '0')}`);
   const coordinador = text(payload.coordinador || payload.nombreCoordinador);
   const fecha = text(payload.fechaResolucion) || nowIso();
+  const pasaInvestigacion = userRole === 'coordinator' && status !== 'DEVUELTO';
+  const estadoGlobal = pasaInvestigacion ? 'PENDIENTE_INVESTIGADOR' : status;
+  const resultadoCoordinador = status === 'REEMPLAZADO'
+    ? 'APROBADO_CON_CORRECCION'
+    : status === 'APROBADO' ? 'APROBADO_SIN_CAMBIOS' : 'DEVUELTO';
+  const workflowId = pasaInvestigacion ? eventoId(`${envio.id}__coord_workflow`) : '';
 
   await commitDocuments('TITULOS', [
     {
@@ -390,8 +417,22 @@ async function guardarResolucion(payload, env) {
       data: {
         tipoTrabajo: TIPO,
         tipoTrabajoLabel: 'Trabajo de Titulación',
-        estado: status,
-        tituloFinal: status === 'DEVUELTO' ? null : finalTitle,
+        estado: estadoGlobal,
+        estadoProceso: estadoGlobal,
+        tituloFinal: status === 'DEVUELTO' || pasaInvestigacion ? null : finalTitle,
+        ...(pasaInvestigacion ? {
+          tituloCoordinador: finalTitle,
+          tituloCoordinadorAntes: selected,
+          resultadoCoordinador,
+          comentarioCoordinador: observation,
+          fechaValidacionCoordinador: fecha,
+          validadoCoordinador: true,
+          requiereAccionDe: 'INVESTIGACION',
+          permitirReenvio: false
+        } : status === 'DEVUELTO' ? {
+          requiereAccionDe: 'ESTUDIANTE',
+          permitirReenvio: true
+        } : {}),
         observacion: observation,
         coordinador,
         fechaResolucion: fecha,
@@ -415,15 +456,38 @@ async function guardarResolucion(payload, env) {
         tipoTrabajo: TIPO,
         numeroResolucion,
         coordinador,
+        rolRevisor: 'COORDINADOR',
         estado: status,
         tituloElegido: selected,
         tituloCorregido: corrected,
+        tituloAntes: selected,
+        tituloDespues: status === 'DEVUELTO' ? '' : finalTitle,
         observacion: observation,
         fechaResolucion: fecha
       },
       merge: false,
       exists: false
-    }
+    },
+    ...(pasaInvestigacion ? [{
+      collection: 'workflow_eventos',
+      id: workflowId,
+      data: {
+        envioId: envio.id,
+        rol: 'COORDINADOR',
+        revisorId: text(payload.coordinadorId || payload.idCoordinador),
+        revisorNombre: coordinador,
+        accion: status === 'REEMPLAZADO' ? 'CORREGIR_VALIDAR' : 'VALIDAR',
+        resultado: resultadoCoordinador,
+        estadoAnterior: text(envio.estadoProceso || envio.estado),
+        estadoNuevo: 'PENDIENTE_INVESTIGADOR',
+        tituloAntes: selected,
+        tituloDespues: finalTitle,
+        observacion: observation,
+        fecha
+      },
+      merge: false,
+      exists: false
+    }] : [])
   ], env);
 
   return {
@@ -432,11 +496,15 @@ async function guardarResolucion(payload, env) {
     resolucionId,
     numeroResolucion,
     numeroRevisiones: numeroResolucion,
-    estado: status,
+    estado: estadoGlobal,
+    estadoProceso: estadoGlobal,
+    estadoCoordinacion: status,
     tituloFinal: status === 'DEVUELTO' ? '' : finalTitle,
     mensaje: status === 'DEVUELTO'
       ? 'Trabajo de Titulación devuelto correctamente.'
-      : 'Trabajo de Titulación aprobado correctamente.'
+      : pasaInvestigacion
+        ? 'Título validado por Coordinación y enviado a Investigación.'
+        : 'Trabajo de Titulación aprobado correctamente.'
   };
 }
 
@@ -469,7 +537,7 @@ async function processRequest(context) {
     if (action === 'CONSULTAR_ENVIO_TRABAJO_TITULACION') return jsonReply(request, await consultar(payload, env));
     if (action === 'ENVIO_TRABAJO_TITULACION') return jsonReply(request, await guardarEnvio(payload, env));
     if (action === 'LISTAR_ENVIOS_TRABAJO_TITULACION') return jsonReply(request, await listar(payload, env));
-    if (action === 'GUARDAR_RESOLUCION_TRABAJO_TITULACION') return jsonReply(request, await guardarResolucion(payload, env));
+    if (action === 'GUARDAR_RESOLUCION_TRABAJO_TITULACION') return jsonReply(request, await guardarResolucion(payload, env, userRole));
     return jsonReply(request, { ok: false, mensaje: 'Acción no reconocida.' }, 400);
   } catch (error) {
     return jsonReply(request, {

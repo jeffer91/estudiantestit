@@ -1,7 +1,9 @@
 import { getPublicStatus, requestClaves, runService } from '../_lib/claves.js';
+import { commitDocuments, getDocument, nowIso } from '../_lib/firestore-fixed.js';
 import { corsHeaders, jsonReply, normalizeAction, readJson, rejectUnknownOrigin, role, text } from '../_lib/http.js';
 
 const ACCESS_ACTION = 'CONSULTAR_ACCESO_ESTUDIANTE';
+const COORDINATOR_FINAL_ACTIONS = new Set(['APROBAR_ENVIO_COORDINADOR', 'GUARDAR_REVISION_COORDINADOR', 'GUARDAR_RESOLUCION']);
 const STUDENT = new Set([
   'PING',
   'CONFIGURACION_PUBLICA',
@@ -152,6 +154,102 @@ function clearCaches() {
   queryInflight.clear();
   publicStatusCache = null;
   publicStatusInflight = null;
+}
+
+function workflowEventId(envioId) {
+  const random = typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID().replace(/-/g, '').slice(0, 12)
+    : Math.random().toString(36).slice(2, 14);
+  return (text(envioId) + '__coord__' + Date.now() + '__' + random).replace(/\//g, '__');
+}
+
+function normalizeTitle(value) {
+  return text(value).replace(/\s+/g, ' ').trim();
+}
+
+async function registerCoordinatorValidation(payload, result, env) {
+  const estadoCoordinacion = text(payload.estadoFinal || payload.estado || result && result.estado).toUpperCase();
+  if (!['APROBADO', 'REEMPLAZADO'].includes(estadoCoordinacion)) return result;
+
+  const envioId = text(payload.envioId || payload.idRegistro || result && (result.envioId || result.idRegistro));
+  if (!envioId) return result;
+
+  const envio = await getDocument('TITULOS', 'envios', envioId, env);
+  if (!envio) return result;
+
+  const antes = normalizeTitle(
+    payload.tituloElegido ||
+    payload.preferido ||
+    envio.tituloPreferidoTexto ||
+    envio.tituloElegido ||
+    envio.titulo1
+  );
+  const despues = normalizeTitle(
+    payload.tituloFinal ||
+    payload.tituloCorregido ||
+    antes
+  );
+  if (!despues) return result;
+
+  const fecha = text(payload.fechaResolucion) || nowIso();
+  const observacion = text(payload.observacion || payload.comentario || payload.comentarioCoordinador);
+  const cambio = normalizeTitle(antes).toLowerCase() !== normalizeTitle(despues).toLowerCase();
+  const resultadoCoordinador = cambio || estadoCoordinacion === 'REEMPLAZADO'
+    ? 'APROBADO_CON_CORRECCION'
+    : 'APROBADO_SIN_CAMBIOS';
+  const eventoId = workflowEventId(envioId);
+
+  await commitDocuments('TITULOS', [
+    {
+      collection: 'envios',
+      id: envioId,
+      data: {
+        estado: 'PENDIENTE_INVESTIGADOR',
+        estadoProceso: 'PENDIENTE_INVESTIGADOR',
+        tituloFinal: null,
+        tituloCoordinador: despues,
+        tituloCoordinadorAntes: antes,
+        resultadoCoordinador,
+        comentarioCoordinador: observacion,
+        fechaValidacionCoordinador: fecha,
+        validadoCoordinador: true,
+        requiereAccionDe: 'INVESTIGACION',
+        permitirReenvio: false,
+        actualizadoEn: fecha
+      },
+      merge: true,
+      ...(envio._updateTime ? { updateTime: envio._updateTime } : {})
+    },
+    {
+      collection: 'workflow_eventos',
+      id: eventoId,
+      data: {
+        envioId,
+        rol: 'COORDINADOR',
+        revisorId: text(payload.coordinadorId || payload.idCoordinador),
+        revisorNombre: text(payload.coordinador || payload.nombreCoordinador),
+        accion: cambio ? 'CORREGIR_VALIDAR' : 'VALIDAR',
+        resultado: resultadoCoordinador,
+        estadoAnterior: text(envio.estadoProceso || envio.estado),
+        estadoNuevo: 'PENDIENTE_INVESTIGADOR',
+        tituloAntes: antes,
+        tituloDespues: despues,
+        observacion,
+        fecha
+      },
+      merge: false,
+      exists: false
+    }
+  ], env);
+
+  return {
+    ...(result || {}),
+    estado: 'PENDIENTE_INVESTIGADOR',
+    estadoProceso: 'PENDIENTE_INVESTIGADOR',
+    estadoCoordinacion,
+    tituloCoordinador: despues,
+    mensaje: 'Título validado por Coordinación y enviado a Investigación.'
+  };
 }
 
 function yes(value) {
@@ -416,7 +514,7 @@ function extractEnvio(result) {
 function envioEstado(result) {
   const envio = extractEnvio(result) || {};
   return text(
-    flexible(envio, ['estado', 'estadoFinal', 'estadoProceso', 'estadoGoogleSheets']) ||
+    flexible(envio, ['estadoProceso', 'estado', 'estadoFinal', 'estadoGoogleSheets']) ||
     flexible(result, ['estado', 'estadoFinal'])
   ).toUpperCase();
 }
@@ -545,7 +643,8 @@ async function executeAccess(env, payload, userRole) {
   const envio = extractEnvio(direct);
   const permitir = permiteReenvio(direct);
   const estado = envioEstado(direct);
-  const aprobado = estado.includes('APROBADO') || estado === 'REEMPLAZADO';
+  const aprobado = estado === 'APROBADO_FINAL' || estado === 'APROBADO' || estado === 'REEMPLAZADO';
+  const pendienteInvestigacion = estado === 'PENDIENTE_INVESTIGADOR';
 
   return {
     ...base,
@@ -557,9 +656,11 @@ async function executeAccess(env, payload, userRole) {
     fuenteEnvio: 'ENVÍOS_Y_RESOLUCIONES_RESPALDO_TITULOS_APP',
     mensaje: permitir
       ? 'El registro fue devuelto y puede corregirse.'
-      : aprobado
-        ? 'Tu tema de titulación fue aprobado por coordinación.'
-        : 'Tus propuestas ya fueron enviadas y están siendo revisadas por coordinación.'
+      : pendienteInvestigacion
+        ? 'Validado por Coordinación. Pendiente de Investigación.'
+        : aprobado
+          ? 'Tu título de titulación está aprobado.'
+          : 'Tus propuestas ya fueron enviadas y están siendo revisadas por Coordinación.'
   };
 }
 
@@ -703,6 +804,9 @@ export async function onRequest({ request, env }) {
       );
     }
 
+    if (userRole === 'coordinator' && COORDINATOR_FINAL_ACTIONS.has(action)) {
+      result = await registerCoordinatorValidation(payload, result, env);
+    }
     if (WRITE_ACTIONS.has(action)) clearCaches();
     return jsonReply(request, result);
   } catch (error) {

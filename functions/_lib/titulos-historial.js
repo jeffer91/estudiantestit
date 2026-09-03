@@ -14,6 +14,9 @@ import {
 function normalizeStatus(value) {
   const normalized = text(value).toUpperCase().replace(/[^A-Z0-9]+/g, '_');
   if (!normalized) return 'PENDIENTE_REVISION';
+  if (normalized === 'PENDIENTE_INVESTIGADOR') return 'PENDIENTE_INVESTIGADOR';
+  if (normalized === 'APROBADO_FINAL') return 'APROBADO_FINAL';
+  if (normalized === 'PENDIENTE_COORDINADOR') return 'PENDIENTE_REVISION';
   if (normalized.includes('DEVUEL')) return 'DEVUELTO';
   if (normalized.includes('REEMPLAZ')) return 'REEMPLAZADO';
   if (normalized.includes('APROBAD')) return 'APROBADO';
@@ -219,6 +222,31 @@ function legacyResolution(envio) {
   }, 0);
 }
 
+function publicWorkflowEvent(value, index) {
+  value = value || {};
+  return {
+    id: rowId(value) || ('workflow_' + index),
+    envioId: text(value.envioId),
+    rol: text(value.rol),
+    revisorId: text(value.revisorId),
+    revisorNombre: text(value.revisorNombre),
+    accion: text(value.accion),
+    resultado: text(value.resultado),
+    estadoAnterior: normalizeStatus(value.estadoAnterior),
+    estadoNuevo: normalizeStatus(value.estadoNuevo),
+    tituloAntes: cleanTitle(value.tituloAntes),
+    tituloDespues: cleanTitle(value.tituloDespues),
+    observacion: text(value.observacion),
+    fecha: text(value.fecha || value.fechaResolucion || value.actualizadoEn || value._updateTime)
+  };
+}
+
+function sortWorkflow(rows) {
+  return rows.slice().sort((left, right) =>
+    eventTime(left, ['fecha']) - eventTime(right, ['fecha'])
+  );
+}
+
 function sortVersions(rows) {
   return rows.slice().sort((left, right) => {
     const number = Number(left.numeroVersion || 0) - Number(right.numeroVersion || 0);
@@ -337,13 +365,16 @@ export async function consultarHistorialTitulos(payload = {}, env) {
   const id = rowId(envio);
   const settled = await Promise.allSettled([
     queryEqual('TITULOS', 'versiones_envio', 'envioId', id, 1000, env),
-    queryEqual('TITULOS', 'resoluciones', 'envioId', id, 1000, env)
+    queryEqual('TITULOS', 'resoluciones', 'envioId', id, 1000, env),
+    queryEqual('TITULOS', 'workflow_eventos', 'envioId', id, 1000, env)
   ]);
   const versionRows = settled[0].status === 'fulfilled' ? settled[0].value : [];
   const resolutionRows = settled[1].status === 'fulfilled' ? settled[1].value : [];
+  const workflowRows = settled[2].status === 'fulfilled' ? settled[2].value : [];
 
   let versions = sortVersions(dedupe(versionRows).map(publicVersion));
   let resolutions = sortResolutions(dedupe(resolutionRows).map(publicResolution));
+  const workflow = sortWorkflow(dedupe(workflowRows).map(publicWorkflowEvent));
 
   /* Aunque una colección auxiliar esté incompleta, el documento principal de
      envios contiene suficiente información para reconstruir el estado actual. */
@@ -379,7 +410,9 @@ export async function consultarHistorialTitulos(payload = {}, env) {
     ...summary,
     versiones: versions,
     revisiones: resolutions,
-    historialDisponible: versions.length > 0 || resolutions.length > 0,
+    eventosWorkflow: workflow,
+    lineaTiempo: workflow,
+    historialDisponible: versions.length > 0 || resolutions.length > 0 || workflow.length > 0,
     historialParcial: settled.some((item) => item.status === 'rejected'),
     registroLegado: versions.some((item) => item.legado) || resolutions.some((item) => item.legado),
     historialRecuperado: versions.some((item) => item.recuperadoDesdeEnvio) ||
