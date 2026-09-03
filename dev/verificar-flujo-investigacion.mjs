@@ -87,6 +87,11 @@ expect(/Usar esta propuesta/.test(investigatorJs) && /Tomado por otro usuario/.t
   'La interfaz de Investigación no permite reutilizar propuestas o mostrar bloqueo.');
 expect(/window\.confirm\(confirmacion\)/.test(investigatorJs) && /tituloModificado/.test(investigatorJs),
   'La aprobación final de Investigación no exige confirmación o no distingue una corrección real.');
+expect(/mostrarResultadoModal/.test(investigatorJs) &&
+  /Título aprobado/.test(investigatorJs) &&
+  /Título corregido y aprobado/.test(investigatorJs) &&
+  /Título devuelto al estudiante/.test(investigatorJs),
+  'Investigación no confirma visualmente al docente el resultado de la acción realizada.');
 expect(/Historial del proceso/.test(investigatorHtml),
   'Investigación no muestra el historial previo.');
 expect(/investigadores-mvp/.test(localBuilder) && /Investigación/.test(localBuilder),
