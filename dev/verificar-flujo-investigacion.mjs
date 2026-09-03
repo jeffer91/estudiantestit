@@ -28,6 +28,9 @@ const investigatorJs = read('investigadores-mvp/js/investigadores.app.js');
 const adminHtml = read('administrador/ad-index.html');
 const adminJs = read('administrador/ad-js/ad-google-sheets.app.js');
 const adminStats = read('administrador/ad-js/ad-estadisticas-dashboard.patch.js');
+const adminTitles = read('administrador/ad-js/ad-titulos-admin.patch.js');
+const adminWorkApi = read('functions/api/admin-trabajo-titulacion.js');
+const adminWorkUi = read('administrador/ad-js/ad-trabajo-titulacion-admin.patch.js');
 
 expect(/PENDIENTE_INVESTIGADOR/.test(titles) && /registerCoordinatorValidation/.test(titles),
   'Artículo Académico no envía la validación de Coordinación a Investigación.');
@@ -73,6 +76,12 @@ expect(/cargarInvestigadores/.test(adminJs) && /consultarHistorialTitulo/.test(a
   'Administrador no carga investigadores o historial.');
 expect(/PENDIENTE_INVESTIGADOR/.test(adminStats),
   'El dashboard administrativo mezcla los pendientes de Investigación con Coordinación.');
+expect(/APROBADO_FINAL/.test(adminTitles) && /mantenerAprobacionFinal/.test(adminTitles),
+  'La corrección administrativa puede degradar una aprobación final.');
+expect(/PENDIENTE_COORDINADOR/.test(adminWorkApi) && /workflow_eventos/.test(adminWorkApi),
+  'Las acciones administrativas de Trabajo de Titulación no reinician el flujo con trazabilidad.');
+expect(/PENDIENTE_INVESTIGADOR/.test(adminWorkUi) && /APROBADO_FINAL/.test(adminWorkUi),
+  'La interfaz administrativa de Trabajo de Titulación no reconoce Investigación y aprobación final.');
 
 if (errors.length) {
   console.error('\n[Flujo Investigación] Se encontraron errores:\n');
