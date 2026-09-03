@@ -252,6 +252,72 @@ async function registerCoordinatorValidation(payload, result, env) {
   };
 }
 
+async function registerStudentSubmission(payload, result, env) {
+  const envioId = text(payload.envioId || payload.idRegistro || result && (result.envioId || result.idRegistro));
+  if (!envioId) return result;
+  const envio = await getDocument('TITULOS', 'envios', envioId, env);
+  if (!envio) return result;
+
+  const fecha = nowIso();
+  const eventoId = workflowEventId(envioId + '__student');
+  const esReenvio = Number(result && result.numeroReenvios || envio.numeroReenvios || 0) > 0;
+
+  await commitDocuments('TITULOS', [
+    {
+      collection: 'envios',
+      id: envioId,
+      data: {
+        estado: 'PENDIENTE_REVISION',
+        estadoProceso: 'PENDIENTE_COORDINADOR',
+        requiereAccionDe: 'COORDINACION',
+        permitirReenvio: false,
+        devueltoPor: '',
+        tituloFinal: null,
+        tituloFinalInvestigacion: null,
+        tituloCoordinador: null,
+        tituloCoordinadorAntes: null,
+        resultadoCoordinador: null,
+        resultadoInvestigacion: null,
+        comentarioCoordinador: null,
+        observacionInvestigacion: null,
+        fechaValidacionCoordinador: null,
+        fechaResolucionInvestigacion: null,
+        investigacionRevisionId: null,
+        validadoCoordinador: false,
+        actualizadoEn: fecha
+      },
+      merge: true,
+      ...(envio._updateTime ? { updateTime: envio._updateTime } : {})
+    },
+    {
+      collection: 'workflow_eventos',
+      id: eventoId,
+      data: {
+        envioId,
+        rol: 'ESTUDIANTE',
+        revisorId: normalizeCedula(payload.cedula || payload.numeroIdentificacion),
+        revisorNombre: text(payload.nombres || payload.estudiante),
+        accion: esReenvio ? 'REENVIO' : 'ENVIO',
+        resultado: 'PENDIENTE_COORDINADOR',
+        estadoAnterior: text(envio.estadoProceso || envio.estado),
+        estadoNuevo: 'PENDIENTE_COORDINADOR',
+        tituloAntes: '',
+        tituloDespues: '',
+        observacion: '',
+        fecha
+      },
+      merge: false,
+      exists: false
+    }
+  ], env);
+
+  return {
+    ...(result || {}),
+    estadoProceso: 'PENDIENTE_COORDINADOR',
+    requiereAccionDe: 'COORDINACION'
+  };
+}
+
 function yes(value) {
   return value === true || ['SI', 'SÍ', 'TRUE', '1', 'YES'].includes(text(value).toUpperCase());
 }
@@ -804,6 +870,9 @@ export async function onRequest({ request, env }) {
       );
     }
 
+    if (userRole === 'student' && action === 'ENVIO_ESTUDIANTE') {
+      result = await registerStudentSubmission(payload, result, env);
+    }
     if (userRole === 'coordinator' && COORDINATOR_FINAL_ACTIONS.has(action)) {
       result = await registerCoordinatorValidation(payload, result, env);
     }
