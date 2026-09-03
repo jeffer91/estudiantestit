@@ -53,6 +53,7 @@ function requireIds(html, ids, appName) {
 const studentHtml = checkAssets('estudiantes-mvp/estudiante.html');
 const workHtml = checkAssets('trabajo-titulacion-mvp/index.html');
 const coordinatorHtml = checkAssets('coordinadores-mvp/coordinador.html');
+const investigatorHtml = checkAssets('investigadores-mvp/index.html');
 const adminHtml = checkAssets('administrador/ad-index.html');
 
 requireIds(studentHtml, ['formConsulta', 'cedulaInput', 'formEnvio'], 'Estudiantes');
@@ -61,6 +62,11 @@ requireIds(coordinatorHtml, [
   'coordinadorSelect', 'estadoPrincipal', 'tablaEstudiantesBody', 'detalleModal',
   'tituloFinalInput', 'comentarioCoordinadorInput', 'btnAprobarEnvio', 'btnDevolverEnvio'
 ], 'Coordinadores');
+requireIds(investigatorHtml, [
+  'loginForm', 'cedulaInput', 'pinInput', 'dashboardView', 'carrerasBody',
+  'pendientesBody', 'reviewView', 'tituloFinalInput', 'observacionInput',
+  'aprobarBtn', 'corregirAprobarBtn', 'devolverBtn'
+], 'Investigación');
 requireIds(adminHtml, ['ad-seccion-titulos', 'ad-seccion-estadisticas', 'ad-diagnostico-salida'], 'Administrador');
 
 const coordinatorBootstrap = read('coordinadores-mvp/js/coordinador.bootstrap.independiente.js');
@@ -87,9 +93,12 @@ const appsScriptFast = read('google-apps-script/REQUISITOS_CONSULTA_RAPIDA.gs');
 const studentBuild = read('dev/preparar-pages-estudiantes.mjs');
 const localBuild = read('dev/preparar-pages-local.mjs');
 const coordinatorBuild = read('dev/preparar-pages-coordinadores.mjs');
+const investigatorBuild = read('dev/preparar-pages-investigadores.mjs');
+const investigatorApi = read('functions/api/investigadores.js');
+const investigatorApp = read('investigadores-mvp/js/investigadores.app.js');
 const adminBuild = read('dev/preparar-pages-administrador.mjs');
 
-assert(/v2\.9\.7/.test(coordinatorHtml) && /VERSION=['"]2\.9\.7['"]/.test(coordinatorBootstrap) && /VERSION=['"]2\.9\.7['"]/.test(coordinatorSource), 'Coordinadores no usa de forma uniforme la versión 2.9.7.');
+assert(/v3\.0\.0/.test(coordinatorHtml) && /VERSION=['"]3\.0\.0['"]/.test(coordinatorBootstrap) && /VERSION=['"]3\.0\.0['"]/.test(coordinatorSource), 'Coordinadores no usa de forma uniforme la versión 3.0.0.');
 assert(!/id=["']periodoSelect["']/.test(coordinatorHtml), 'Coordinadores todavía muestra selector de período.');
 assert(/<th>Período<\/th>/.test(coordinatorHtml), 'La tabla no informa el período de cada envío.');
 assert(!/data-vista=["']faltantes["']/.test(coordinatorHtml), 'Coordinadores todavía muestra estudiantes sin envío.');
@@ -149,8 +158,8 @@ assert(!/pull_bl2|MatriculasPeriodo|Requisitos|Notas/.test(studentSheetsFallback
 assert(/getSheetByName\("Estudiantes"\)/.test(appsScriptFast), 'Apps Script no consulta únicamente la hoja Estudiantes.');
 assert(/createTextFinder/.test(appsScriptFast), 'Apps Script no busca la cédula con TextFinder.');
 assert(!/ensureAllSheets_|handlePullBL2_/.test(appsScriptFast), 'La consulta rápida de Apps Script ejecuta procesos pesados.');
-assert(/VERSION\s*=\s*'2\.4\.4'/.test(studentBuild), 'El build de Estudiantes no usa la versión 2.4.4.');
-assert(/VERSION_ESTUDIANTES\s*=\s*'2\.4\.4'/.test(localBuild), 'El entorno local no usa Estudiantes 2.4.4.');
+assert(/VERSION\s*=\s*'2\.5\.0'/.test(studentBuild), 'El build de Estudiantes no usa la versión 2.5.0.');
+assert(/VERSION_ESTUDIANTES\s*=\s*'2\.5\.0'/.test(localBuild), 'El entorno local no usa Estudiantes 2.5.0.');
 
 assert(/currentEnrollments/.test(adminGlobal) && /queryPeriodRows\('UTET', 'matriculas'/.test(adminGlobal), 'Administrador no construye la población desde matriculas.');
 assert(
@@ -170,6 +179,10 @@ assert(/\/api\/titulos/.test(studentSheets), 'Estudiantes no utiliza Firebase T�
 assert(/ADMIN_REPORTE_FIREBASE_TITULOS/.test(adminApi), 'Administrador no expone el reporte de Firebase Títulos.');
 assert(/Generar PDF Firebase Títulos/.test(adminPdf), 'Administrador no muestra el botón del PDF.');
 assert(/\.pages-coordinadores/.test(coordinatorBuild), 'No existe build independiente de Coordinadores.');
+assert(/\.pages-investigadores/.test(investigatorBuild), 'No existe build independiente de Investigación.');
+assert(/PENDIENTE_INVESTIGADOR/.test(investigatorApi) && /APROBADO_FINAL/.test(investigatorApi), 'Investigación no implementa el flujo de validación final.');
+assert(/REGISTRAR_PIN/.test(investigatorApi) && /investigacion_bloqueos/.test(investigatorApi), 'Investigación no protege acceso y concurrencia.');
+assert(/LISTAR_CARRERAS/.test(investigatorApp) && /TOMAR_REVISION/.test(investigatorApp), 'La app de Investigación no consume la cola compartida.');
 assert(/\.pages-administrador/.test(adminBuild), 'No existe build independiente de Administrador.');
 
 if (errors.length) {
@@ -182,4 +195,5 @@ if (errors.length) {
 console.log('[Apps] Estudiantes: Estudiante + matriculas en Firebase UTET, con Google Sheets como respaldo y Títulos al final.');
 console.log('[Apps] Trabajo de Titulación: comparte el lector académico de UTET y guarda envíos unificados.');
 console.log('[Apps] Coordinadores: permanece aislado de UTET y trabaja únicamente sobre Firebase Títulos.');
-console.log('[Apps] Administrador: población desde matriculas + Estudiante, cruzada con Títulos por período.');
+console.log('[Apps] Investigación: cola compartida sobre Firebase Títulos, PIN y bloqueo concurrente.');
+console.log('[Apps] Administrador: población desde matriculas + Estudiante, cruzada con Títulos por período e Investigación.');

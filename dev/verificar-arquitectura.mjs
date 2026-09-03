@@ -21,6 +21,7 @@ function assert(condition, message) {
 const apps = [
   ['estudiantes-mvp', 'estudiante.html'],
   ['coordinadores-mvp', 'coordinador.html'],
+  ['investigadores-mvp', 'index.html'],
   ['administrador', 'ad-index.html']
 ];
 
@@ -35,10 +36,12 @@ for (const [directory, expected] of apps) {
 
 const studentHtml = read('estudiantes-mvp/estudiante.html');
 const coordinatorHtml = read('coordinadores-mvp/coordinador.html');
+const investigatorHtml = read('investigadores-mvp/index.html');
 const adminHtml = read('administrador/ad-index.html');
 
 assert(!/firebase-app|firebase-firestore/i.test(studentHtml), 'El estudiante no debe cargar Firebase directamente en el navegador.');
 assert(!/firebase-app|firebase-firestore/i.test(coordinatorHtml), 'Coordinadores no debe cargar Firebase directamente en el navegador.');
+assert(!/firebase-app|firebase-firestore/i.test(investigatorHtml), 'Investigación no debe cargar Firebase directamente en el navegador.');
 assert(!/firebase-app|firebase-firestore/i.test(adminHtml), 'Administrador no debe cargar Firebase directamente en el navegador.');
 
 const requiredFiles = [
@@ -50,12 +53,15 @@ const requiredFiles = [
   'functions/_lib/claves.js',
   'functions/api/claves.js',
   'functions/api/titulos.js',
+  'functions/api/investigadores.js',
+  'functions/_lib/workflow-titulacion.js',
   'functions/api/requisitos.js',
   'functions/api/ia.js',
   'estudiantes-mvp/js/requisitos.estudiantes.service.js',
   'estudiantes-mvp/js/titulos.cola.service.js',
   'coordinadores-mvp/js/coordinador.sheets.primary.js',
   'coordinadores-mvp/js/coordinador.app.js',
+  'investigadores-mvp/js/investigadores.app.js',
   'administrador/ad-js/ad-api.service.js',
   'administrador/ad-js/ad-google-sheets.app.js',
   'dev/preparar-pages-administrador.mjs'
@@ -69,6 +75,8 @@ const ai = read('functions/_lib/ia-firebase.js');
 const claves = read('functions/_lib/claves.js');
 const http = read('functions/_lib/http.js');
 const titlesApi = read('functions/api/titulos.js');
+const investigatorApi = read('functions/api/investigadores.js');
+const workflowApi = read('functions/_lib/workflow-titulacion.js');
 const requirementsApi = read('functions/api/requisitos.js');
 const aiApi = read('functions/api/ia.js');
 const adminApi = read('administrador/ad-js/ad-api.service.js');
@@ -90,9 +98,11 @@ assert(/ADMIN_ELIMINAR_TITULOS/.test(titles), 'Títulos no implementa la elimina
 assert(/listProviders/.test(ai) && /generateWithProvider/.test(ai), 'IA no está conectada a Firebase Títulos.');
 assert(/executeTitulosAction/.test(claves) && /pullRequisitos/.test(claves), 'La fachada no enruta hacia las dos Firebase.');
 assert(!/CLAVES_APPS_SCRIPT_URL|script\.google\.com/.test(claves + titles + requirements + ai), 'La capa activa todavía depende de Apps Script.');
-assert(/requestHost/.test(http) && /titulos-administrador\.pages\.dev/.test(http), 'Los roles no se determinan por el host del proyecto.');
+assert(/requestHost/.test(http) && /titulos-administrador\.pages\.dev/.test(http) && /titulos-investigadores\.pages\.dev/.test(http), 'Los roles no se determinan por el host de cada proyecto.');
 assert(/runService\s*\(\s*env\s*,\s*['"]TITULOS['"]/.test(titlesApi), 'La API de Títulos no usa la fachada Firebase.');
 assert(/ADMIN_ELIMINAR_TITULOS/.test(titlesApi), 'La API no reserva la eliminación para Administrador.');
+assert(/PENDIENTE_INVESTIGADOR/.test(workflowApi) && /APROBADO_FINAL/.test(workflowApi), 'No existe una máquina de estados compartida para Investigación.');
+assert(/validarSesion/.test(investigatorApi) && /investigacion_bloqueos/.test(investigatorApi) && /workflow_eventos/.test(investigatorApi), 'Investigación no valida sesión, concurrencia y trazabilidad.');
 assert(/runService\s*\(\s*env\s*,\s*['"]REQUISITOS['"]/.test(requirementsApi), 'La API de Requisitos no usa la fachada Firebase.');
 assert(/generateAi/.test(aiApi), 'La API de IA no usa el motor Firebase.');
 assert(/CONSULTAR_ESTUDIANTE/.test(adminApi), 'Administrador no consulta el estudiante con el rol que permite devolver celular.');
@@ -107,6 +117,6 @@ if (errors.length) {
   process.exit(1);
 }
 
-console.log('[Arquitectura] Correcta: UTET=datos mínimos; Títulos=envíos, coordinación, administración e IA.');
+console.log('[Arquitectura] Correcta: UTET=datos mínimos; Títulos=envíos, Coordinación, Investigación, administración e IA.');
 console.log('[Arquitectura] Local usa configuración web; producción puede usar OAuth con cuenta de servicio.');
 console.log('[Arquitectura] La eliminación completa de títulos está disponible solo para Administrador.');
