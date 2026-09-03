@@ -71,6 +71,8 @@ expect(!/Coordinador no registrado/.test(publicHistory),
 expect(/REGISTRAR_PIN/.test(investigator) && /LOGIN_MAX_ATTEMPTS/.test(investigator) &&
   /investigacion_bloqueos/.test(investigator),
   'Investigación no tiene PIN seguro o bloqueo concurrente.');
+expect(/PBKDF2_ITERATIONS\s*=\s*100000/.test(investigator) && !/iterations:\s*120000/.test(investigator),
+  'El PIN de Investigación usa un número de iteraciones PBKDF2 no compatible con Cloudflare Workers.');
 expect(/queryEqual\([\s\S]*'envios'[\s\S]*'estadoProceso'[\s\S]*'PENDIENTE_INVESTIGADOR'/.test(investigator),
   'Investigación vuelve a recorrer toda la colección de envíos en vez de consultar solo sus pendientes.');
 expect(/El título no tiene cambios/.test(investigator),
