@@ -93,20 +93,26 @@ function validarPin(pin) {
 }
 
 async function asegurarCatalogo(env) {
-  for (const item of INVESTIGADORES) {
-    const actual = await getDocument('TITULOS', 'investigadores', item.cedula, env);
-    if (!actual) {
-      await setDocument('TITULOS', 'investigadores', item.cedula, {
-        cedula: item.cedula,
-        nombre: item.nombre,
-        activo: true,
-        pinHash: '',
-        pinSalt: '',
-        creadoEn: nowIso(),
-        actualizadoEn: nowIso()
-      }, { merge: false, exists: false }, env);
-    }
-  }
+  const existentes = await listCollection('TITULOS', 'investigadores', { pageSize: 100, maxDocuments: 500 }, env);
+  const ids = new Set(existentes.map((item) => cedula(item.cedula || item.id)).filter(Boolean));
+  const faltantes = INVESTIGADORES.filter((item) => !ids.has(item.cedula));
+  if (!faltantes.length) return;
+  const fecha = nowIso();
+  await commitDocuments('TITULOS', faltantes.map((item) => ({
+    collection: 'investigadores',
+    id: item.cedula,
+    data: {
+      cedula: item.cedula,
+      nombre: item.nombre,
+      activo: true,
+      pinHash: '',
+      pinSalt: '',
+      creadoEn: fecha,
+      actualizadoEn: fecha
+    },
+    merge: false,
+    exists: false
+  })), env);
 }
 
 async function investigadorActivo(id, env) {
@@ -263,7 +269,14 @@ async function bloqueosActivos(env) {
 }
 
 async function pendientes(env) {
-  const rows = await listCollection('TITULOS', 'envios', { pageSize: 300, maxDocuments: 10000 }, env);
+  const rows = await queryEqual(
+    'TITULOS',
+    'envios',
+    'estadoProceso',
+    'PENDIENTE_INVESTIGADOR',
+    10000,
+    env
+  );
   return rows.filter(esPendienteInvestigacion);
 }
 
@@ -522,10 +535,10 @@ async function resolver(payload, actual, env) {
 
 async function adminResumenInvestigacion(env) {
   const [eventos, bloqueos] = await Promise.all([
-    listCollection('TITULOS', 'workflow_eventos', { pageSize: 300, maxDocuments: 10000 }, env),
+    queryEqual('TITULOS', 'workflow_eventos', 'rol', 'INVESTIGADOR', 10000, env),
     listCollection('TITULOS', 'investigacion_bloqueos', { pageSize: 300, maxDocuments: 5000 }, env)
   ]);
-  const revisiones = eventos.filter((item) => text(item.rol).toUpperCase() === 'INVESTIGADOR')
+  const revisiones = eventos
     .map((item) => ({
       envioId: text(item.envioId),
       investigadorId: text(item.revisorId),
