@@ -3,6 +3,7 @@ import {
   getDocument,
   listCollection,
   nowIso,
+  queryEqual,
   setDocument,
   text
 } from '../_lib/firestore-fixed.js';
@@ -38,6 +39,8 @@ const INVESTIGADORES = Object.freeze([
 
 const LOCK_MS = 2 * 60 * 1000;
 const SESSION_MS = 8 * 60 * 60 * 1000;
+const LOGIN_MAX_ATTEMPTS = 5;
+const LOGIN_LOCK_MS = 15 * 60 * 1000;
 const enc = new TextEncoder();
 
 function cedula(value) {
@@ -113,6 +116,35 @@ async function investigadorActivo(id, env) {
   return item && item.activo !== false ? item : null;
 }
 
+async function revocarSesiones(cedulaInvestigador, env) {
+  const sesiones = await queryEqual('TITULOS', 'investigadores_sesiones', 'cedula', cedulaInvestigador, 1000, env);
+  const activas = sesiones.filter((item) => item.activo !== false);
+  if (!activas.length) return 0;
+  const fecha = nowIso();
+  await commitDocuments('TITULOS', activas.map((item) => ({
+    collection: 'investigadores_sesiones',
+    id: item.id,
+    data: { activo: false, revocadaEn: fecha },
+    merge: true,
+    ...(item._updateTime ? { updateTime: item._updateTime } : {})
+  })), env);
+  return activas.length;
+}
+
+async function cerrarSesion(token, env) {
+  const raw = text(token);
+  if (!raw) return { ok: true };
+  const id = await sha256(raw);
+  const sesion = await getDocument('TITULOS', 'investigadores_sesiones', id, env);
+  if (sesion && sesion.activo !== false) {
+    await setDocument('TITULOS', 'investigadores_sesiones', id, {
+      activo: false,
+      cerradaEn: nowIso()
+    }, { merge: true, ...(sesion._updateTime ? { updateTime: sesion._updateTime } : {}) }, env);
+  }
+  return { ok: true };
+}
+
 async function crearSesion(investigador, env) {
   const token = crypto.randomUUID() + '.' + randomHex(16);
   const id = await sha256(token);
@@ -168,6 +200,8 @@ async function registrarPin(payload, env) {
     pinSalt: salt,
     pinHash: hash,
     pinCreadoEn: nowIso(),
+    intentosFallidos: 0,
+    bloqueoLoginHasta: '',
     actualizadoEn: nowIso()
   }, { merge: true, updateTime: investigador._updateTime }, env);
   const sesion = await crearSesion(actualizado, env);
@@ -183,10 +217,32 @@ async function login(payload, env) {
   if (!text(investigador.pinHash) || !text(investigador.pinSalt)) {
     return { ok: false, requiereRegistroPin: true, mensaje: 'Primero registra tu PIN.' };
   }
+  const bloqueoHasta = Date.parse(investigador.bloqueoLoginHasta || '');
+  if (Number.isFinite(bloqueoHasta) && bloqueoHasta > Date.now()) {
+    throw new Error('Acceso temporalmente bloqueado por varios intentos fallidos. Intenta más tarde o solicita al administrador restablecer el PIN.');
+  }
   const hash = await pinHash(pin, investigador.pinSalt);
-  if (hash !== investigador.pinHash) throw new Error('PIN incorrecto.');
-  const sesion = await crearSesion(investigador, env);
-  return { ok: true, nombre: investigador.nombre, cedula: c, sesion: sesion.token, expiraEn: sesion.expiraEn };
+  if (hash !== investigador.pinHash) {
+    const intentos = Number(investigador.intentosFallidos || 0) + 1;
+    const bloquear = intentos >= LOGIN_MAX_ATTEMPTS;
+    await setDocument('TITULOS', 'investigadores', c, {
+      intentosFallidos: bloquear ? 0 : intentos,
+      bloqueoLoginHasta: bloquear ? new Date(Date.now() + LOGIN_LOCK_MS).toISOString() : '',
+      ultimoIntentoFallidoEn: nowIso(),
+      actualizadoEn: nowIso()
+    }, { merge: true, ...(investigador._updateTime ? { updateTime: investigador._updateTime } : {}) }, env);
+    throw new Error(bloquear
+      ? 'Demasiados intentos fallidos. El acceso quedó bloqueado temporalmente.'
+      : 'PIN incorrecto.');
+  }
+  const actualizado = await setDocument('TITULOS', 'investigadores', c, {
+    intentosFallidos: 0,
+    bloqueoLoginHasta: '',
+    ultimoIngresoEn: nowIso(),
+    actualizadoEn: nowIso()
+  }, { merge: true, ...(investigador._updateTime ? { updateTime: investigador._updateTime } : {}) }, env);
+  const sesion = await crearSesion(actualizado, env);
+  return { ok: true, nombre: actualizado.nombre, cedula: c, sesion: sesion.token, expiraEn: sesion.expiraEn };
 }
 
 function lockId(envioId) {
@@ -265,6 +321,19 @@ async function listarPendientesCarrera(payload, actual, env) {
   };
 }
 
+async function historialEnvio(envioId, env) {
+  const rows = await queryEqual('TITULOS', 'workflow_eventos', 'envioId', envioId, 1000, env);
+  return rows.map((item) => ({
+    rol: text(item.rol),
+    accion: text(item.accion),
+    resultado: text(item.resultado),
+    tituloAntes: text(item.tituloAntes),
+    tituloDespues: text(item.tituloDespues),
+    observacion: text(item.observacion),
+    fecha: text(item.fecha || item.actualizadoEn || item._updateTime)
+  })).sort((a, b) => (Date.parse(a.fecha || '') || 0) - (Date.parse(b.fecha || '') || 0));
+}
+
 async function tomarRevision(payload, actual, env) {
   const id = text(payload.envioId);
   if (!id) throw new Error('No se indicó el título a revisar.');
@@ -293,7 +362,8 @@ async function tomarRevision(payload, actual, env) {
     }
     throw _error;
   }
-  return { ok: true, envio: publicoPendiente(envio, data, actual), bloqueoHasta: data.bloqueoHasta };
+  const historial = await historialEnvio(id, env).catch(() => []);
+  return { ok: true, envio: { ...publicoPendiente(envio, data, actual), historial }, bloqueoHasta: data.bloqueoHasta };
 }
 
 async function heartbeat(payload, actual, env) {
@@ -486,16 +556,20 @@ async function adminResetPin(payload, env) {
   await setDocument('TITULOS', 'investigadores', c, {
     pinHash: '',
     pinSalt: '',
+    intentosFallidos: 0,
+    bloqueoLoginHasta: '',
     pinReiniciadoEn: nowIso(),
     actualizadoEn: nowIso()
   }, { merge: true, updateTime: actual._updateTime }, env);
-  return { ok: true, mensaje: 'PIN restablecido. Se solicitará uno nuevo en el próximo ingreso.' };
+  await revocarSesiones(c, env);
+  return { ok: true, mensaje: 'PIN restablecido y sesiones anteriores cerradas. Se solicitará uno nuevo en el próximo ingreso.' };
 }
 
 async function execute(action, payload, userRole, env) {
   if (action === 'CONSULTAR_ACCESO') return consultarAcceso(payload, env);
   if (action === 'REGISTRAR_PIN') return registrarPin(payload, env);
   if (action === 'LOGIN') return login(payload, env);
+  if (action === 'LOGOUT') return cerrarSesion(payload.sesion, env);
 
   if (userRole === 'admin') {
     if (action === 'ADMIN_LISTAR_INVESTIGADORES') return adminListar(env);
