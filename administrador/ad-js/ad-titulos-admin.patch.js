@@ -17,9 +17,9 @@
   function normal(value){return text(value).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').replace(/\s+/g,' ').trim();}
   function esc(value){return text(value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');}
   function status(value){return text(value).toUpperCase();}
-  function isApproved(value){var current=status(value);return current==='APROBADO'||current==='REEMPLAZADO';}
-  function statusLabel(value){var current=status(value);if(current==='REEMPLAZADO')return'Aprobado con corrección';if(current==='APROBADO')return'Aprobado';if(current==='DEVUELTO')return'Devuelto';if(current==='NO_ENVIADO')return'No enviado';return'Pendiente de revisión';}
-  function statusClass(value){var current=status(value);if(current==='APROBADO'||current==='REEMPLAZADO')return'ad-badge-success';if(current==='NO_ENVIADO'||current==='DEVUELTO')return'ad-badge-warning';return'ad-badge-info';}
+  function isApproved(value){var current=status(value);return current==='APROBADO_FINAL'||current==='APROBADO'||current==='REEMPLAZADO';}
+  function statusLabel(value){var current=status(value);if(current==='APROBADO_FINAL')return'Aprobado final';if(current==='REEMPLAZADO')return'Aprobado con corrección histórico';if(current==='APROBADO')return'Aprobado histórico';if(current==='PENDIENTE_INVESTIGADOR')return'Pendiente de Investigación';if(current==='DEVUELTO')return'Devuelto';if(current==='NO_ENVIADO')return'No enviado';return'Pendiente de Coordinación';}
+  function statusClass(value){var current=status(value);if(current==='APROBADO_FINAL'||current==='APROBADO'||current==='REEMPLAZADO')return'ad-badge-success';if(current==='NO_ENVIADO'||current==='DEVUELTO')return'ad-badge-warning';return'ad-badge-info';}
   function setHidden(element,hidden){if(element&&element.hidden!==Boolean(hidden))element.hidden=Boolean(hidden);}
   function selectedPeriodLabel(){var select=$('ad-v2-title-period');if(!select||select.selectedIndex<0)return'';return text(select.options[select.selectedIndex]&&select.options[select.selectedIndex].textContent).replace(/\s+·\s+Inactivo$/i,'');}
   function selectedPeriodId(){var select=$('ad-v2-title-period');return select?text(select.value):'';}
@@ -105,7 +105,7 @@
         '<strong>Corrección administrativa del título</strong>'+
         '<p class="ad-admin-title-current"><span>Título actual:</span><br><strong id="ad-admin-title-current">-</strong></p>'+
         '<label><span>Nuevo título final</span><textarea id="ad-admin-title-corrected" maxlength="600" placeholder="Escribe el título corregido"></textarea></label>'+
-        '<small>Al guardar, el título anterior no se elimina: queda registrado en el historial de resoluciones y el estado pasa a “Aprobado con corrección”.</small>'+
+        '<small>Al guardar, el título anterior queda en el historial. Si ya tenía aprobación final, conservará ese estado.</small>'+
         '<button class="ad-btn ad-btn-primary" type="button" data-admin-title-action="save-correction">Guardar corrección</button>';
       card.insertBefore(panel,returnBlock);
     }
@@ -174,7 +174,7 @@
     var timer=window.setInterval(function(){
       attempts+=1;
       var updated=studentByCedula(cedula);
-      var ready=updated&&status(updated.estado)==='REEMPLAZADO'&&normal(currentTitle(updated))===normal(corrected);
+      var ready=updated&&['REEMPLAZADO','APROBADO_FINAL'].indexOf(status(updated.estado))>=0&&normal(currentTitle(updated))===normal(corrected);
       if(!ready&&attempts<32)return;
       window.clearInterval(timer);
       renderApprovedGroup();
@@ -234,6 +234,8 @@
       nombreCoordinador:'Administrador de Titulación',
       estado:'REEMPLAZADO',
       estadoFinal:'REEMPLAZADO',
+      estadoOriginal:status(student.estado),
+      mantenerAprobacionFinal:status(student.estado)==='APROBADO_FINAL',
       tituloElegido:current,
       tituloCorregido:corrected,
       observacion:'Corrección del título final realizada desde Administrador.',
