@@ -24,6 +24,7 @@ const student = read('estudiantes-mvp/js/estudiante.consulta.revision.js');
 const workStudent = read('trabajo-titulacion-mvp/js/trabajo-titulacion.js');
 const publicHistory = read('estudiantes-mvp/js/titulos.historial.publico.js');
 const investigatorHtml = read('investigadores-mvp/index.html');
+const localBuilder = read('dev/preparar-pages-local.mjs');
 const investigatorJs = read('investigadores-mvp/js/investigadores.app.js');
 const adminHtml = read('administrador/ad-index.html');
 const adminJs = read('administrador/ad-js/ad-google-sheets.app.js');
@@ -68,6 +69,8 @@ expect(/Usar esta propuesta/.test(investigatorJs) && /Tomado por otro usuario/.t
   'La interfaz de Investigación no permite reutilizar propuestas o mostrar bloqueo.');
 expect(/Historial del proceso/.test(investigatorHtml),
   'Investigación no muestra el historial previo.');
+expect(/investigadores-mvp/.test(localBuilder) && /Investigación/.test(localBuilder),
+  'El entorno local no incluye la aplicación de Investigación.');
 
 expect(/ad-seccion-investigadores/.test(adminHtml) &&
   /ad-filtro-titulo-investigador/.test(adminHtml),

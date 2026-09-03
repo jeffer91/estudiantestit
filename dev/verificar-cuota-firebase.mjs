@@ -112,8 +112,9 @@ assert(
 assert(
   /HISTORY_FILE/.test(localBuilder) &&
   /prepararTrabajoLocal\(\)/.test(localBuilder) &&
-  /injectScript\(html, HISTORY_FILE\)/.test(localBuilder),
-  'El entorno local no carga el historial en Artículos y Trabajo de Titulación.'
+  /injectScript\(html, HISTORY_FILE\)/.test(localBuilder) &&
+  /investigadores-mvp/.test(localBuilder),
+  'El entorno local no carga el historial o no incluye Investigación.'
 );
 
 assert(

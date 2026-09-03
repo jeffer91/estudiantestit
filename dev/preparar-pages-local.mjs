@@ -4,8 +4,8 @@ import process from 'node:process';
 
 const root = process.cwd();
 const output = path.join(root, '.pages-local');
-const VERSION_ESTUDIANTES = '2.4.4';
-const VERSION_ADMIN = '3.3.3';
+const VERSION_ESTUDIANTES = '2.5.0';
+const VERSION_ADMIN = '3.6.0';
 const HISTORY_FILE = 'js/titulos.historial.publico.js';
 const LEGACY_SCRIPTS = [
   'estudiante.consulta.optimizada.js',
@@ -17,6 +17,7 @@ const staticDirectories = [
   'estudiantes-mvp',
   'trabajo-titulacion-mvp',
   'coordinadores-mvp',
+  'investigadores-mvp',
   'administrador',
   'shared',
   'assets',
@@ -103,7 +104,7 @@ fs.mkdirSync(output, { recursive: true });
 const copiedDirectories = staticDirectories.filter(copyDirectory);
 const copiedFiles = staticFiles.filter(copyFile);
 
-for (const required of ['estudiantes-mvp', 'trabajo-titulacion-mvp', 'coordinadores-mvp', 'administrador']) {
+for (const required of ['estudiantes-mvp', 'trabajo-titulacion-mvp', 'coordinadores-mvp', 'investigadores-mvp', 'administrador']) {
   if (!copiedDirectories.includes(required)) {
     throw new Error('No se encontró ' + required + ' para preparar Pages local.');
   }
@@ -126,6 +127,7 @@ if (!copiedFiles.includes('index.html')) {
   <p><a href="/estudiantes-mvp/estudiante.html">Artículos académicos</a></p>
   <p><a href="/trabajo-titulacion-mvp/">Trabajo de Titulación</a></p>
   <p><a href="/coordinadores-mvp/coordinador.html">Coordinadores</a></p>
+  <p><a href="/investigadores-mvp/">Investigación</a></p>
   <p><a href="/administrador/ad-index.html">Administrador</a></p>
 </body>
 </html>`;
@@ -137,4 +139,5 @@ console.log(`[Pages local] Estudiantes ${VERSION_ESTUDIANTES}: UTET → Sheets �
 console.log('[Pages local] Historial activo en Artículos y Trabajo de Titulación.');
 console.log('[Pages local] Trabajo de Titulación disponible en /trabajo-titulacion-mvp/.');
 console.log('[Pages local] Coordinadores: artículos y Trabajos de Titulación.');
-console.log('[Pages local] Administrador: dos Firebase y reporte PDF.');
+console.log('[Pages local] Investigación: cola compartida, PIN y bloqueo concurrente.');
+console.log('[Pages local] Administrador: dos Firebase, Investigación, PDF y Excel.');
