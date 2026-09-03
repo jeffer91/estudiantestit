@@ -4,6 +4,7 @@ import { corsHeaders, jsonReply, normalizeAction, readJson, rejectUnknownOrigin,
 
 const ACCESS_ACTION = 'CONSULTAR_ACCESO_ESTUDIANTE';
 const COORDINATOR_FINAL_ACTIONS = new Set(['APROBAR_ENVIO_COORDINADOR', 'GUARDAR_REVISION_COORDINADOR', 'GUARDAR_RESOLUCION']);
+const RETURN_ACTIONS = new Set(['DEVOLVER_ENVIO_COORDINADOR', 'GUARDAR_REVISION_COORDINADOR', 'GUARDAR_RESOLUCION']);
 const STUDENT = new Set([
   'PING',
   'CONFIGURACION_PUBLICA',
@@ -315,6 +316,74 @@ async function registerStudentSubmission(payload, result, env) {
     ...(result || {}),
     estadoProceso: 'PENDIENTE_COORDINADOR',
     requiereAccionDe: 'COORDINACION'
+  };
+}
+
+async function registerReturnToStudent(payload, result, env, actorRole) {
+  const estado = text(payload.estadoFinal || payload.estado || result && result.estado).toUpperCase();
+  if (estado !== 'DEVUELTO') return result;
+
+  const envioId = text(payload.envioId || payload.idRegistro || result && (result.envioId || result.idRegistro));
+  if (!envioId) return result;
+  const envio = await getDocument('TITULOS', 'envios', envioId, env);
+  if (!envio) return result;
+
+  const fecha = text(payload.fechaResolucion) || nowIso();
+  const observacion = text(payload.observacion || payload.comentario || payload.comentarioCoordinador);
+  const rol = actorRole === 'admin' ? 'ADMINISTRADOR' : 'COORDINADOR';
+  const eventoId = workflowEventId(envioId + '__return');
+
+  await commitDocuments('TITULOS', [
+    {
+      collection: 'envios',
+      id: envioId,
+      data: {
+        estado: 'DEVUELTO',
+        estadoProceso: 'DEVUELTO',
+        tituloFinal: null,
+        tituloFinalInvestigacion: null,
+        permitirReenvio: true,
+        requiereAccionDe: 'ESTUDIANTE',
+        devueltoPor: rol,
+        observacionDevolucion: observacion,
+        actualizadoEn: fecha
+      },
+      merge: true,
+      ...(envio._updateTime ? { updateTime: envio._updateTime } : {})
+    },
+    {
+      collection: 'workflow_eventos',
+      id: eventoId,
+      data: {
+        envioId,
+        rol,
+        revisorId: actorRole === 'admin'
+          ? 'ADMIN'
+          : text(payload.coordinadorId || payload.idCoordinador),
+        revisorNombre: actorRole === 'admin'
+          ? 'Administrador de Titulación'
+          : text(payload.coordinador || payload.nombreCoordinador),
+        accion: 'DEVOLVER_ESTUDIANTE',
+        resultado: 'DEVUELTO',
+        estadoAnterior: text(envio.estadoProceso || envio.estado),
+        estadoNuevo: 'DEVUELTO',
+        tituloAntes: normalizeTitle(payload.tituloElegido || envio.tituloCoordinador || envio.tituloPreferidoTexto || envio.titulo1),
+        tituloDespues: '',
+        observacion,
+        fecha
+      },
+      merge: false,
+      exists: false
+    }
+  ], env);
+
+  return {
+    ...(result || {}),
+    estado: 'DEVUELTO',
+    estadoProceso: 'DEVUELTO',
+    permitirReenvio: true,
+    requiereAccionDe: 'ESTUDIANTE',
+    mensaje: 'Propuestas devueltas para corrección.'
   };
 }
 
@@ -971,10 +1040,14 @@ export async function onRequest({ request, env }) {
     if (userRole === 'student' && action === 'ENVIO_ESTUDIANTE') {
       result = await registerStudentSubmission(payload, result, env);
     }
+    if (userRole === 'coordinator' && RETURN_ACTIONS.has(action)) {
+      result = await registerReturnToStudent(payload, result, env, userRole);
+    }
     if (userRole === 'coordinator' && COORDINATOR_FINAL_ACTIONS.has(action)) {
       result = await registerCoordinatorValidation(payload, result, env);
     }
     if (userRole === 'admin' && action === 'GUARDAR_RESOLUCION') {
+      result = await registerReturnToStudent(payload, result, env, userRole);
       result = await registerAdminFinalCorrection(payload, result, env);
     }
     if (WRITE_ACTIONS.has(action)) clearCaches();
