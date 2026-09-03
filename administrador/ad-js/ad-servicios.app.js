@@ -2,7 +2,7 @@
 (function(window,document){
   'use strict';
 
-  var VERSION='3.5.2';
+  var VERSION='3.6.0';
   var servicios=[];
   function api(){return window.ADAPIService||null;}
   function $(id){return document.getElementById(id);}

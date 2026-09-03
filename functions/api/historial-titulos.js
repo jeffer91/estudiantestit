@@ -4,8 +4,32 @@ import {
   jsonReply,
   readJson,
   rejectUnknownOrigin,
+  role,
   text
 } from '../_lib/http.js';
+
+function sanitizeHistory(result, userRole) {
+  if (!result || userRole === 'admin') return result;
+
+  const sanitized = { ...result };
+  sanitized.revisiones = (result.revisiones || []).map((item) => ({
+    ...item,
+    coordinador: ''
+  }));
+
+  const cleanWorkflow = (result.eventosWorkflow || result.lineaTiempo || []).map((item) => {
+    const isInvestigation = String(item && item.rol || '').toUpperCase() === 'INVESTIGADOR';
+    return {
+      ...item,
+      rol: userRole === 'student' ? '' : item.rol,
+      revisorId: '',
+      revisorNombre: isInvestigation || userRole === 'student' ? '' : item.revisorNombre
+    };
+  });
+  sanitized.eventosWorkflow = cleanWorkflow;
+  sanitized.lineaTiempo = cleanWorkflow;
+  return sanitized;
+}
 
 export async function onRequest({ request, env }) {
   const badOrigin = rejectUnknownOrigin(request);
@@ -41,7 +65,7 @@ export async function onRequest({ request, env }) {
     }
 
     const result = await consultarHistorialTitulos(payload, env);
-    return jsonReply(request, result);
+    return jsonReply(request, sanitizeHistory(result, role(request)));
   } catch (error) {
     /* El historial es informativo y nunca debe bloquear la pantalla principal
        ni provocar reintentos agresivos. Devuelve una respuesta válida y deja

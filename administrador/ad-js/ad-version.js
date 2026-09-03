@@ -2,7 +2,7 @@
 (function(window,document){
   'use strict';
 
-  var VERSION='3.5.2';
+  var VERSION='3.6.0';
   var MASS_BATCH_SIZE=50;
   var MAX_OUTLOOK_URL_LENGTH=7000;
   var OUTLOOK_COMPOSE='https://outlook.office.com/mail/deeplink/compose';
