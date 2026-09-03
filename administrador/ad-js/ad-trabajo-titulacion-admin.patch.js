@@ -23,8 +23,8 @@
   }
   function currentStudent(){return studentById($('ad-v2-detail-id')&&$('ad-v2-detail-id').textContent);}
   function isWork(item){return text(item&&item.tipoTrabajo).toUpperCase()===TYPE;}
-  function stateOf(item){return text(item&&item.estado).toUpperCase();}
-  function canSendCoordinator(item){var value=stateOf(item);return value==='APROBADO'||value==='REEMPLAZADO'||value==='DEVUELTO';}
+  function stateOf(item){return text(item&&(item.estadoProceso||item.estado)).toUpperCase();}
+  function canSendCoordinator(item){var value=stateOf(item);return['APROBADO_FINAL','PENDIENTE_INVESTIGADOR','APROBADO','REEMPLAZADO','DEVUELTO'].indexOf(value)>=0;}
   function isReturned(item){return stateOf(item)==='DEVUELTO';}
 
   function request(action,data){
@@ -142,9 +142,11 @@
     if(coordinatorButton){coordinatorButton.hidden=false;coordinatorButton.disabled=!canSendCoordinator(item);}
     if(studentButton){studentButton.hidden=false;studentButton.disabled=false;}
 
-    if(isReturned(item))status('Devuelto al estudiante. Puedes enviarlo nuevamente al coordinador o confirmar la devolución al estudiante.','info');
-    else if(canSendCoordinator(item))status('Puedes devolverlo al coordinador para una nueva revisión o al estudiante para corrección.','info');
-    else status('Pendiente de revisión. Puedes devolverlo al estudiante.','info');
+    if(isReturned(item))status('Devuelto al estudiante. Puedes reabrirlo en Coordinación o confirmar la devolución.','info');
+    else if(stateOf(item)==='PENDIENTE_INVESTIGADOR')status('Validado por Coordinación y pendiente de Investigación. Puedes reabrirlo en Coordinación o devolverlo al estudiante.','info');
+    else if(stateOf(item)==='APROBADO_FINAL')status('Aprobado definitivamente. Puedes reabrirlo en Coordinación o devolverlo al estudiante si se requiere una corrección excepcional.','info');
+    else if(canSendCoordinator(item))status('Puedes devolverlo a Coordinación para una nueva revisión o al estudiante para corrección.','info');
+    else status('Pendiente de Coordinación. Puedes devolverlo al estudiante.','info');
   }
 
   function payload(item){
@@ -175,7 +177,7 @@
     }else if(action==='reopen'){
       if(!canSendCoordinator(item)){status('Este trabajo ya está pendiente de revisión del coordinador.','info');return;}
       endpointAction='ADMIN_REABRIR_REVISION_TRABAJO_TITULACION';
-      confirmation='El trabajo volverá a Pendiente de revisión para el coordinador. ¿Continuar?';
+      confirmation='El trabajo volverá a Pendiente de Coordinación y deberá pasar nuevamente por Investigación. ¿Continuar?';
     }else if(action==='return'){
       endpointAction='ADMIN_DEVOLVER_TRABAJO_TITULACION';
       if(comment)data.comentario=comment;
