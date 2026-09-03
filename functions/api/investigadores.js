@@ -520,6 +520,41 @@ async function resolver(payload, actual, env) {
   };
 }
 
+async function adminResumenInvestigacion(env) {
+  const [eventos, bloqueos] = await Promise.all([
+    listCollection('TITULOS', 'workflow_eventos', { pageSize: 300, maxDocuments: 10000 }, env),
+    listCollection('TITULOS', 'investigacion_bloqueos', { pageSize: 300, maxDocuments: 5000 }, env)
+  ]);
+  const revisiones = eventos.filter((item) => text(item.rol).toUpperCase() === 'INVESTIGADOR')
+    .map((item) => ({
+      envioId: text(item.envioId),
+      investigadorId: text(item.revisorId),
+      investigadorNombre: text(item.revisorNombre),
+      accion: text(item.accion),
+      resultado: text(item.resultado),
+      tituloAntes: text(item.tituloAntes),
+      tituloDespues: text(item.tituloDespues),
+      observacion: text(item.observacion),
+      fecha: text(item.fecha || item.actualizadoEn || item._updateTime)
+    }))
+    .sort((a, b) => (Date.parse(b.fecha || '') || 0) - (Date.parse(a.fecha || '') || 0));
+
+  const ultimoPorEnvio = {};
+  revisiones.forEach((item) => {
+    if (item.envioId && !ultimoPorEnvio[item.envioId]) ultimoPorEnvio[item.envioId] = item;
+  });
+  return {
+    ok: true,
+    revisiones,
+    ultimoPorEnvio,
+    bloqueos: bloqueos.filter(lockVigente).map((item) => ({
+      envioId: text(item.envioId),
+      cedulaInvestigador: text(item.cedulaInvestigador),
+      bloqueoHasta: text(item.bloqueoHasta)
+    }))
+  };
+}
+
 async function adminListar(env) {
   await asegurarCatalogo(env);
   const rows = await listCollection('TITULOS', 'investigadores', { pageSize: 100, maxDocuments: 500 }, env);
@@ -573,6 +608,7 @@ async function execute(action, payload, userRole, env) {
 
   if (userRole === 'admin') {
     if (action === 'ADMIN_LISTAR_INVESTIGADORES') return adminListar(env);
+    if (action === 'ADMIN_RESUMEN_INVESTIGACION') return adminResumenInvestigacion(env);
     if (action === 'ADMIN_GUARDAR_INVESTIGADOR') return adminGuardar(payload, env);
     if (action === 'ADMIN_RESETEAR_PIN_INVESTIGADOR') return adminResetPin(payload, env);
     if (action === 'ADMIN_LIBERAR_REVISION_INVESTIGACION') {

@@ -62,6 +62,9 @@ function normalizeStatus(value) {
   const state = text(value || 'PENDIENTE_REVISION')
     .toUpperCase()
     .replace(/[^A-Z0-9]+/g, '_');
+  if (state === 'PENDIENTE_INVESTIGADOR') return 'PENDIENTE_INVESTIGADOR';
+  if (state === 'APROBADO_FINAL') return 'APROBADO_FINAL';
+  if (state === 'PENDIENTE_COORDINADOR') return 'PENDIENTE_REVISION';
   if (state.includes('DEVUEL')) return 'DEVUELTO';
   if (state.includes('REEMPLAZ')) return 'REEMPLAZADO';
   if (state.includes('APROBAD')) return 'APROBADO';
@@ -135,7 +138,11 @@ function publicEnvio(row) {
     tituloFinal: cleanTitle(
       row.tituloFinal || row.tituloAprobado || row.tituloCorregido || row.tituloElegido
     ),
-    estado: normalizeStatus(row.estado || row.estadoFinal || row.ultimoEstadoRevision),
+    tituloCoordinador: cleanTitle(row.tituloCoordinador || row.tituloValidadoCoordinador),
+    estadoProceso: normalizeStatus(row.estadoProceso || row.estado || row.estadoFinal || row.ultimoEstadoRevision),
+    estado: normalizeStatus(row.estadoProceso || row.estado || row.estadoFinal || row.ultimoEstadoRevision),
+    resultadoCoordinador: text(row.resultadoCoordinador),
+    resultadoInvestigacion: text(row.resultadoInvestigacion),
     coordinador: text(row.coordinador || row.nombreCoordinador || row.ultimoCoordinador),
     observacion: text(
       row.observacion || row.comentarioCoordinador || row.comentario || row.ultimoComentario
@@ -283,7 +290,10 @@ export async function buildAdminStatistics(payload = {}, env) {
         enviados: 0,
         faltan: 0,
         pendientes: 0,
+        pendientesCoordinacion: 0,
+        pendientesInvestigacion: 0,
         aprobados: 0,
+        aprobadosFinal: 0,
         reemplazados: 0,
         devueltos: 0,
         avance: 0
@@ -296,10 +306,12 @@ export async function buildAdminStatistics(payload = {}, env) {
       career.faltan += 1;
     } else {
       career.enviados += 1;
-      if (state === 'APROBADO') career.aprobados += 1;
+      if (state === 'APROBADO_FINAL') { career.aprobados += 1; career.aprobadosFinal += 1; }
+      else if (state === 'APROBADO') career.aprobados += 1;
       else if (state === 'REEMPLAZADO') career.reemplazados += 1;
       else if (state === 'DEVUELTO') career.devueltos += 1;
-      else career.pendientes += 1;
+      else if (state === 'PENDIENTE_INVESTIGADOR') { career.pendientes += 1; career.pendientesInvestigacion += 1; }
+      else { career.pendientes += 1; career.pendientesCoordinacion += 1; }
     }
 
     if (!coordinatorBuckets.has(coordinatorKey)) {
@@ -331,7 +343,7 @@ export async function buildAdminStatistics(payload = {}, env) {
   })).sort((a, b) => a.carrera.localeCompare(b.carrera, 'es'));
 
   const resumen = carreras.reduce((total, item) => {
-    ['esperados', 'enviados', 'faltan', 'pendientes', 'aprobados', 'reemplazados', 'devueltos']
+    ['esperados', 'enviados', 'faltan', 'pendientes', 'pendientesCoordinacion', 'pendientesInvestigacion', 'aprobados', 'aprobadosFinal', 'reemplazados', 'devueltos']
       .forEach((field) => { total[field] += item[field]; });
     return total;
   }, {
@@ -339,7 +351,10 @@ export async function buildAdminStatistics(payload = {}, env) {
     enviados: 0,
     faltan: 0,
     pendientes: 0,
+    pendientesCoordinacion: 0,
+    pendientesInvestigacion: 0,
     aprobados: 0,
+    aprobadosFinal: 0,
     reemplazados: 0,
     devueltos: 0
   });
@@ -349,7 +364,8 @@ export async function buildAdminStatistics(payload = {}, env) {
     : 0;
   resumen.totalEstudiantes = resumen.esperados;
   resumen.enviaron = resumen.enviados;
-  resumen.porRevisar = resumen.pendientes;
+  resumen.porRevisar = resumen.pendientesCoordinacion;
+  resumen.porRevisarInvestigacion = resumen.pendientesInvestigacion;
   resumen.enviosFirebase = global.totalEnviosPeriodo || 0;
   resumen.trabajosTitulacion = global.totalTrabajosTitulacion || 0;
   resumen.fueraPoblacion = (global.fueraPoblacion || []).length;
@@ -365,6 +381,9 @@ export async function buildAdminStatistics(payload = {}, env) {
   const pendientesRevision = global.registros.filter(
     (item) => normalizeStatus(item.estado) === 'PENDIENTE_REVISION'
   );
+  const pendientesInvestigacion = global.registros.filter(
+    (item) => normalizeStatus(item.estado) === 'PENDIENTE_INVESTIGADOR'
+  );
 
   return {
     ...global,
@@ -372,6 +391,7 @@ export async function buildAdminStatistics(payload = {}, env) {
     carreras,
     coordinadores,
     pendientesRevision,
+    pendientesInvestigacion,
     mensaje:
       `Estadísticas calculadas para ${resumen.esperados} estudiantes: ` +
       `${resumen.enviados} enviaron y ${resumen.faltan} faltan por enviar.`
