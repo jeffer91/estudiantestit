@@ -15,7 +15,8 @@ import {
   slug,
   text
 } from './firestore.js';
-import { getStudentBasic, listTitleCareers, listTitlePeriods } from './requisitos-firebase.js';
+import { getStudentBasicFast } from './requisitos-firebase-fast.js';
+import { listTitleCareers, listTitlePeriods } from './requisitos-firebase.js';
 
 const RESOLUTION_STATES = new Set(['APROBADO', 'REEMPLAZADO', 'DEVUELTO']);
 
@@ -288,11 +289,14 @@ async function saveStudentSubmission(payload = {}, env) {
     throw new Error('Los tres títulos deben ser diferentes.');
   }
 
-  const basic = await getStudentBasic(cedula, {
+  const basic = await getStudentBasicFast(cedula, {
     periodoId: payload.periodoId || payload.periodo || payload.periodoLabel
   }, env);
   if (basic.encontrado !== true || !basic.estudiante) {
-    throw new Error('La cédula no corresponde a un estudiante habilitado en Firebase UTET.');
+    throw new Error(
+      text(basic && basic.mensaje) ||
+      'La cédula no corresponde a un estudiante habilitado en Firebase UTET.'
+    );
   }
 
   const student = basic.estudiante;
@@ -623,7 +627,7 @@ export async function executeTitulosAction(action, payload = {}, userRole = 'stu
     return { ok: true, log };
   }
   if (normalized === 'CONSULTAR_ESTUDIANTE') {
-    return getStudentBasic(payload.cedula || payload.numeroIdentificacion, {
+    return getStudentBasicFast(payload.cedula || payload.numeroIdentificacion, {
       periodoId: payload.periodoId || payload.periodo,
       includePhone: userRole === 'admin'
     }, env);
