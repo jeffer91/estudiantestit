@@ -143,6 +143,11 @@ function publicEnvio(row) {
     estado: normalizeStatus(row.estadoProceso || row.estado || row.estadoFinal || row.ultimoEstadoRevision),
     resultadoCoordinador: text(row.resultadoCoordinador),
     resultadoInvestigacion: text(row.resultadoInvestigacion),
+    resultadoAdministrativo: text(row.resultadoAdministrativo),
+    observacionInvestigacion: text(row.observacionInvestigacion),
+    tituloFinalInvestigacion: cleanTitle(row.tituloFinalInvestigacion),
+    fechaValidacionCoordinador: text(row.fechaValidacionCoordinador),
+    fechaResolucionInvestigacion: text(row.fechaResolucionInvestigacion),
     coordinador: text(row.coordinador || row.nombreCoordinador || row.ultimoCoordinador),
     observacion: text(
       row.observacion || row.comentarioCoordinador || row.comentario || row.ultimoComentario
