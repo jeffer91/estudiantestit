@@ -23,6 +23,7 @@
         <a href="#ad-seccion-periodos" data-ad-view-target="ad-seccion-periodos">Períodos</a>
         <a href="#ad-seccion-carreras" data-ad-view-target="ad-seccion-carreras">Carreras</a>
         <a href="#ad-seccion-coordinadores" data-ad-view-target="ad-seccion-coordinadores">Coordinadores</a>
+        <a href="#ad-seccion-investigadores" data-ad-view-target="ad-seccion-investigadores">Investigadores</a>
         <a href="#ad-seccion-titulos" data-ad-view-target="ad-seccion-titulos">Títulos</a>
         <a href="#ad-seccion-estadisticas" data-ad-view-target="ad-seccion-estadisticas">Estadísticas</a>
         <a href="#ad-seccion-ia" data-ad-view-target="ad-seccion-ia">Claves de IA</a>
@@ -41,7 +42,7 @@
           <span class="ad-badge ad-badge-warning" id="ad-badge-requisitos">UTET: pendiente</span>
           <span class="ad-badge ad-badge-warning" id="ad-badge-titulos">Títulos: pendiente</span>
           <span class="ad-badge ad-badge-warning" id="ad-badge-claves">IA: pendiente</span>
-          <span class="ad-badge ad-badge-info" id="ad-badge-version">v3.3.3</span>
+          <span class="ad-badge ad-badge-info" id="ad-badge-version">v3.6.0</span>
         </div>
       </header>
 
@@ -107,14 +108,30 @@
         </div>
       </section>
 
+      <section id="ad-seccion-investigadores" class="ad-view" data-ad-view hidden>
+        <div class="ad-section-head"><div><p class="ad-eyebrow">Investigación</p><h3>Investigadores</h3><p class="ad-muted">Gestiona nombre, cédula, estado y restablecimiento del PIN. Las carreras no se asignan: todos revisan la cola compartida.</p></div></div>
+        <div class="ad-card">
+          <form id="ad-form-investigador" class="ad-form-grid ad-form-grid-4">
+            <label><span>Cédula</span><input id="ad-investigador-cedula" inputmode="numeric" maxlength="10" required /></label>
+            <label><span>Nombre completo</span><input id="ad-investigador-nombre" required /></label>
+            <label class="ad-check"><input id="ad-investigador-activo" type="checkbox" checked /><span>Investigador activo</span></label>
+            <button class="ad-btn ad-btn-primary" type="submit">Guardar investigador</button>
+          </form>
+          <pre id="ad-estado-investigador" class="ad-result-box">Sin cambios pendientes.</pre>
+          <div class="ad-table-wrap"><table class="ad-table"><thead><tr><th>Investigador</th><th>Cédula</th><th>PIN</th><th>Estado</th><th>Acciones</th></tr></thead><tbody id="ad-tabla-investigadores"><tr><td colspan="5" class="ad-empty">Cargando...</td></tr></tbody></table></div>
+        </div>
+      </section>
+
       <section id="ad-seccion-titulos" class="ad-view" data-ad-view hidden>
         <div class="ad-section-head"><div><p class="ad-eyebrow">Firebase Títulos</p><h3>Títulos enviados</h3><p class="ad-muted">Filtra los registros y abre el detalle para revisar propuestas, favorito y resolución.</p></div></div>
         <div class="ad-card">
           <div class="ad-filter-grid">
             <label><span>Período</span><select id="ad-filtro-titulo-periodo" data-periodo-select></select></label>
             <label><span>Carrera</span><select id="ad-filtro-titulo-carrera" data-carrera-select></select></label>
-            <label><span>Estado</span><select id="ad-filtro-titulo-estado"><option value="">Todos</option><option value="PENDIENTE_REVISION">Pendiente de revisión</option><option value="APROBADO">Aprobado</option><option value="REEMPLAZADO">Aprobado con corrección</option><option value="DEVUELTO">Devuelto</option></select></label>
-            <label><span>Buscar</span><input id="ad-buscar-titulo" placeholder="Cédula o nombre" /></label>
+            <label><span>Estado</span><select id="ad-filtro-titulo-estado"><option value="">Todos</option><option value="PENDIENTE_REVISION">Pendiente de Coordinación</option><option value="PENDIENTE_INVESTIGADOR">Pendiente de Investigación</option><option value="APROBADO_FINAL">Aprobado final</option><option value="APROBADO">Aprobado histórico</option><option value="REEMPLAZADO">Aprobado con corrección histórico</option><option value="DEVUELTO">Devuelto</option></select></label>
+            <label><span>Coordinador</span><select id="ad-filtro-titulo-coordinador"><option value="">Todos</option></select></label>
+            <label><span>Investigador</span><select id="ad-filtro-titulo-investigador"><option value="">Todos</option></select></label>
+            <label><span>Buscar</span><input id="ad-buscar-titulo" placeholder="Nombre, cédula o título" /></label>
           </div>
           <pre id="ad-estado-titulos" class="ad-result-box">Usa 👁️ para ver detalles y 🗑️ únicamente para eliminar definitivamente.</pre>
           <div class="ad-table-wrap"><table class="ad-table"><thead><tr><th>Cédula</th><th>Estudiante</th><th>Carrera</th><th>Período</th><th>Estado</th><th>Acciones</th></tr></thead><tbody id="ad-tabla-titulos"><tr><td colspan="6" class="ad-empty">Cargando...</td></tr></tbody></table></div>
@@ -193,7 +210,7 @@
         <div class="ad-card"><pre id="ad-diagnostico-salida" class="ad-diagnostic-box">Diagnóstico pendiente.</pre></div>
       </section>
 
-      <footer class="ad-footer"><span>Administrador Titulación</span><span id="ad-footer-version">Versión 3.3.3</span></footer>
+      <footer class="ad-footer"><span>Administrador Titulación</span><span id="ad-footer-version">Versión 3.6.0</span></footer>
     </main>
   </div>
 
@@ -227,6 +244,22 @@
             <div><span>Observación</span><strong id="ad-detalle-observacion">-</strong></div>
           </div>
         </section>
+        <section class="ad-review-card">
+          <h4>Revisión de Investigación</h4>
+          <div class="ad-review-grid">
+            <div><span>Estado</span><strong id="ad-investigacion-estado">-</strong></div>
+            <div><span>Investigador</span><strong id="ad-investigacion-investigador">-</strong></div>
+            <div><span>Fecha</span><strong id="ad-investigacion-fecha">-</strong></div>
+            <div><span>Resultado</span><strong id="ad-investigacion-resultado">-</strong></div>
+            <div><span>Título antes</span><strong id="ad-investigacion-antes">-</strong></div>
+            <div><span>Título después</span><strong id="ad-investigacion-despues">-</strong></div>
+            <div class="ad-form-span"><span>Observación</span><strong id="ad-investigacion-observacion">-</strong></div>
+          </div>
+        </section>
+        <section class="ad-review-card">
+          <h4>Historial del estudiante</h4>
+          <div id="ad-detalle-linea-tiempo" class="ad-result-box">Cargando historial...</div>
+        </section>
         <section class="ad-return-box" id="ad-caja-devolver">
           <label><span>Motivo para devolver las propuestas</span><textarea id="ad-modal-motivo-devolucion" placeholder="Escribe una observación de al menos 4 caracteres"></textarea></label>
           <pre id="ad-modal-estado-titulo" class="ad-result-box">Desde este modal puedes devolver o eliminar el registro.</pre>
@@ -234,6 +267,7 @@
       </div>
       <footer class="ad-modal__footer">
         <button class="ad-btn ad-btn-secondary" type="button" data-action="cerrar-modal-titulo">Cerrar</button>
+        <button class="ad-btn ad-btn-secondary" id="ad-btn-liberar-investigacion" type="button" data-action="liberar-revision-investigacion" hidden>Liberar revisión de Investigación</button>
         <button class="ad-btn ad-btn-danger" type="button" data-action="eliminar-titulo-modal">🗑️ Eliminar</button>
         <button class="ad-btn ad-btn-primary" type="button" data-action="devolver-titulo-modal">↩️ Devolver propuestas</button>
       </footer>

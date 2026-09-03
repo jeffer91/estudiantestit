@@ -16,6 +16,7 @@
     periodos:30*60*1000,
     carreras:30*60*1000,
     coordinadores:10*60*1000,
+    investigadores:2*60*1000,
     titulos:2*60*1000,
     global:3*60*1000,
     estadisticas:3*60*1000,
@@ -133,6 +134,8 @@
   function titulosLectura(a,d,m,ttl){return solicitarConCache('/api/titulos',a,d||{},ttl,function(){return solicitar('/api/titulos',a,d,m);});}
   function requisitosLectura(a,d,ttl){return solicitarConCache('/api/requisitos',a,d||{},ttl,function(){return solicitar('/api/requisitos',a,d,'POST');});}
   function adminGlobalLectura(a,d,ttl){return solicitarConCache('/api/estadisticas',a,d||{},ttl,function(){return solicitar('/api/estadisticas',a,d||{},'POST');});}
+  function investigacionLectura(a,d,ttl){return solicitarConCache('/api/investigadores',a,d||{},ttl,function(){return solicitar('/api/investigadores',a,d||{},'POST');});}
+  function historialLectura(d){return solicitarConCache('/api/historial-titulos','CONSULTAR_HISTORIAL',d||{},TTL.titulo,function(){return solicitar('/api/historial-titulos','CONSULTAR_HISTORIAL',d||{},'POST');});}
   function clavesGet(action){return solicitarConCache('/api/claves',action,{},TTL.servicios,function(){return clavesGetRed(action);});}
   function iaGet(action,providerId){return solicitarConCache('/api/ia',action,{providerId:providerId||''},TTL.ia,function(){return iaGetRed(action,providerId);});}
   function lista(r,claves){if(Array.isArray(r))return r;r=r||{};for(var i=0;i<claves.length;i++)if(Array.isArray(r[claves[i]]))return r[claves[i]];if(r.data&&typeof r.data==='object')return lista(r.data,claves);if(r.resultado&&typeof r.resultado==='object')return lista(r.resultado,claves);return[];}
@@ -158,6 +161,12 @@
     asignarCarreraCoordinador:function(datos){return escritura(solicitar('/api/estadisticas','ADMIN_ASIGNAR_CARRERA_COORDINADOR',datos||{},'POST'));},
     consultarEstudiante:function(cedula,periodoId){return solicitar('/api/titulos','CONSULTAR_ESTUDIANTE',{cedula:cedula,numeroIdentificacion:cedula,periodoId:periodoId||''},'GET');},
     listarCoordinadores:function(){return titulosLectura('LISTAR_COORDINADORES',{incluirInactivos:true},'GET',TTL.coordinadores);},
+    listarInvestigadores:function(){return investigacionLectura('ADMIN_LISTAR_INVESTIGADORES',{},TTL.investigadores);},
+    resumenInvestigacion:function(){return investigacionLectura('ADMIN_RESUMEN_INVESTIGACION',{},TTL.investigadores);},
+    guardarInvestigador:function(datos){return escritura(solicitar('/api/investigadores','ADMIN_GUARDAR_INVESTIGADOR',datos||{},'POST'));},
+    resetPinInvestigador:function(cedula){return escritura(solicitar('/api/investigadores','ADMIN_RESETEAR_PIN_INVESTIGADOR',{cedula:cedula},'POST'));},
+    liberarRevisionInvestigacion:function(envioId){return escritura(solicitar('/api/investigadores','ADMIN_LIBERAR_REVISION_INVESTIGACION',{envioId:envioId},'POST'));},
+    consultarHistorialTitulo:function(datos){return historialLectura(datos||{});},
     guardarCoordinador:function(datos){return escritura(solicitar('/api/titulos','GUARDAR_COORDINADOR',datos||{},'POST'));},
     cambiarEstadoCoordinador:function(datos){return escritura(solicitar('/api/titulos','CAMBIAR_ESTADO_COORDINADOR',datos||{},'POST'));},
     asignarCarreras:function(datos){return escritura(solicitar('/api/titulos','ASIGNAR_CARRERA',datos||{},'POST'));},
