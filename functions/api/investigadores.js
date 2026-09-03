@@ -42,6 +42,7 @@ const LOCK_MS = 2 * 60 * 1000;
 const SESSION_MS = 8 * 60 * 60 * 1000;
 const LOGIN_MAX_ATTEMPTS = 5;
 const LOGIN_LOCK_MS = 15 * 60 * 1000;
+const PBKDF2_ITERATIONS = 100000;
 const enc = new TextEncoder();
 
 function cedula(value) {
@@ -71,7 +72,7 @@ async function sha256(value) {
   return hex(await crypto.subtle.digest('SHA-256', enc.encode(String(value))));
 }
 
-async function pinHash(pin, salt) {
+async function pinHash(pin, salt, iterations = PBKDF2_ITERATIONS) {
   const material = await crypto.subtle.importKey(
     'raw',
     enc.encode(String(pin)),
@@ -82,7 +83,7 @@ async function pinHash(pin, salt) {
   return hex(await crypto.subtle.deriveBits({
     name: 'PBKDF2',
     salt: enc.encode(String(salt)),
-    iterations: 120000,
+    iterations,
     hash: 'SHA-256'
   }, material, 256));
 }
@@ -206,6 +207,7 @@ async function registrarPin(payload, env) {
   const actualizado = await setDocument('TITULOS', 'investigadores', c, {
     pinSalt: salt,
     pinHash: hash,
+    pinIterations: PBKDF2_ITERATIONS,
     pinCreadoEn: nowIso(),
     intentosFallidos: 0,
     bloqueoLoginHasta: '',
@@ -228,7 +230,8 @@ async function login(payload, env) {
   if (Number.isFinite(bloqueoHasta) && bloqueoHasta > Date.now()) {
     throw new Error('Acceso temporalmente bloqueado por varios intentos fallidos. Intenta más tarde o solicita al administrador restablecer el PIN.');
   }
-  const hash = await pinHash(pin, investigador.pinSalt);
+  const iterations = Number(investigador.pinIterations || PBKDF2_ITERATIONS);
+  const hash = await pinHash(pin, investigador.pinSalt, iterations);
   if (hash !== investigador.pinHash) {
     const intentos = Number(investigador.intentosFallidos || 0) + 1;
     const bloquear = intentos >= LOGIN_MAX_ATTEMPTS;
@@ -608,6 +611,7 @@ async function adminResetPin(payload, env) {
   await setDocument('TITULOS', 'investigadores', c, {
     pinHash: '',
     pinSalt: '',
+    pinIterations: PBKDF2_ITERATIONS,
     intentosFallidos: 0,
     bloqueoLoginHasta: '',
     pinReiniciadoEn: nowIso(),
