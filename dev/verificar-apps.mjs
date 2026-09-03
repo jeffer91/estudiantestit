@@ -98,7 +98,7 @@ const investigatorApi = read('functions/api/investigadores.js');
 const investigatorApp = read('investigadores-mvp/js/investigadores.app.js');
 const adminBuild = read('dev/preparar-pages-administrador.mjs');
 
-assert(/v3\.0\.0/.test(coordinatorHtml) && /VERSION=['"]3\.0\.0['"]/.test(coordinatorBootstrap) && /VERSION=['"]3\.0\.0['"]/.test(coordinatorSource), 'Coordinadores no usa de forma uniforme la versión 3.0.0.');
+assert(/\?v=3\.0\.0/.test(coordinatorHtml) && /VERSION=['"]3\.0\.0['"]/.test(coordinatorBootstrap) && /VERSION=['"]3\.0\.0['"]/.test(coordinatorSource), 'Coordinadores no usa de forma uniforme la versión 3.0.0.');
 assert(!/id=["']periodoSelect["']/.test(coordinatorHtml), 'Coordinadores todavía muestra selector de período.');
 assert(/<th>Período<\/th>/.test(coordinatorHtml), 'La tabla no informa el período de cada envío.');
 assert(!/data-vista=["']faltantes["']/.test(coordinatorHtml), 'Coordinadores todavía muestra estudiantes sin envío.');
