@@ -443,6 +443,9 @@ async function resolver(payload, actual, env) {
     despues = text(payload.tituloFinal).replace(/\s+/g, ' ').trim();
     if (despues.length < 8) throw new Error('Escribe un título final completo.');
     resultado = resultadoPorCambio(antes, despues);
+    if (resultado === 'APROBADO_SIN_CAMBIOS') {
+      throw new Error('El título no tiene cambios. Usa “Aprobar sin cambios”.');
+    }
   } else if (accion === 'DEVOLVER') {
     estado = 'DEVUELTO';
     despues = '';
