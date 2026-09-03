@@ -188,7 +188,7 @@
   }
 
   function baseBucket(){
-    return{esperados:0,enviados:0,faltan:0,pendientes:0,aprobados:0,reemplazados:0,devueltos:0,revisados:0,avance:0,revision:0,pendienteMasAntiguoDias:null,devueltoMasAntiguoDias:null};
+    return{esperados:0,enviados:0,faltan:0,pendientes:0,pendientesInvestigacion:0,aprobados:0,reemplazados:0,devueltos:0,revisados:0,avance:0,revision:0,pendienteMasAntiguoDias:null,investigacionMasAntiguaDias:null,devueltoMasAntiguoDias:null};
   }
 
   function add(bucket,item,typeFiltered){
@@ -198,8 +198,12 @@
       if(st==='NO_ENVIADO'){bucket.faltan+=1;return;}
     }else if(st==='NO_ENVIADO')return;
     bucket.enviados+=1;
-    if(st==='APROBADO')bucket.aprobados+=1;
+    if(st==='APROBADO_FINAL'||st==='APROBADO')bucket.aprobados+=1;
     else if(st==='REEMPLAZADO')bucket.reemplazados+=1;
+    else if(st==='PENDIENTE_INVESTIGADOR'){
+      bucket.pendientesInvestigacion+=1;
+      if(item.diasPendiente!==null)bucket.investigacionMasAntiguaDias=bucket.investigacionMasAntiguaDias===null?item.diasPendiente:Math.max(bucket.investigacionMasAntiguaDias,item.diasPendiente);
+    }
     else if(st==='DEVUELTO'){
       bucket.devueltos+=1;
       if(item.diasDevuelto!==null)bucket.devueltoMasAntiguoDias=bucket.devueltoMasAntiguoDias===null?item.diasDevuelto:Math.max(bucket.devueltoMasAntiguoDias,item.diasDevuelto);
@@ -221,7 +225,7 @@
     var type=tipoNormal(filters.tipoTrabajo),typeFiltered=Boolean(type),rows=[],keys={},included=[];
     cargas.forEach(function(load){
       var summary=load.result&&load.result.resumen||{};
-      var include=load.period.activo===true||Number(summary.pendientes||0)>0||Number(summary.devueltos||0)>0;
+      var include=load.period.activo===true||Number(summary.pendientes||0)>0||Number(summary.pendientesInvestigacion||0)>0||Number(summary.devueltos||0)>0;
       if(filters.periodoId!==ALL)include=true;
       if(!include)return;
       included.push(load.period);
@@ -241,7 +245,7 @@
           coordinadorResponsable:asg.coordinador,
           coordinadorResponsableEncontrado:asg.coordinadorEncontrado,
           coordinadorResponsableActivo:asg.coordinadorActivo,
-          diasPendiente:st==='PENDIENTE_REVISION'?diasDesde(item.fechaEnvio):null,
+          diasPendiente:st==='PENDIENTE_REVISION'?diasDesde(item.fechaEnvio):st==='PENDIENTE_INVESTIGADOR'?diasDesde(item.fechaValidacionCoordinador||item.fechaResolucion||item.fechaEnvio):null,
           diasDevuelto:st==='DEVUELTO'?diasDesde(item.fechaResolucion||item.fechaEnvio):null
         }));
       });
@@ -323,6 +327,7 @@
       coordinadores:coords,
       periodos:periods,
       pendientesRevision:pending,
+      pendientesInvestigacion:rows.filter(function(x){return x.estado==='PENDIENTE_INVESTIGADOR';}),
       devueltosActuales:returned,
       faltantes:typeFiltered?[]:rows.filter(function(x){return x.estado==='NO_ENVIADO';}),
       alertas:{
