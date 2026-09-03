@@ -20,6 +20,7 @@ const historyLib = read('functions/_lib/titulos-historial.js');
 const investigator = read('functions/api/investigadores.js');
 const coordinatorHtml = read('coordinadores-mvp/coordinador.html');
 const coordinatorState = read('coordinadores-mvp/js/coordinador.state.js');
+const coordinatorModal = read('coordinadores-mvp/js/coordinador.modal.js');
 const student = read('estudiantes-mvp/js/estudiante.consulta.revision.js');
 const workStudent = read('trabajo-titulacion-mvp/js/trabajo-titulacion.js');
 const publicHistory = read('estudiantes-mvp/js/titulos.historial.publico.js');
@@ -28,6 +29,7 @@ const localBuilder = read('dev/preparar-pages-local.mjs');
 const investigatorJs = read('investigadores-mvp/js/investigadores.app.js');
 const adminHtml = read('administrador/ad-index.html');
 const adminJs = read('administrador/ad-js/ad-google-sheets.app.js');
+const adminGlobalUi = read('administrador/ad-js/ad-administracion-global.js');
 const adminStats = read('administrador/ad-js/ad-estadisticas-dashboard.patch.js');
 const adminTitles = read('administrador/ad-js/ad-titulos-admin.patch.js');
 const adminWorkApi = read('functions/api/admin-trabajo-titulacion.js');
@@ -37,6 +39,8 @@ expect(/PENDIENTE_INVESTIGADOR/.test(titles) && /registerCoordinatorValidation/.
   'Artículo Académico no envía la validación de Coordinación a Investigación.');
 expect(/registerStudentSubmission/.test(titles) && /PENDIENTE_COORDINADOR/.test(titles),
   'Artículo Académico no reinicia el flujo en Coordinación al reenviar.');
+expect(/registerReturnToStudent/.test(titles) && /requiereAccionDe:\s*'ESTUDIANTE'/.test(titles),
+  'Artículo Académico no consolida la devolución al estudiante en el estado global.');
 expect(/PENDIENTE_INVESTIGADOR/.test(work) && /APROBADO_FINAL/.test(work),
   'Trabajo de Titulación no preserva los estados del nuevo flujo.');
 expect(/workflow_eventos/.test(historyLib) && /lineaTiempo/.test(historyLib),
@@ -50,6 +54,8 @@ expect(/data-vista="validados"/.test(coordinatorHtml) &&
   'Coordinadores no expone Por revisar / Devueltos / Validados / Aprobados.');
 expect(/PENDIENTE_INVESTIGADOR/.test(coordinatorState) && /APROBADO_FINAL/.test(coordinatorState),
   'Coordinadores no distingue validado de aprobado final.');
+expect(/Validar y enviar a Investigación/.test(coordinatorModal),
+  'El modal de Coordinación puede volver a mostrar el texto antiguo después de un error.');
 
 expect(/PENDIENTE_INVESTIGADOR/.test(student) && /APROBADO_FINAL/.test(student),
   'Estudiante no reconoce Investigación o la aprobación final.');
@@ -65,8 +71,14 @@ expect(!/Coordinador no registrado/.test(publicHistory),
 expect(/REGISTRAR_PIN/.test(investigator) && /LOGIN_MAX_ATTEMPTS/.test(investigator) &&
   /investigacion_bloqueos/.test(investigator),
   'Investigación no tiene PIN seguro o bloqueo concurrente.');
+expect(/queryEqual\([\s\S]*'envios'[\s\S]*'estadoProceso'[\s\S]*'PENDIENTE_INVESTIGADOR'/.test(investigator),
+  'Investigación vuelve a recorrer toda la colección de envíos en vez de consultar solo sus pendientes.');
+expect(/El título no tiene cambios/.test(investigator),
+  'Investigación permite usar “Corregir y aprobar” sin una corrección real.');
 expect(/Usar esta propuesta/.test(investigatorJs) && /Tomado por otro usuario/.test(investigatorJs),
   'La interfaz de Investigación no permite reutilizar propuestas o mostrar bloqueo.');
+expect(/window\.confirm\(confirmacion\)/.test(investigatorJs) && /tituloModificado/.test(investigatorJs),
+  'La aprobación final de Investigación no exige confirmación o no distingue una corrección real.');
 expect(/Historial del proceso/.test(investigatorHtml),
   'Investigación no muestra el historial previo.');
 expect(/investigadores-mvp/.test(localBuilder) && /Investigación/.test(localBuilder),
@@ -77,6 +89,9 @@ expect(/ad-seccion-investigadores/.test(adminHtml) &&
   'Administrador no gestiona o filtra por investigadores.');
 expect(/cargarInvestigadores/.test(adminJs) && /consultarHistorialTitulo/.test(adminJs),
   'Administrador no carga investigadores o historial.');
+expect(/ad-v2-title-investigator/.test(adminGlobalUi) && /Historial del proceso/.test(adminGlobalUi) &&
+  /resumenInvestigacion/.test(adminGlobalUi),
+  'La lista global activa del Administrador no integra filtro, historial y resolución de Investigación.');
 expect(/PENDIENTE_INVESTIGADOR/.test(adminStats),
   'El dashboard administrativo mezcla los pendientes de Investigación con Coordinación.');
 expect(/APROBADO_FINAL/.test(adminTitles) && /mantenerAprobacionFinal/.test(adminTitles),
