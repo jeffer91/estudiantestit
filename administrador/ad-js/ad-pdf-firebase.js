@@ -2,9 +2,10 @@
 (function(window,document){
   'use strict';
 
-  var VERSION='3.3.2';
+  var VERSION='3.6.0';
   var JS_PDF='https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js';
   var AUTO_TABLE='https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js';
+  var SHEET_JS='https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
 
   function $(id){return document.getElementById(id);}
   function texto(value){return String(value===null||value===undefined?'':value).trim();}
@@ -56,6 +57,13 @@
       var doc=new sample();
       if(typeof doc.autoTable==='function')return;
       return loadScript(AUTO_TABLE,'data-jspdf-autotable');
+    });
+  }
+
+  function ensureExcel(){
+    if(window.XLSX&&window.XLSX.utils)return Promise.resolve();
+    return loadScript(SHEET_JS,'data-sheetjs').then(function(){
+      if(!window.XLSX||!window.XLSX.utils)throw new Error('La librería de Excel no está disponible.');
     });
   }
 
@@ -133,20 +141,35 @@
       {key:'carrerasNombres',label:'Carreras'}
     ],collections.coordinadores||[]);
 
+    addSection(doc,'Investigadores',[
+      {key:'cedula',label:'Cédula'},
+      {key:'nombre',label:'Investigador'},
+      {key:'activo',label:'Activo'},
+      {key:'pinHash',label:'PIN protegido'},
+      {key:'ultimoIngresoEn',label:'Último ingreso'}
+    ],collections.investigadores||[]);
+
     addSection(doc,'Envíos de títulos',[
       {key:'cedula',label:'Cédula'},
       {key:'nombres',label:'Estudiante'},
       {key:'carreraNombre',label:'Carrera'},
       {key:'periodoNombre',label:'Período'},
+      {key:'estadoProceso',label:'Etapa actual'},
       {key:'estado',label:'Estado'},
       {key:'titulo1',label:'Título 1'},
       {key:'titulo2',label:'Título 2'},
       {key:'titulo3',label:'Título 3'},
       {key:'tituloPreferidoNumero',label:'Favorito'},
-      {key:'tituloFinal',label:'Título final'},
+      {key:'tituloCoordinadorAntes',label:'Antes Coordinación'},
+      {key:'tituloCoordinador',label:'Validado Coordinación'},
+      {key:'resultadoCoordinador',label:'Resultado Coordinación'},
+      {key:'tituloFinalInvestigacion',label:'Título Investigación'},
+      {key:'resultadoInvestigacion',label:'Resultado Investigación'},
+      {key:'tituloFinal',label:'Título definitivo'},
       {key:'coordinador',label:'Coordinador'},
-      {key:'fechaEnvio',label:'Fecha envío'},
-      {key:'fechaResolucion',label:'Fecha resolución'}
+      {key:'fechaValidacionCoordinador',label:'Fecha Coordinación'},
+      {key:'fechaResolucionInvestigacion',label:'Fecha Investigación'},
+      {key:'fechaEnvio',label:'Fecha envío'}
     ],collections.envios||[]);
 
     addSection(doc,'Versiones de los envíos',[
@@ -170,6 +193,26 @@
       {key:'observacion',label:'Observación'},
       {key:'fechaResolucion',label:'Fecha'}
     ],collections.resoluciones||[]);
+
+    addSection(doc,'Trazabilidad del flujo',[
+      {key:'envioId',label:'Envío'},
+      {key:'rol',label:'Rol'},
+      {key:'revisorNombre',label:'Responsable'},
+      {key:'accion',label:'Acción'},
+      {key:'resultado',label:'Resultado'},
+      {key:'tituloAntes',label:'Antes'},
+      {key:'tituloDespues',label:'Después'},
+      {key:'observacion',label:'Observación'},
+      {key:'fecha',label:'Fecha'}
+    ],collections.workflow_eventos||[]);
+
+    addSection(doc,'Bloqueos de Investigación',[
+      {key:'envioId',label:'Envío'},
+      {key:'cedulaInvestigador',label:'Investigador'},
+      {key:'tomadoEn',label:'Tomado'},
+      {key:'bloqueoHasta',label:'Bloqueo hasta'},
+      {key:'liberadoEn',label:'Liberado'}
+    ],collections.investigacion_bloqueos||[]);
 
     ['ia','servicios','configuracion','migraciones'].forEach(function(name){
       addSection(doc,'Colección: '+name,[
@@ -199,6 +242,61 @@
     win.document.close();
   }
 
+  function excelRows(data){
+    var c=data.colecciones||{};
+    return {
+      Resumen:data.resumen||[],
+      Envios:(c.envios||[]).map(function(r){return{
+        envioId:r.id||r._id||r._docId||'',
+        cedula:r.cedula||r.numeroIdentificacion||'',
+        estudiante:r.nombres||r.estudiante||'',
+        carrera:r.carreraNombre||r.carrera||'',
+        periodo:r.periodoNombre||r.periodoLabel||r.periodoId||'',
+        estadoProceso:r.estadoProceso||r.estado||'',
+        titulo1:r.titulo1||'',
+        titulo2:r.titulo2||'',
+        titulo3:r.titulo3||'',
+        favorito:r.tituloPreferidoNumero||'',
+        tituloAntesCoordinacion:r.tituloCoordinadorAntes||'',
+        tituloCoordinacion:r.tituloCoordinador||'',
+        resultadoCoordinacion:r.resultadoCoordinador||'',
+        comentarioCoordinacion:r.comentarioCoordinador||r.observacion||'',
+        fechaCoordinacion:r.fechaValidacionCoordinador||r.fechaResolucion||'',
+        resultadoInvestigacion:r.resultadoInvestigacion||'',
+        observacionInvestigacion:r.observacionInvestigacion||'',
+        fechaInvestigacion:r.fechaResolucionInvestigacion||'',
+        tituloDefinitivo:r.tituloFinalInvestigacion||r.tituloFinal||''
+      };}),
+      Investigadores:c.investigadores||[],
+      Trazabilidad:c.workflow_eventos||[],
+      Bloqueos:c.investigacion_bloqueos||[]
+    };
+  }
+
+  function generateExcel(data){
+    var XLSX=window.XLSX,book=XLSX.utils.book_new(),sheets=excelRows(data);
+    Object.keys(sheets).forEach(function(name){
+      var rows=sheets[name]||[];
+      var sheet=XLSX.utils.json_to_sheet(rows.length?rows:[{SinDatos:'Sin registros'}]);
+      XLSX.utils.book_append_sheet(book,sheet,name.slice(0,31));
+    });
+    XLSX.writeFile(book,'Firebase_Titulos_Investigacion_'+new Date().toISOString().slice(0,10)+'.xlsx',{compression:true});
+  }
+
+  function exportExcel(){
+    if(!window.ADAPIService||typeof window.ADAPIService.exportarFirebaseTitulos!=='function'){
+      setStatus('El servicio de exportación todavía no está disponible.','danger');return;
+    }
+    busy(true,'Leyendo Firebase Títulos y preparando el Excel...');
+    window.ADAPIService.exportarFirebaseTitulos().then(function(data){
+      return ensureExcel().then(function(){generateExcel(data);});
+    }).then(function(){
+      setStatus('Excel administrativo generado con Coordinación, Investigación y trazabilidad.','success');
+    }).catch(function(error){
+      setStatus(error&&error.message?error.message:'No se pudo generar el Excel.','danger');
+    }).finally(function(){busy(false);});
+  }
+
   function exportPdf(){
     if(!window.ADAPIService||typeof window.ADAPIService.exportarFirebaseTitulos!=='function'){
       setStatus('El servicio de exportación PDF todavía no está disponible.','danger');
@@ -225,6 +323,11 @@
     button.type='button';
     button.setAttribute('data-action','generar-pdf-firebase');
     button.textContent='Generar PDF Firebase Títulos';
+    var excel=document.createElement('button');
+    excel.className='ad-btn ad-btn-secondary';
+    excel.type='button';
+    excel.setAttribute('data-action','generar-excel-firebase');
+    excel.textContent='Generar Excel administrativo';
     var current=head.querySelector('button');
     if(current){
       var wrapper=document.createElement('div');
@@ -233,15 +336,19 @@
       current.parentNode.insertBefore(wrapper,current);
       wrapper.appendChild(current);
       wrapper.appendChild(button);
-    }else head.appendChild(button);
+      wrapper.appendChild(excel);
+    }else{head.appendChild(button);head.appendChild(excel);}
     return true;
   }
 
   function init(){
     updateVersion();
     document.addEventListener('click',function(event){
-      var button=event.target&&event.target.closest?event.target.closest('[data-action="generar-pdf-firebase"]'):null;
-      if(button)exportPdf();
+      var button=event.target&&event.target.closest?event.target.closest('[data-action]'):null;
+      if(!button)return;
+      var action=button.getAttribute('data-action');
+      if(action==='generar-pdf-firebase')exportPdf();
+      else if(action==='generar-excel-firebase')exportExcel();
     });
     var attempts=0;
     var timer=setInterval(function(){

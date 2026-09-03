@@ -8,9 +8,12 @@ const COLLECTIONS = Object.freeze([
   ['periodos', 500],
   ['carreras', 500],
   ['coordinadores', 500],
+  ['investigadores', 500],
   ['envios', 900],
   ['versiones_envio', 900],
   ['resoluciones', 900],
+  ['workflow_eventos', 900],
+  ['investigacion_bloqueos', 500],
   ['ia', 300],
   ['servicios', 300],
   ['configuracion', 300],
@@ -23,7 +26,7 @@ function normalizedKey(value) {
 }
 
 function sensitive(key) {
-  return /(credencial|secreto|password|token|apikey|privatekey|clientsecret|authorization)/i
+  return /(credencial|secreto|password|token|apikey|privatekey|clientsecret|authorization|pinhash|pinsalt)/i
     .test(normalizedKey(key));
 }
 
