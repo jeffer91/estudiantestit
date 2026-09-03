@@ -9,6 +9,7 @@ import {
   normalizeCedula,
   periodSignature,
   queryField,
+  samePeriod,
   text
 } from './firestore-fixed.js';
 
@@ -173,6 +174,17 @@ function chooseEnrollment(rows) {
   return candidates[0] || null;
 }
 
+function chooseEnrollmentForPeriod(rows, requestedPeriod = '') {
+  const requested = text(requestedPeriod);
+  if (!requested) return chooseEnrollment(rows);
+
+  const exact = dedupe(rows).filter((row) => {
+    const info = periodInfo(row);
+    return samePeriod(info.id || info.label || info.rawId, requested);
+  });
+  return exact.length ? chooseEnrollment(exact) : null;
+}
+
 async function directStudentDocument(cedula, env) {
   const canonical = normalizeCedula(cedula);
   if (!canonical) return null;
@@ -192,7 +204,7 @@ async function directStudentDocument(cedula, env) {
   return null;
 }
 
-async function enrollmentForStudent(cedula, env) {
+async function enrollmentForStudent(cedula, env, requestedPeriod = '') {
   const canonical = normalizeCedula(cedula);
   if (!canonical) return null;
   const variants = canonical.startsWith('0') ? [canonical, canonical.slice(1)] : [canonical];
@@ -207,14 +219,18 @@ async function enrollmentForStudent(cedula, env) {
       const found = await queryField('UTET', 'matriculas', field, value, 50, env);
       rows.push(...found);
     }
-    if (rows.length) return chooseEnrollment(rows);
+    if (rows.length) {
+      const candidate = chooseEnrollmentForPeriod(rows, requestedPeriod);
+      if (candidate) return candidate;
+      if (!requestedPeriod) return chooseEnrollment(rows);
+    }
   }
 
   /* Respaldo para matrículas que guardan referencias o IDs compuestos.
      Solo se usa cuando las consultas puntuales no encontraron coincidencias. */
   const scanned = await listCollection('UTET', 'matriculas', { maxDocuments: 10000 }, env);
   const matches = scanned.filter((row) => studentIdFromEnrollment(row) === canonical);
-  return chooseEnrollment(matches);
+  return chooseEnrollmentForPeriod(matches, requestedPeriod);
 }
 
 async function periodDocumentById(id, env) {
@@ -232,12 +248,15 @@ async function periodDocumentById(id, env) {
   }) || null;
 }
 
-async function resolvePeriod(document, cedula, env) {
+async function resolvePeriod(document, cedula, env, requestedPeriod = '') {
+  const requested = text(requestedPeriod);
   const direct = periodInfo(mergedDocument(document));
-  if (direct.id) return { ...direct, source: 'ESTUDIANTE' };
+  if (direct.id && (!requested || samePeriod(direct.id, requested))) {
+    return { ...direct, source: 'ESTUDIANTE' };
+  }
 
-  const enrollment = await enrollmentForStudent(cedula, env);
-  if (!enrollment) return { id: '', label: '', rawId: '', source: '' };
+  const enrollment = await enrollmentForStudent(cedula, env, requested);
+  if (!enrollment) return { id: '', label: '', rawId: '', source: '', requestedPeriod: requested };
 
   let info = periodInfo(enrollment);
   if (info.rawId) {
@@ -347,7 +366,26 @@ export async function getStudentBasicFast(cedula, options = {}, env) {
     };
   }
 
-  const period = await resolvePeriod(document, canonical, env);
+  const requestedPeriod = text(options.periodoId || options.periodo || options.periodoLabel);
+  const period = await resolvePeriod(document, canonical, env, requestedPeriod);
+  if (requestedPeriod && !period.id) {
+    return {
+      ok: true,
+      encontrado: false,
+      existe: true,
+      habilitado: false,
+      datosCompletos: false,
+      cedula: canonical,
+      numeroIdentificacion: canonical,
+      periodoId: periodSignature(requestedPeriod) || requestedPeriod,
+      periodoLabel: requestedPeriod,
+      fuente: 'FIREBASE_UTET',
+      fuentePeriodo: '',
+      lecturaDirecta: true,
+      mensaje: 'El estudiante existe, pero no registra matrícula en el período solicitado.'
+    };
+  }
+
   const normalized = minimumStudent(document, canonical, period, options.includePhone === true);
   return {
     ok: true,
@@ -375,5 +413,6 @@ export const __test = Object.freeze({
   minimumStudent,
   periodInfo,
   chooseEnrollment,
+  chooseEnrollmentForPeriod,
   studentIdFromEnrollment
 });
