@@ -48,7 +48,7 @@
         buckets.set(key,{
           codigoCarrera:student.codigoCarrera||'',
           carrera:student.carrera||'SIN CARRERA',
-          esperados:0,enviados:0,faltan:0,pendientes:0,
+          esperados:0,enviados:0,faltan:0,pendientes:0,pendientesInvestigacion:0,
           aprobados:0,reemplazados:0,devueltos:0,avance:0
         });
       }
@@ -58,9 +58,10 @@
       if(state==='NO_ENVIADO')item.faltan+=1;
       else{
         item.enviados+=1;
-        if(state==='APROBADO')item.aprobados+=1;
+        if(state==='APROBADO_FINAL'||state==='APROBADO')item.aprobados+=1;
         else if(state==='REEMPLAZADO')item.reemplazados+=1;
         else if(state==='DEVUELTO')item.devueltos+=1;
+        else if(state==='PENDIENTE_INVESTIGADOR')item.pendientesInvestigacion+=1;
         else item.pendientes+=1;
       }
     });
@@ -71,11 +72,11 @@
     }).sort(function(a,b){return a.carrera.localeCompare(b.carrera,'es');});
 
     var resumen={
-      esperados:0,enviados:0,faltan:0,pendientes:0,
+      esperados:0,enviados:0,faltan:0,pendientes:0,pendientesInvestigacion:0,
       aprobados:0,reemplazados:0,devueltos:0,avance:0
     };
     carreras.forEach(function(item){
-      ['esperados','enviados','faltan','pendientes','aprobados','reemplazados','devueltos'].forEach(function(field){
+      ['esperados','enviados','faltan','pendientes','pendientesInvestigacion','aprobados','reemplazados','devueltos'].forEach(function(field){
         resumen[field]+=Number(item[field]||0);
       });
     });
