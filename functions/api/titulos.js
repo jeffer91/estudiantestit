@@ -318,6 +318,74 @@ async function registerStudentSubmission(payload, result, env) {
   };
 }
 
+async function registerAdminFinalCorrection(payload, result, env) {
+  const original = text(payload.estadoOriginal).toUpperCase();
+  if (payload.mantenerAprobacionFinal !== true && original !== 'APROBADO_FINAL') return result;
+
+  const envioId = text(payload.envioId || payload.idRegistro || result && (result.envioId || result.idRegistro));
+  if (!envioId) return result;
+  const envio = await getDocument('TITULOS', 'envios', envioId, env);
+  if (!envio) return result;
+
+  const antes = normalizeTitle(
+    payload.tituloElegido || payload.tituloAnterior || envio.tituloFinal || envio.tituloFinalInvestigacion || envio.tituloCoordinador
+  );
+  const despues = normalizeTitle(payload.tituloCorregido || payload.tituloFinal);
+  if (!despues) return result;
+
+  const fecha = text(payload.fechaResolucion) || nowIso();
+  const observacion = text(payload.observacion || payload.comentario || payload.comentarioCoordinador);
+  const eventoId = workflowEventId(envioId + '__admin_final');
+
+  await commitDocuments('TITULOS', [
+    {
+      collection: 'envios',
+      id: envioId,
+      data: {
+        estado: 'APROBADO_FINAL',
+        estadoProceso: 'APROBADO_FINAL',
+        tituloFinal: despues,
+        tituloFinalInvestigacion: despues,
+        resultadoAdministrativo: 'CORRECCION_FINAL',
+        fechaCorreccionAdministrativa: fecha,
+        requiereAccionDe: '',
+        permitirReenvio: false,
+        actualizadoEn: fecha
+      },
+      merge: true,
+      ...(envio._updateTime ? { updateTime: envio._updateTime } : {})
+    },
+    {
+      collection: 'workflow_eventos',
+      id: eventoId,
+      data: {
+        envioId,
+        rol: 'ADMINISTRADOR',
+        revisorId: 'ADMIN',
+        revisorNombre: 'Administrador de Titulación',
+        accion: 'CORREGIR_APROBACION_FINAL',
+        resultado: 'APROBADO_FINAL',
+        estadoAnterior: original || text(envio.estadoProceso || envio.estado),
+        estadoNuevo: 'APROBADO_FINAL',
+        tituloAntes: antes,
+        tituloDespues: despues,
+        observacion,
+        fecha
+      },
+      merge: false,
+      exists: false
+    }
+  ], env);
+
+  return {
+    ...(result || {}),
+    estado: 'APROBADO_FINAL',
+    estadoProceso: 'APROBADO_FINAL',
+    tituloFinal: despues,
+    mensaje: 'Título final corregido por el administrador conservando la aprobación definitiva.'
+  };
+}
+
 function yes(value) {
   return value === true || ['SI', 'SÍ', 'TRUE', '1', 'YES'].includes(text(value).toUpperCase());
 }
@@ -905,6 +973,9 @@ export async function onRequest({ request, env }) {
     }
     if (userRole === 'coordinator' && COORDINATOR_FINAL_ACTIONS.has(action)) {
       result = await registerCoordinatorValidation(payload, result, env);
+    }
+    if (userRole === 'admin' && action === 'GUARDAR_RESOLUCION') {
+      result = await registerAdminFinalCorrection(payload, result, env);
     }
     if (WRITE_ACTIONS.has(action)) clearCaches();
     return jsonReply(request, result);
