@@ -200,9 +200,9 @@
   }
 
   function cargarComplemento(ruta,atributo){if(!window.document||window.document.querySelector('script['+atributo+'="true"]'))return;var script=window.document.createElement('script');script.src=ruta;script.async=false;script.setAttribute(atributo,'true');window.document.head.appendChild(script);}
-  cargarComplemento('./ad-js/ad-servicios.app.js?v=3.3.3','data-ad-servicios');
-  cargarComplemento('./ad-js/ad-correo-outlook.js?v=3.3.3','data-ad-correo-outlook');
-  cargarComplemento('./ad-js/ad-administracion-global.js?v=3.3.3','data-ad-administracion-global');
-  cargarComplemento('./ad-js/ad-pdf-firebase.js?v=3.3.3','data-ad-pdf-firebase');
-  cargarComplemento('./ad-js/ad-version.js?v=3.3.3','data-ad-version');
+  cargarComplemento('./ad-js/ad-servicios.app.js?v=3.6.0','data-ad-servicios');
+  cargarComplemento('./ad-js/ad-correo-outlook.js?v=3.6.0','data-ad-correo-outlook');
+  cargarComplemento('./ad-js/ad-administracion-global.js?v=3.6.0','data-ad-administracion-global');
+  cargarComplemento('./ad-js/ad-pdf-firebase.js?v=3.6.0','data-ad-pdf-firebase');
+  cargarComplemento('./ad-js/ad-version.js?v=3.6.0','data-ad-version');
 })(window);
