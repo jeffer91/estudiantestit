@@ -61,7 +61,7 @@
     return true;
   }
 
-  function esPendiente(envio){return['PENDIENTE_REVISION','PENDIENTE_SYNC','ENVIADO','PENDIENTE'].indexOf(estadoNormal(envio&&envio.estado))>=0;}
+  function esPendiente(envio){return['PENDIENTE_REVISION','PENDIENTE_COORDINADOR','PENDIENTE_SYNC','ENVIADO','PENDIENTE'].indexOf(estadoNormal(envio&&(envio.estadoProceso||envio.estado)))>=0;}
   function tieneTitulosCompletos(envio){
     if(firebaseService()&&typeof firebaseService().tieneTitulosEnviados==='function')return firebaseService().tieneTitulosEnviados(envio);
     return Boolean(envio&&texto(envio.titulo1)&&texto(envio.titulo2)&&texto(envio.titulo3));
@@ -156,7 +156,7 @@
     setTexto('modalSubtitulo',(envio.cedula||'-')+' · '+(envio.carrera||'-'));
     setTexto('detallePeriodo',envio.periodoLabel||envio.periodoId||envio.periodo);
     setTexto('detalleFechaEnvio',envio.fechaEnvio);
-    setTexto('detalleEstado',ui()&&ui().textoEstado?ui().textoEstado(envio.estado):envio.estado);
+    setTexto('detalleEstado',ui()&&ui().textoEstado?ui().textoEstado(envio.estadoProceso||envio.estado):(envio.estadoProceso||envio.estado));
   }
 
   function pintarTitulos(envio){
@@ -223,9 +223,9 @@
     var aprobar=$('btnAprobarEnvio');
     var devolver=$('btnDevolverEnvio');
 
-    if(finalInput){finalInput.readOnly=!pendiente;if(!pendiente)finalInput.value=texto(envio.tituloAprobado||envio.tituloFinal||envio.tituloCorregido);}
+    if(finalInput){finalInput.readOnly=!pendiente;if(!pendiente)finalInput.value=texto(envio.tituloFinal||envio.tituloCoordinador||envio.tituloAprobado||envio.tituloCorregido);}
     if(comentario){comentario.readOnly=!pendiente;if(!pendiente)comentario.value=texto(envio.comentarioCoordinador||envio.comentario||envio.observacion);}
-    if(aprobar){aprobar.hidden=!pendiente;aprobar.disabled=false;aprobar.textContent='Aprobar título';}
+    if(aprobar){aprobar.hidden=!pendiente;aprobar.disabled=false;aprobar.textContent='Validar y enviar a Investigación';}
     if(devolver){devolver.hidden=!pendiente;devolver.disabled=false;devolver.textContent='Devolver';}
 
     document.querySelectorAll('input[name="tituloSeleccionado"]').forEach(function(radio){radio.disabled=!pendiente;});
@@ -375,7 +375,7 @@
     setValor('tituloFinalInput','');
     setValor('comentarioCoordinadorInput','');
     var aprobar=$('btnAprobarEnvio'),devolver=$('btnDevolverEnvio'),finalInput=$('tituloFinalInput'),comentario=$('comentarioCoordinadorInput');
-    if(aprobar){aprobar.hidden=false;aprobar.disabled=false;aprobar.textContent='Aprobar título';}
+    if(aprobar){aprobar.hidden=false;aprobar.disabled=false;aprobar.textContent='Validar y enviar a Investigación';}
     if(devolver){devolver.hidden=false;devolver.disabled=false;devolver.textContent='Devolver';}
     if(finalInput)finalInput.readOnly=false;
     if(comentario)comentario.readOnly=false;

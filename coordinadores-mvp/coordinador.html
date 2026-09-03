@@ -37,14 +37,15 @@
       <div class="content-toolbar">
         <nav class="tabs" aria-label="Estados de revisión">
           <button type="button" class="tab-btn is-active" data-accion="cambiar-vista" data-vista="pendientes">Por revisar</button>
-          <button type="button" class="tab-btn" data-accion="cambiar-vista" data-vista="aprobados">Aprobados</button>
           <button type="button" class="tab-btn" data-accion="cambiar-vista" data-vista="devueltos">Devueltos</button>
+          <button type="button" class="tab-btn" data-accion="cambiar-vista" data-vista="validados">Validados</button>
+          <button type="button" class="tab-btn" data-accion="cambiar-vista" data-vista="aprobados">Aprobados</button>
         </nav>
         <div class="counter-box"><span>Total</span><strong id="contadorRegistros">0</strong></div>
       </div>
       <div class="table-tools">
         <div><p class="section-kicker" id="vistaActualKicker">Por revisar</p><h2 id="tituloTablaEstudiantes">Estudiantes con títulos pendientes de revisión</h2></div>
-        <label class="field field--search"><span>Buscar</span><input type="search" id="buscadorInput" placeholder="Cédula o nombre" autocomplete="off" /></label>
+        <label class="field field--search"><span>Buscar</span><input type="search" id="buscadorInput" placeholder="Nombre, cédula o título" autocomplete="off" /></label>
       </div>
       <div class="table-wrap">
         <table class="data-table">
@@ -87,7 +88,7 @@
           <div id="detalleTrabajoContenido"></div>
         </section>
         <div class="resolution-box">
-          <label class="field"><span>Título final aprobado o corregido</span><textarea id="tituloFinalInput" rows="3" placeholder="Selecciona una propuesta o escribe el título final"></textarea></label>
+          <label class="field"><span>Título validado por Coordinación</span><textarea id="tituloFinalInput" rows="3" placeholder="Selecciona una propuesta o escribe el título final"></textarea></label>
           <label class="field"><span>Comentario del coordinador</span><textarea id="comentarioCoordinadorInput" rows="3" placeholder="Opcional al aprobar y obligatorio para devolver"></textarea></label>
           <div id="estadoModal" class="status-message"></div>
         </div>
@@ -95,7 +96,7 @@
       <footer class="modal__footer">
         <button type="button" class="btn btn--ghost" data-accion="cerrar-modal">Cerrar</button>
         <button type="button" class="btn btn--danger" id="btnDevolverEnvio" data-accion="devolver-envio">Devolver</button>
-        <button type="button" class="btn btn--primary" id="btnAprobarEnvio" data-accion="aprobar-envio">Aprobar título</button>
+        <button type="button" class="btn btn--primary" id="btnAprobarEnvio" data-accion="aprobar-envio">Validar y enviar a Investigación</button>
       </footer>
     </div>
   </section>

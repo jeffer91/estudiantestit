@@ -24,7 +24,7 @@
     state.iniciado=true;
     var guardada=leerLocal('coordinadores_mvp__ultima_vista_titulos');
     var tipo=leerLocal('coordinadores_mvp__tipo_trabajo');
-    state.vistaActual=['pendientes','aprobados','devueltos'].indexOf(guardada)>=0?guardada:'pendientes';
+    state.vistaActual=['pendientes','devueltos','validados','aprobados'].indexOf(guardada)>=0?guardada:'pendientes';
     state.tipoTrabajoActual=['TODOS','ARTICULO_ACADEMICO','TRABAJO_TITULACION'].indexOf(tipo)>=0?tipo:'TODOS';
     recalcularFiltros();emitir('iniciado');return true;
   }
@@ -41,7 +41,7 @@
 
   function setEnvios(lista){state.envios=Array.isArray(lista)?lista.slice():[];state.ultimaCarga=new Date().toISOString();recalcularFiltros();emitir('envios');}
   function obtenerEnvios(){return clonar(state.envios);}
-  function setVistaActual(vista){if(['pendientes','aprobados','devueltos'].indexOf(vista)<0)return false;state.vistaActual=vista;guardarLocal('coordinadores_mvp__ultima_vista_titulos',vista);recalcularFiltros();emitir('vista');return true;}
+  function setVistaActual(vista){if(['pendientes','devueltos','validados','aprobados'].indexOf(vista)<0)return false;state.vistaActual=vista;guardarLocal('coordinadores_mvp__ultima_vista_titulos',vista);recalcularFiltros();emitir('vista');return true;}
   function obtenerVistaActual(){return state.vistaActual;}
   function setBusqueda(valor){state.busqueda=texto(valor);recalcularFiltros();emitir('busqueda');}
   function obtenerBusqueda(){return state.busqueda;}
@@ -52,15 +52,15 @@
   function carreraEquivalente(a,b){var na=normal(a),nb=normal(b);if(!na||!nb)return false;if(na===nb||na.indexOf(nb)>=0||nb.indexOf(na)>=0)return true;var ta=tokensCarrera(a),tb=tokensCarrera(b);if(!ta.length||!tb.length)return false;var comunes=ta.filter(function(token){return tb.indexOf(token)>=0;});var base=Math.min(ta.length,tb.length);return comunes.length>=2&&comunes.length/base>=0.7;}
   function coincideCarrera(envio,coordinador){var carreras=coordinador&&Array.isArray(coordinador.carreras)?coordinador.carreras:[];var valores=[envio&&envio.carrera,envio&&envio.codigoCarrera].filter(Boolean);if(!carreras.length||!valores.length)return false;return carreras.some(function(carrera){return valores.some(function(valor){return carreraEquivalente(valor,carrera);});});}
   function tieneTitulos(envio){return Boolean(envio&&(envio.titulo1||envio.titulo2||envio.titulo3));}
-  function estadosVista(vista){if(vista==='aprobados')return['APROBADO','REEMPLAZADO'];if(vista==='devueltos')return['DEVUELTO'];return['PENDIENTE_REVISION','PENDIENTE_SYNC','ENVIADO','PENDIENTE'];}
+  function estadosVista(vista){if(vista==='aprobados')return['APROBADO_FINAL','APROBADO','REEMPLAZADO'];if(vista==='validados')return['PENDIENTE_INVESTIGADOR'];if(vista==='devueltos')return['DEVUELTO'];return['PENDIENTE_REVISION','PENDIENTE_COORDINADOR','PENDIENTE_SYNC','ENVIADO','PENDIENTE'];}
 
   function recalcularFiltros(){
     var permitidos=estadosVista(state.vistaActual),busqueda=normal(state.busqueda),coordinador=state.coordinadorActual,tipo=state.tipoTrabajoActual;
     var conTitulos=state.envios.filter(tieneTitulos);
     var deCarreras=conTitulos.filter(function(envio){return coincideCarrera(envio,coordinador);});
     var delTipo=deCarreras.filter(function(envio){return tipo==='TODOS'||tipoNormal(envio)===tipo;});
-    var delEstado=delTipo.filter(function(envio){return permitidos.indexOf(estadoNormal(envio.estado))>=0;});
-    state.registrosFiltrados=delEstado.filter(function(envio){var base=normal([envio.cedula,envio.nombres,envio.carrera,envio.codigoCarrera,envio.periodoLabel,envio.periodoId,envio.tipoTrabajo,envio.tipoTrabajoLabel].join(' '));return !busqueda||base.indexOf(busqueda)>=0;});
+    var delEstado=delTipo.filter(function(envio){return permitidos.indexOf(estadoNormal(envio.estadoProceso||envio.estado))>=0;});
+    state.registrosFiltrados=delEstado.filter(function(envio){var base=normal([envio.cedula,envio.nombres,envio.carrera,envio.codigoCarrera,envio.periodoLabel,envio.periodoId,envio.tipoTrabajo,envio.tipoTrabajoLabel,envio.titulo1,envio.titulo2,envio.titulo3,envio.tituloCoordinador,envio.tituloFinal].join(' '));return !busqueda||base.indexOf(busqueda)>=0;});
     state.diagnosticoFiltros={recibidos:state.envios.length,conTitulos:conTitulos.length,deCarreras:deCarreras.length,delTipo:delTipo.length,delEstado:delEstado.length,mostrados:state.registrosFiltrados.length};
     return state.registrosFiltrados;
   }

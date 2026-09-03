@@ -42,7 +42,7 @@ function normalizarEnvio(f,i){
   var c=config().data.columnas.envios;f=f||{};
   var t=[utils().limpiarTitulo(campo(f,c.titulo1,'')||f.titulo1),utils().limpiarTitulo(campo(f,c.titulo2,'')||f.titulo2),utils().limpiarTitulo(campo(f,c.titulo3,'')||f.titulo3)];
   var pr=utils().limpiarTexto(campo(f,c.preferido,'')||f.tituloPreferidoNumero||f.preferido),pn=favorito(pr,t);
-  var e=utils().normalizarEstado(utils().limpiarTexto(campo(f,c.estado,'')||f.estado)||utils().limpiarTexto(campo(f,c.estadoFirebase,'')||f.estadoFinal)||config().obtenerEstado('pendiente'));
+  var e=utils().normalizarEstado(utils().limpiarTexto(f.estadoProceso||campo(f,c.estado,'')||f.estado)||utils().limpiarTexto(campo(f,c.estadoFirebase,'')||f.estadoFinal)||config().obtenerEstado('pendiente'));
   if(e==='ENVIADO'||e==='PENDIENTE_SYNC')e=config().obtenerEstado('pendiente');
   var p=utils().limpiarTexto(campo(f,c.periodo,'')||f.periodoNombre||f.periodoLabel||f.periodoId);
   var id=utils().limpiarTexto(campo(f,c.idRegistro,''))||utils().limpiarTexto(f.envioId||f.id||f.ID||f._id||f._docId||'');
@@ -53,9 +53,9 @@ function normalizarEnvio(f,i){
     carrera:utils().limpiarTexto(campo(f,c.carrera,'')||f.carrera||f.carreraNombre||f.nombreCarrera),codigoCarrera:utils().limpiarTexto(f.codigoCarrera||f.carreraCodigo||f.CodigoCarrera||f.carreraId||''),
     periodo:p||utils().limpiarTexto(f.periodoNombre||f.periodoLabel||f.periodoId),periodoLabel:utils().limpiarTexto(f.periodoLabel||f.periodoNombre||p||f.periodoId),periodoId:utils().limpiarTexto(f.periodoId||p),
     telegram:utils().limpiarTexto(campo(f,c.telegram,'')||f.telegram),celular:utils().limpiarTexto(f.celular||f.telefono||''),correoInstitucional:utils().limpiarTexto(f.correoInstitucional||''),correoPersonal:utils().limpiarTexto(f.correoPersonal||''),
-    estado:e,enviado:true,tieneTitulos:Boolean(t[0]||t[1]||t[2]),puedeRevisar:true,fechaEnvio:utils().limpiarTexto(campo(f,c.fechaEnvio,'')||f.fechaEnvio),
+    estado:e,estadoProceso:utils().normalizarEstado(f.estadoProceso||e),enviado:true,tieneTitulos:Boolean(t[0]||t[1]||t[2]),puedeRevisar:['PENDIENTE_REVISION','PENDIENTE_COORDINADOR','PENDIENTE'].indexOf(e)>=0,fechaEnvio:utils().limpiarTexto(campo(f,c.fechaEnvio,'')||f.fechaEnvio),
     titulo1:t[0],titulo2:t[1],titulo3:t[2],tituloPreferido:pr||String(pn||''),tituloPreferidoNumero:pn,tituloPreferidoTexto:pn?t[pn-1]:pr,preferido:pn||pr,
-    tituloAprobado:utils().limpiarTitulo(campo(f,c.tituloAprobado,'')||f.tituloFinal),comentarioCoordinador:utils().limpiarTextoMultilinea(campo(f,c.comentarioCoordinador,'')||f.observacion),
+    tituloAprobado:utils().limpiarTitulo(campo(f,c.tituloAprobado,'')||f.tituloFinal||f.tituloCoordinador),tituloFinal:utils().limpiarTitulo(f.tituloFinal||''),tituloCoordinador:utils().limpiarTitulo(f.tituloCoordinador||f.tituloValidadoCoordinador||''),resultadoCoordinador:utils().limpiarTexto(f.resultadoCoordinador||''),resultadoInvestigacion:utils().limpiarTexto(f.resultadoInvestigacion||''),comentarioCoordinador:utils().limpiarTextoMultilinea(campo(f,c.comentarioCoordinador,'')||f.comentarioCoordinador||f.observacion),
     coordinador:utils().limpiarTexto(campo(f,c.coordinador,'')||f.coordinador),fechaRevision:utils().limpiarTexto(campo(f,c.fechaRevision,'')||f.fechaResolucion),
     revisionAnterior:revision,comentarioRevisionAnterior:utils().limpiarTextoMultilinea(f.comentarioRevisionAnterior||revision&&revision.observacion||''),
     coordinadorRevisionAnterior:utils().limpiarTexto(f.coordinadorRevisionAnterior||revision&&revision.coordinador||''),fechaRevisionAnterior:utils().limpiarTexto(f.fechaRevisionAnterior||revision&&revision.fechaResolucion||''),
