@@ -167,7 +167,7 @@
       actualizarModal('Verificando los títulos que enviaste…', 2);
     }, 2200));
     temporizadoresModal.push(window.setTimeout(function () {
-      actualizarModal('Revisando la resolución del coordinador…', 3);
+      actualizarModal('Revisando el estado de validación…', 3);
     }, 5200));
     temporizadoresModal.push(window.setTimeout(function () {
       actualizarModal('Consolidando el resultado de tu registro…', 3);
@@ -266,8 +266,8 @@
     return texto(
       resultado && resultado.estadoEfectivo ||
       resultado && resultado.estadoEnvio ||
-      campo(resultado && resultado.resolucion || {}, ['estadoFinal', 'estado']) ||
-      campo(resultado && resultado.envio || {}, ['estadoFinal', 'estado'])
+      campo(resultado && resultado.envio || {}, ['estadoProceso', 'estadoFinal', 'estado']) ||
+      campo(resultado && resultado.resolucion || {}, ['estadoProceso', 'estadoFinal', 'estado'])
     ).toUpperCase();
   }
 
@@ -324,8 +324,8 @@
 
   function tituloAprobado(resolucion, envio) {
     return texto(
-      campo(resolucion || {}, ['tituloCorregido', 'tituloAprobado', 'tituloFinal', 'tituloElegido']) ||
-      campo(envio || {}, ['tituloCorregido', 'tituloAprobado', 'tituloFinal', 'tituloElegido'])
+      campo(envio || {}, ['tituloFinalInvestigacion', 'tituloFinal', 'tituloAprobado', 'tituloCorregido', 'tituloElegido']) ||
+      campo(resolucion || {}, ['tituloFinalInvestigacion', 'tituloFinal', 'tituloCorregido', 'tituloAprobado', 'tituloElegido'])
     );
   }
 
@@ -379,7 +379,6 @@
     var propuestas = propuestasAnteriores(envio);
     var numeroFavorito = favorito(envio);
     var observacion = comentario(resolucion, envio);
-    var revisor = coordinador(resolucion, envio);
     var final = tituloAprobado(resolucion, envio);
     var clase = 'pending';
     var titulo = 'Tus propuestas están en revisión';
@@ -395,9 +394,8 @@
       insignia = 'DEVUELTO';
       icono = '!';
       contenidoExtra =
-        '<div class="student-process-panel__comment"><span>Comentario del coordinador' +
-        (revisor ? ': ' + escapar(revisor) : '') + '</span><p>' +
-        escapar(observacion || 'La coordinación solicitó correcciones.') + '</p></div>' +
+        '<div class="student-process-panel__comment"><span>Observación para corrección</span><p>' +
+        escapar(observacion || 'Se solicitaron correcciones en tus propuestas.') + '</p></div>' +
         listaTitulosHtml(propuestas, numeroFavorito) +
         '<div class="student-process-panel__notice"><strong>Los títulos anteriores fueron cargados.</strong> Puedes modificarlos antes de reenviar.</div>';
       if (continuar) {
@@ -406,16 +404,23 @@
         continuar.textContent = 'Corregir y reenviar';
         continuar.setAttribute('data-reenvio-activo', 'true');
       }
-    } else if (estado === 'APROBADO' || estado === 'REEMPLAZADO') {
+    } else if (estado === 'PENDIENTE_INVESTIGADOR') {
+      clase = 'pending';
+      titulo = 'Validado por Coordinación';
+      mensaje = 'Tu título pasó la revisión de Coordinación y está pendiente de validación por Investigación.';
+      insignia = 'PENDIENTE DE INVESTIGACIÓN';
+      icono = '…';
+      contenidoExtra = '<div class="student-process-panel__approved"><span>Título validado por Coordinación</span><strong>' +
+        escapar(texto(campo(envio || {}, ['tituloCoordinador', 'tituloValidadoCoordinador'])) || 'Validación registrada') + '</strong></div>';
+      if (continuar) continuar.hidden = true;
+    } else if (estado === 'APROBADO_FINAL' || estado === 'APROBADO' || estado === 'REEMPLAZADO') {
       clase = 'approved';
-      titulo = estado === 'REEMPLAZADO' ? 'Tu título corregido fue aprobado' : 'Tu tema de titulación fue aprobado';
+      titulo = 'Tu título fue aprobado';
       mensaje = 'El proceso de revisión ha finalizado. No necesitas realizar un nuevo envío.';
-      insignia = estado;
+      insignia = 'APROBADO';
       icono = '✓';
-      contenidoExtra = '<div class="student-process-panel__approved"><span>Título final aprobado</span><strong>' +
-        escapar(final || 'Comunícate con coordinación para confirmar el título final.') + '</strong></div>' +
-        (observacion ? '<div class="student-process-panel__comment"><span>Comentario del coordinador' +
-          (revisor ? ': ' + escapar(revisor) : '') + '</span><p>' + escapar(observacion) + '</p></div>' : '');
+      contenidoExtra = '<div class="student-process-panel__approved"><span>Título definitivo</span><strong>' +
+        escapar(final || 'Título aprobado') + '</strong></div>';
       if (continuar) continuar.hidden = true;
     } else if (continuar) {
       continuar.hidden = true;
