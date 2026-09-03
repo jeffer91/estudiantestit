@@ -44,7 +44,7 @@ assert(
   'El Administrador no consulta los títulos por el período seleccionado.'
 );
 assert(
-  /return cargarTitulos\(\)/.test(admin) && /Promise\.allSettled\(\[cargarPeriodos\(\),cargarCoordinadores\(\),cargarIA\(\)\]\)/.test(admin),
+  /Promise\.allSettled\(\[[^\]]*cargarPeriodos\(\)[^\]]*\]\)[\s\S]{0,500}return cargarTitulos\(\)/.test(admin),
   'El Administrador no espera el catálogo de períodos antes de cargar títulos.'
 );
 

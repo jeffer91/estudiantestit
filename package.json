@@ -25,6 +25,7 @@
     "check:syntax": "node dev/verificar-sintaxis.mjs",
     "check:apps": "node dev/verificar-apps.mjs",
     "check:compatibility": "node dev/verificar-compatibilidad-historial.mjs && node scripts/check-historical-compatibility.mjs && node scripts/check-returned-student-flow.mjs",
+    "check:workflow": "node dev/verificar-flujo-investigacion.mjs",
     "check:quota": "node dev/verificar-cuota-firebase.mjs && node dev/verificar-batch-firestore.mjs && node dev/verificar-admin-v7.mjs",
     "check:outlook": "node dev/verificar-correo-outlook.mjs",
     "check:architecture": "node dev/verificar-arquitectura.mjs",
@@ -33,7 +34,7 @@
     "check:apps-script": "node dev/verificar-apps-script.mjs",
     "check:admin": "node dev/verificar-admin-correccion-titulo.mjs && node dev/verificar-admin-envios-flexibles.mjs",
     "check:electron": "node dev/verificar-electron-administrador.mjs && node dev/verificar-admin-runtime.mjs",
-    "check": "npm run check:syntax && npm run check:apps && npm run check:compatibility && npm run check:quota && npm run check:outlook && npm run check:architecture && npm run check:firebase-auth && npm run check:access && npm run check:apps-script && npm run check:admin && npm run check:electron"
+    "check": "npm run check:syntax && npm run check:apps && npm run check:compatibility && npm run check:workflow && npm run check:quota && npm run check:outlook && npm run check:architecture && npm run check:firebase-auth && npm run check:access && npm run check:apps-script && npm run check:admin && npm run check:electron"
   },
   "devDependencies": {
     "electron": "43.2.0"
