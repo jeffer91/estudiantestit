@@ -34,7 +34,8 @@ const INVESTIGADORES = Object.freeze([
   { cedula: '1724125255', nombre: 'William Andrés Perez Mayorga' },
   { cedula: '1725075533', nombre: 'Jhair Ramiro Aldas Onofre' },
   { cedula: '1004431241', nombre: 'Pamela Araceli Placencia Noquez' },
-  { cedula: '1723249015', nombre: 'María Fernanda Garcés Quimuña' }
+  { cedula: '1723249015', nombre: 'María Fernanda Garcés Quimuña' },
+  { cedula: '0401135306', nombre: 'Jefferson Villarreal' }
 ]);
 
 const LOCK_MS = 2 * 60 * 1000;
