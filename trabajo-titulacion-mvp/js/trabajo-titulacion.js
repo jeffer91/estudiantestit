@@ -17,7 +17,7 @@
   function busy(value){state.busy=value===true;document.querySelectorAll('button').forEach(function(button){button.disabled=state.busy;});}
   function escapeHtml(value){return text(value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');}
   function estadoNormal(value){return text(value).toUpperCase().replace(/[^A-Z0-9]+/g,'_');}
-  function estadoLabel(value){var current=estadoNormal(value);var labels={PENDIENTE_REVISION:'Pendiente de revisión',PENDIENTE:'Pendiente de revisión',ENVIADO:'Pendiente de revisión',APROBADO:'Aprobado',REEMPLAZADO:'Aprobado con corrección',DEVUELTO:'Devuelto para corrección'};return labels[current]||text(value)||'Sin estado';}
+  function estadoLabel(value){var current=estadoNormal(value);var labels={PENDIENTE_COORDINADOR:'Pendiente de Coordinación',PENDIENTE_REVISION:'Pendiente de Coordinación',PENDIENTE:'Pendiente de Coordinación',ENVIADO:'Pendiente de Coordinación',PENDIENTE_INVESTIGADOR:'Pendiente de Investigación',APROBADO_FINAL:'Aprobado',APROBADO:'Aprobado',REEMPLAZADO:'Aprobado con corrección',DEVUELTO:'Devuelto para corrección'};return labels[current]||text(value)||'Sin estado';}
   function cleanTitle(value){
     var output=text(value),match;
     if(!output)return'';
@@ -135,19 +135,19 @@
     var section=$('registroExistente');
     if(!section)return;
     var favorite=Number(envio.tituloPreferidoNumero||envio.preferido||0);
-    var currentStatus=estadoNormal(statusValue||envio.estado||envio.estadoFinal);
+    var currentStatus=estadoNormal(statusValue||envio.estadoProceso||envio.estado||envio.estadoFinal);
     $('existenteEstado').textContent=estadoLabel(currentStatus);
     $('existenteEstado').className='state-badge state-badge--'+currentStatus.toLowerCase();
     $('existenteNombres').textContent=text(envio.nombres||envio.estudiante||state.student&&state.student.nombres)||'-';
     $('existenteCarrera').textContent=text(envio.carrera||envio.carreraNombre||envio.nombreCarrera||state.student&&state.student.carrera)||'-';
     $('existentePeriodo').textContent=text(envio.periodoLabel||envio.periodoNombre||envio.periodoId||state.student&&state.student.periodoLabel)||'-';
     $('existenteTitulos').innerHTML=titlesHtml(envio,favorite);
-    var finalTitle=cleanTitle(envio.tituloFinal||envio.tituloAprobado||envio.tituloCorregido);
-    var observation=text(envio.observacion||envio.comentarioCoordinador||envio.comentario||envio.ultimoComentario);
+    var isFinal=['APROBADO_FINAL','APROBADO','REEMPLAZADO'].indexOf(currentStatus)>=0;
+    var finalTitle=isFinal?cleanTitle(envio.tituloFinalInvestigacion||envio.tituloFinal||envio.tituloAprobado||envio.tituloCorregido):'';
     var resolution=$('existenteResolucion');
-    resolution.hidden=!finalTitle&&!observation;
+    resolution.hidden=!isFinal||!finalTitle;
     $('existenteTituloFinal').textContent=finalTitle||'-';
-    $('existenteObservacion').textContent=observation||'-';
+    $('existenteObservacion').textContent='-';
     section.hidden=false;
   }
   function renderReturnedDetails(envio){
@@ -157,7 +157,7 @@
     var favorite=Number(envio.tituloPreferidoNumero||envio.preferido||0);
     var observation=text(envio.observacion||envio.comentarioCoordinador||envio.comentario||envio.ultimoComentario);
     $('devolucionTitulos').innerHTML=titlesHtml(envio,favorite);
-    $('devolucionObservacion').textContent=observation||'No consta una observación del coordinador en este registro.';
+    $('devolucionObservacion').textContent=observation||'No consta una observación para la corrección en este registro.';
     section.hidden=false;
   }
   function preload(envio){
@@ -189,19 +189,25 @@
       return request('/api/trabajo-titulacion','CONSULTAR_ENVIO_TRABAJO_TITULACION',{cedula:id,periodoId:state.student.periodoId,periodoLabel:state.student.periodoLabel});
     }).then(function(existing){
       var envio=existing.envio||existing.registro||null;
-      var currentStatus=estadoNormal(existing.estado||envio&&envio.estado);
+      var currentStatus=estadoNormal(existing.estado||envio&&envio.estadoProceso||envio&&envio.estado);
       if(existing.encontrado&&envio){
         renderExisting(envio,currentStatus);
         preload(envio);
         if(currentStatus==='DEVUELTO'){
           renderReturnedDetails(envio);
           status('consultaEstado','Tu registro fue devuelto. Revisa la observación y corrige los títulos.','info');
-          status('datosEstado','Revisa los títulos enviados y la observación del coordinador antes de continuar.','info');
+          status('datosEstado','Revisa los títulos enviados y la observación para corrección antes de continuar.','info');
           showStep(2);
           return;
         }
         hideReturnedDetails();
-        status('consultaEstado','Tus títulos ya están registrados. Estado: '+estadoLabel(currentStatus)+'.','success');
+        if(currentStatus==='PENDIENTE_INVESTIGADOR'){
+          status('consultaEstado','Tus títulos fueron validados por Coordinación y están pendientes de Investigación.','success');
+        }else if(['APROBADO_FINAL','APROBADO','REEMPLAZADO'].indexOf(currentStatus)>=0){
+          status('consultaEstado','Tu título está aprobado. El proceso de revisión ha finalizado.','success');
+        }else{
+          status('consultaEstado','Tus títulos ya están registrados. Estado: '+estadoLabel(currentStatus)+'.','success');
+        }
         showStep(1);
         return;
       }

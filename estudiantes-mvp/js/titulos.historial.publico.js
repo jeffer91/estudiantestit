@@ -30,7 +30,7 @@
   }
   function stateLabel(value){
     var key=text(value).toUpperCase().replace(/[^A-Z0-9]+/g,'_');
-    var labels={PENDIENTE_REVISION:'Pendiente de revisión',DEVUELTO:'Devuelto',APROBADO:'Aprobado',REEMPLAZADO:'Aprobado con corrección'};
+    var labels={PENDIENTE_COORDINADOR:'Pendiente de Coordinación',PENDIENTE_REVISION:'Pendiente de Coordinación',PENDIENTE_INVESTIGADOR:'Pendiente de Investigación',DEVUELTO:'Devuelto',APROBADO_FINAL:'Aprobado',APROBADO:'Aprobado',REEMPLAZADO:'Aprobado con corrección'};
     return labels[key]||text(value)||'Sin estado';
   }
 
@@ -85,10 +85,9 @@
     if(!revisions.length)return'<p class="public-history__empty">Todavía no existen comentarios de revisión anteriores.</p>';
     return'<div class="public-history__timeline">'+revisions.slice().reverse().map(function(item){
       var comment=text(item.comentario||item.observacion)||'Sin comentario registrado.';
-      var coordinator=text(item.coordinador)||'Coordinador no registrado';
       return'<article class="public-history__item">'+
         '<div class="public-history__item-head"><strong>Revisión '+Number(item.numeroResolucion||1)+' · '+escapeHtml(stateLabel(item.estado))+'</strong><small>'+escapeHtml(dateLabel(item.fechaResolucion))+'</small></div>'+
-        '<small>'+escapeHtml(coordinator)+'</small><p>'+escapeHtml(comment)+'</p></article>';
+        '<p>'+escapeHtml(comment)+'</p></article>';
     }).join('')+'</div>';
   }
 

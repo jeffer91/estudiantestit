@@ -21,6 +21,8 @@ const investigator = read('functions/api/investigadores.js');
 const coordinatorHtml = read('coordinadores-mvp/coordinador.html');
 const coordinatorState = read('coordinadores-mvp/js/coordinador.state.js');
 const student = read('estudiantes-mvp/js/estudiante.consulta.revision.js');
+const workStudent = read('trabajo-titulacion-mvp/js/trabajo-titulacion.js');
+const publicHistory = read('estudiantes-mvp/js/titulos.historial.publico.js');
 const investigatorHtml = read('investigadores-mvp/index.html');
 const investigatorJs = read('investigadores-mvp/js/investigadores.app.js');
 const adminHtml = read('administrador/ad-index.html');
@@ -49,6 +51,12 @@ expect(/PENDIENTE_INVESTIGADOR/.test(student) && /APROBADO_FINAL/.test(student),
   'Estudiante no reconoce Investigación o la aprobación final.');
 expect(!/Comentario del coordinador/.test(student),
   'Estudiante todavía identifica al autor de una devolución.');
+expect(/PENDIENTE_INVESTIGADOR/.test(workStudent) && /APROBADO_FINAL/.test(workStudent),
+  'Trabajo de Titulación no muestra correctamente Investigación y aprobación final.');
+expect(!/observación del coordinador/i.test(workStudent),
+  'Trabajo de Titulación todavía revela la unidad que devolvió.');
+expect(!/Coordinador no registrado/.test(publicHistory),
+  'El historial público todavía identifica a la unidad revisora.');
 
 expect(/REGISTRAR_PIN/.test(investigator) && /LOGIN_MAX_ATTEMPTS/.test(investigator) &&
   /investigacion_bloqueos/.test(investigator),

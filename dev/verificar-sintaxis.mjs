@@ -40,6 +40,7 @@ const files = [
   'estudiantes-mvp/js/sheets.service.js',
   'estudiantes-mvp/js/ia.providers.service.js',
   'estudiantes-mvp/js/estudiante.consulta.revision.js',
+  'estudiantes-mvp/js/titulos.historial.publico.js',
   'trabajo-titulacion-mvp/js/trabajo-titulacion.js',
   'coordinadores-mvp/js/coordinador.bootstrap.independiente.js',
   'coordinadores-mvp/js/coordinador.sheets.primary.js',

@@ -533,6 +533,35 @@ async function lookupStudentFallback(env, cedula, requestedPeriod) {
   };
 }
 
+function sanitizeStudentRecord(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  const clean = { ...value };
+  [
+    'coordinador', 'nombreCoordinador', 'coordinadorId', 'ultimoCoordinador',
+    'investigador', 'nombreInvestigador', 'investigadorId',
+    'revisorId', 'revisorNombre', 'devueltoPor'
+  ].forEach((key) => { delete clean[key]; });
+  return clean;
+}
+
+function sanitizeStudentResult(result) {
+  if (!result || typeof result !== 'object') return result;
+  const clean = sanitizeStudentRecord(result);
+  ['envio', 'registro', 'registroEnvio', 'envioActual', 'resolucion'].forEach((key) => {
+    if (clean[key] && typeof clean[key] === 'object') clean[key] = sanitizeStudentRecord(clean[key]);
+  });
+  if (clean.data && typeof clean.data === 'object') {
+    clean.data = sanitizeStudentResult(clean.data);
+  }
+  if (clean.resultado && typeof clean.resultado === 'object') {
+    clean.resultado = sanitizeStudentResult(clean.resultado);
+  }
+  if (clean.respuesta && typeof clean.respuesta === 'object') {
+    clean.respuesta = sanitizeStudentResult(clean.respuesta);
+  }
+  return clean;
+}
+
 function studentFound(result) {
   return Boolean(
     result &&
@@ -704,7 +733,7 @@ async function executeAccess(env, payload, userRole) {
   if (!directHasEnvio(direct)) {
     direct = await lookupEnvio(env, { cedula }, userRole);
   }
-  if (!directHasEnvio(direct)) return base;
+  if (!directHasEnvio(direct)) return sanitizeStudentResult(base);
 
   const envio = extractEnvio(direct);
   const permitir = permiteReenvio(direct);
@@ -712,7 +741,7 @@ async function executeAccess(env, payload, userRole) {
   const aprobado = estado === 'APROBADO_FINAL' || estado === 'APROBADO' || estado === 'REEMPLAZADO';
   const pendienteInvestigacion = estado === 'PENDIENTE_INVESTIGADOR';
 
-  return {
+  return sanitizeStudentResult({
     ...base,
     tieneEnvio: !permitir,
     encontradoEnvio: true,
@@ -727,12 +756,13 @@ async function executeAccess(env, payload, userRole) {
         : aprobado
           ? 'Tu título de titulación está aprobado.'
           : 'Tus propuestas ya fueron enviadas y están siendo revisadas por Coordinación.'
-  };
+  });
 }
 
 async function executeRead(env, action, method, payload, userRole) {
   if (action === ACCESS_ACTION) return executeAccess(env, payload, userRole);
-  return executeService(env, action, method, payload, userRole);
+  const result = await executeService(env, action, method, payload, userRole);
+  return userRole === 'student' ? sanitizeStudentResult(result) : result;
 }
 
 async function verifyWithCache(env, action, method, payload, userRole) {

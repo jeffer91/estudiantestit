@@ -95,7 +95,7 @@ function validarPropuestas(propuestas) {
   if (new Set(titulos).size !== 3) throw new Error('Los tres títulos propuestos deben ser diferentes.');
 }
 
-function publico(row) {
+function publico(row, viewerRole = 'student') {
   row = row || {};
   const id = text(row.id || row._docId || row._id || row.envioId);
   const input = Array.isArray(row.propuestasDetalle)
@@ -109,7 +109,7 @@ function publico(row) {
   const preferido = Number(row.tituloPreferidoNumero || row.preferido || 0);
   const status = estado(row.estadoProceso || row.estado || row.estadoFinal);
   const cedula = cedulaEstricta(row.cedula || row.numeroIdentificacion);
-  return {
+  const output = {
     ...row,
     id,
     _id: id,
@@ -147,6 +147,14 @@ function publico(row) {
     fechaRevision: text(row.fechaResolucion),
     permitirReenvio: status === 'DEVUELTO'
   };
+  if (viewerRole === 'student') {
+    [
+      'coordinador', 'nombreCoordinador', 'coordinadorId', 'ultimoCoordinador',
+      'investigador', 'nombreInvestigador', 'investigadorId',
+      'revisorId', 'revisorNombre', 'devueltoPor'
+    ].forEach((key) => { delete output[key]; });
+  }
+  return output;
 }
 
 async function buscarPorCedula(cedulaValue, periodoValue, env) {
@@ -180,14 +188,14 @@ async function buscarPorId(id, env) {
   return row && esTrabajoTitulacion(row) ? row : null;
 }
 
-async function consultar(payload, env) {
+async function consultar(payload, env, userRole = 'student') {
   const cedula = cedulaEstricta(payload.cedula || payload.numeroIdentificacion);
   if (!cedula) throw new Error('La cédula debe contener exactamente 10 dígitos.');
   const row = payload.envioId
     ? await buscarPorId(payload.envioId, env)
     : await buscarPorCedula(cedula, [payload.periodoId, payload.periodoLabel, payload.periodo], env);
   if (!row) return { ok: true, encontrado: false, existe: false, tieneEnvio: false, tipoTrabajo: TIPO };
-  const envio = publico(row);
+  const envio = publico(row, userRole);
   return {
     ok: true,
     encontrado: true,
@@ -363,7 +371,7 @@ async function guardarEnvio(payload, env) {
   };
 }
 
-async function listar(payload, env) {
+async function listar(payload, env, userRole = 'coordinator') {
   let rows = await listarTrabajosTitulacionUnificados(env);
   const requestedStatus = text(payload.estado) ? estado(payload.estado, '') : '';
   if (requestedStatus) rows = rows.filter((row) => estado(row.estado) === requestedStatus);
@@ -372,7 +380,7 @@ async function listar(payload, env) {
     const dateB = Date.parse(b.fechaResolucion || b.fechaEnvio || b.actualizadoEn || b._updateTime || '') || 0;
     return dateB - dateA;
   });
-  return { ok: true, envios: rows.map(publico), tipoTrabajo: TIPO, total: rows.length };
+  return { ok: true, envios: rows.map((row) => publico(row, userRole)), tipoTrabajo: TIPO, total: rows.length };
 }
 
 async function guardarResolucion(payload, env, userRole) {
@@ -534,9 +542,9 @@ async function processRequest(context) {
   try {
     if (action === 'PING') return jsonReply(request, { ok: true, servicio: 'trabajo-titulacion', coleccion: COLECCION_ENVIOS });
     if (action === 'MIGRAR_TRABAJOS_TITULACION') return jsonReply(request, await migrarTrabajosTitulacionLegados(env));
-    if (action === 'CONSULTAR_ENVIO_TRABAJO_TITULACION') return jsonReply(request, await consultar(payload, env));
+    if (action === 'CONSULTAR_ENVIO_TRABAJO_TITULACION') return jsonReply(request, await consultar(payload, env, userRole));
     if (action === 'ENVIO_TRABAJO_TITULACION') return jsonReply(request, await guardarEnvio(payload, env));
-    if (action === 'LISTAR_ENVIOS_TRABAJO_TITULACION') return jsonReply(request, await listar(payload, env));
+    if (action === 'LISTAR_ENVIOS_TRABAJO_TITULACION') return jsonReply(request, await listar(payload, env, userRole));
     if (action === 'GUARDAR_RESOLUCION_TRABAJO_TITULACION') return jsonReply(request, await guardarResolucion(payload, env, userRole));
     return jsonReply(request, { ok: false, mensaje: 'Acción no reconocida.' }, 400);
   } catch (error) {
