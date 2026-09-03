@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
   <title>Revisión de Investigación - Titulación</title>
-  <link rel="stylesheet" href="css/investigadores.css?v=1.1.0">
+  <link rel="stylesheet" href="css/investigadores.css?v=1.2.0">
 </head>
 <body>
   <header class="topbar">
@@ -88,6 +88,25 @@
     </section>
   </main>
 
-  <script src="js/investigadores.app.js?v=1.1.0"></script>
+  <div id="resultadoModal" class="result-modal" hidden role="dialog" aria-modal="true" aria-labelledby="resultadoModalTitulo">
+    <div class="result-modal__backdrop"></div>
+    <section class="result-modal__card" role="document">
+      <div id="resultadoModalIcono" class="result-modal__icon">✓</div>
+      <p class="eyebrow">Acción completada</p>
+      <h2 id="resultadoModalTitulo">Revisión guardada</h2>
+      <p id="resultadoModalEstudiante" class="result-modal__student"></p>
+      <p id="resultadoModalMensaje" class="muted"></p>
+      <div id="resultadoModalTituloBox" class="validated result-modal__title" hidden>
+        <span>Título definitivo</span>
+        <strong id="resultadoModalTituloFinal">-</strong>
+      </div>
+      <div class="actions result-modal__actions">
+        <button id="resultadoVolverBtn" class="secondary" type="button">Volver a carreras</button>
+        <button id="resultadoSiguienteBtn" class="primary" type="button">Revisar siguiente</button>
+      </div>
+    </section>
+  </div>
+
+  <script src="js/investigadores.app.js?v=1.2.0"></script>
 </body>
 </html>
