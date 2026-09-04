@@ -5,6 +5,10 @@
   var GRUPOS_CARRERAS=[
     {
       canonica:'UNIVERSITARIA EN DESARROLLO SOFTWARE Y CIBERSEGURIDAD',
+      identificadores:[
+        '560613D01-P-1701',
+        'carrera_a622d13fbc34'
+      ],
       aliases:[
         'UNIVERSITARIA EN DESARROLLO SOFTWARE Y CIBERSEGURIDAD',
         'UNIVERSITARIA EN DESARROLLO DE SOFTWARE Y CIBERSEGURIDAD',
@@ -26,7 +30,7 @@
     if(!objetivo)return null;
     for(var i=0;i<GRUPOS_CARRERAS.length;i+=1){
       var grupo=GRUPOS_CARRERAS[i];
-      var nombres=[grupo.canonica].concat(grupo.aliases||[]);
+      var nombres=[grupo.canonica].concat(grupo.aliases||[]).concat(grupo.identificadores||[]);
       for(var j=0;j<nombres.length;j+=1){if(firma(nombres[j])===objetivo)return grupo;}
     }
     return null;
@@ -41,7 +45,7 @@
     var salida=[];
     lista(valor).forEach(function(item){
       var grupo=grupoDe(item);
-      if(grupo)salida=salida.concat([grupo.canonica]).concat(grupo.aliases||[]);
+      if(grupo)salida=salida.concat([grupo.canonica]).concat(grupo.aliases||[]).concat(grupo.identificadores||[]);
       else salida.push(item);
     });
     return unicas(salida);
@@ -51,7 +55,8 @@
     if(!envio||typeof envio!=='object')return envio;
     var copia=Object.assign({},envio);
     var original=texto(copia.carrera||copia.nombreCarrera||copia.carreraNombre);
-    var nombre=canonica(original);
+    var identificador=texto(copia.codigoCarrera||copia.carreraCodigo||copia.CodigoCarrera||copia.carreraId);
+    var nombre=canonica(grupoDe(identificador)?identificador:original);
     if(nombre){
       copia.carreraOriginal=original;
       copia.carrera=nombre;
