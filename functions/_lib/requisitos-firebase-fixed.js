@@ -1,6 +1,6 @@
 /* Requisitos con períodos canónicos y consulta mínima de identidad. */
 import {
-  listTitleCareers
+  listTitleCareers as listTitleCareersBase
 } from './requisitos-firebase.js';
 import { getStudentBasicFast } from './requisitos-firebase-fast.js';
 import {
@@ -8,6 +8,7 @@ import {
   periodSignature,
   text
 } from './firestore-fixed.js';
+import { canonizarListaCarreras, carreraCanonica } from './carreras-canonicas.js';
 
 function active(value) {
   const normalized = text(value === undefined || value === null || value === '' ? 'ACTIVO' : value).toUpperCase();
@@ -23,8 +24,33 @@ function principal(row) {
   ));
 }
 
-export const getStudentBasic = getStudentBasicFast;
-export { listTitleCareers };
+function canonizarEstudiante(student) {
+  if (!student || typeof student !== 'object') return student;
+  const original = text(student.nombreCarrera || student.NombreCarrera || student.carrera);
+  const carrera = carreraCanonica(original);
+  if (!carrera) return student;
+  return {
+    ...student,
+    carreraOriginal: original,
+    carrera,
+    nombreCarrera: carrera,
+    NombreCarrera: carrera
+  };
+}
+
+function canonizarResultado(result) {
+  if (!result || typeof result !== 'object') return result;
+  const estudiante = canonizarEstudiante(result.estudiante || result.registro);
+  return estudiante ? { ...result, estudiante, registro: estudiante } : result;
+}
+
+export async function getStudentBasic(cedula, options = {}, env) {
+  return canonizarResultado(await getStudentBasicFast(cedula, options, env));
+}
+
+export async function listTitleCareers(periodoId = '', env) {
+  return canonizarListaCarreras(await listTitleCareersBase(periodoId, env));
+}
 
 export async function listTitlePeriods(env) {
   const rows = await listCollection('TITULOS', 'periodos', { maxDocuments: 1000 }, env);
@@ -108,7 +134,7 @@ export async function pullRequisitos(action, payload = {}, env) {
   }
 
   if (['consultar_estudiante', 'consultar_estudiante_titulacion'].includes(normalizedAction)) {
-    return getStudentBasicFast(
+    return getStudentBasic(
       payload.cedula || payload.numeroIdentificacion || payload.identificacion,
       {
         includePhone: payload.includePhone === true || payload.rol === 'admin'
