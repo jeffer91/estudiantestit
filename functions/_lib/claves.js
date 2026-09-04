@@ -3,7 +3,7 @@
 import { text } from './firestore-fixed.js';
 import { generateWithProvider, listProviders, saveProvider, toggleProvider } from './ia-firebase.js';
 import { getStudentBasic, pullRequisitos } from './requisitos-firebase-fixed.js';
-import { executeTitulosAction, publicTitleConfiguration } from './titulos-firebase-v11.js';
+import { executeTitulosAction, publicTitleConfiguration } from './titulos-firebase-v12.js';
 
 const PRIVATE_STUDENT_FIELDS = new Set([
   'celular',
