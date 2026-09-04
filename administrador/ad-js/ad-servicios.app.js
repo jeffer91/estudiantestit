@@ -33,6 +33,7 @@
     cargarComplemento('./ad-js/ad-titulos-admin.patch.js','data-ad-titulos-admin');
     cargarComplemento('./ad-js/ad-estadisticas-control.patch.js','data-ad-estadisticas-control');
     cargarComplemento('./ad-js/ad-estadisticas-dashboard.patch.js','data-ad-estadisticas-dashboard');
+    cargarComplemento('./ad-js/ad-estado-coordinadores.patch.js','data-ad-estado-coordinadores');
   }
 
   function asegurarInterfaz(){
