@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+  <title>Revisión de Investigación - Titulación</title>
+  <link rel="stylesheet" href="css/investigadores.css?v=1.2.0">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar__inner">
+      <div class="mark">I</div>
+      <div><span>Investigación</span><h1>Revisión de títulos</h1></div>
+      <button id="salirBtn" class="ghost" hidden>Salir</button>
+    </div>
+  </header>
+
+  <main class="shell">
+    <section id="loginView" class="card login-card">
+      <p class="eyebrow">Acceso de investigadores</p>
+      <h2>Ingresa con tu cédula</h2>
+      <p class="muted">En el primer ingreso registrarás tu PIN personal.</p>
+      <form id="loginForm" class="stack">
+        <label><span>Cédula</span><input id="cedulaInput" inputmode="numeric" maxlength="10" autocomplete="username" required></label>
+        <div id="pinWrap" hidden><label><span>PIN</span><input id="pinInput" type="password" inputmode="numeric" maxlength="8" autocomplete="current-password"></label></div>
+        <div id="pinConfirmWrap" hidden><label><span>Confirma tu PIN</span><input id="pinConfirmInput" type="password" inputmode="numeric" maxlength="8" autocomplete="new-password"></label></div>
+        <button id="loginBtn" class="primary" type="submit">Continuar</button>
+      </form>
+      <div id="loginStatus" class="status"></div>
+    </section>
+
+    <section id="dashboardView" hidden>
+      <div class="hero card">
+        <div><p class="eyebrow">Investigador</p><h2 id="investigadorNombre">-</h2><p class="muted">Selecciona una carrera con títulos pendientes.</p></div>
+        <div class="hero__count"><strong id="totalPendientes">0</strong><span>Pendientes</span></div>
+      </div>
+      <div class="card">
+        <div class="toolbar"><div><p class="eyebrow">Carreras</p><h3>Pendientes de Investigación</h3></div><input id="buscarCarrera" type="search" placeholder="Buscar carrera"></div>
+        <div class="table-wrap"><table><thead><tr><th>Carrera</th><th>Pendientes</th><th></th></tr></thead><tbody id="carrerasBody"></tbody></table></div>
+      </div>
+    </section>
+
+    <section id="careerView" hidden>
+      <div class="card">
+        <div class="toolbar toolbar--back">
+          <button class="ghost" id="volverCarrerasBtn">← Carreras</button>
+          <div><p class="eyebrow">Carrera seleccionada</p><h2 id="carreraTitulo">-</h2></div>
+          <input id="buscarPendiente" type="search" placeholder="Buscar nombre, cédula o título">
+        </div>
+        <div class="table-wrap"><table><thead><tr><th>Estudiante</th><th>Tipo</th><th>Período</th><th>Estado</th><th></th></tr></thead><tbody id="pendientesBody"></tbody></table></div>
+      </div>
+    </section>
+
+    <section id="reviewView" hidden>
+      <div class="card review-head">
+        <button class="ghost" id="cerrarRevisionBtn">← Volver</button>
+        <div><p class="eyebrow">Revisión de Investigación</p><h2 id="revisionNombre">-</h2><p id="revisionMeta" class="muted"></p></div>
+      </div>
+      <div class="card">
+        <h3>Propuestas originales</h3>
+        <div id="propuestasGrid" class="proposal-grid"></div>
+        <div class="validated">
+          <span>Validado por Coordinación</span>
+          <strong id="tituloCoordinador">-</strong>
+        </div>
+        <div class="validated" id="comentarioCoordinadorBox" hidden>
+          <span>Observación de Coordinación</span>
+          <strong id="comentarioCoordinador">-</strong>
+        </div>
+        <section id="historialBox" hidden>
+          <h3>Historial del proceso</h3>
+          <div id="historialRevision" class="proposal-grid"></div>
+        </section>
+        <label class="stack-field"><span>Título corregido / definitivo</span><textarea id="tituloFinalInput" rows="4"></textarea></label>
+        <label class="stack-field"><span>Observación</span><textarea id="observacionInput" rows="3" placeholder="Obligatoria al corregir o devolver"></textarea></label>
+        <div id="reviewStatus" class="status"></div>
+        <div class="actions">
+          <button class="danger" id="devolverBtn">Devolver</button>
+          <button class="secondary" id="corregirAprobarBtn">Corregir y aprobar</button>
+          <button class="primary" id="aprobarBtn">Aprobar sin cambios</button>
+        </div>
+      </div>
+      <div id="postAction" class="card post-action" hidden>
+        <strong>Revisión guardada.</strong>
+        <div class="actions"><button class="secondary" id="volverDespuesBtn">Volver a carreras</button><button class="primary" id="siguienteBtn">Revisar siguiente de esta carrera</button></div>
+      </div>
+    </section>
+  </main>
+
+  <div id="resultadoModal" class="result-modal" hidden role="dialog" aria-modal="true" aria-labelledby="resultadoModalTitulo">
+    <div class="result-modal__backdrop"></div>
+    <section class="result-modal__card" role="document">
+      <div id="resultadoModalIcono" class="result-modal__icon">✓</div>
+      <p class="eyebrow">Acción completada</p>
+      <h2 id="resultadoModalTitulo">Revisión guardada</h2>
+      <p id="resultadoModalEstudiante" class="result-modal__student"></p>
+      <p id="resultadoModalMensaje" class="muted"></p>
+      <div id="resultadoModalTituloBox" class="validated result-modal__title" hidden>
+        <span>Título definitivo</span>
+        <strong id="resultadoModalTituloFinal">-</strong>
+      </div>
+      <div class="actions result-modal__actions">
+        <button id="resultadoVolverBtn" class="secondary" type="button">Volver a carreras</button>
+        <button id="resultadoSiguienteBtn" class="primary" type="button">Revisar siguiente</button>
+      </div>
+    </section>
+  </div>
+
+  <script src="js/investigadores.app.js?v=1.2.0"></script>
+</body>
+</html>
