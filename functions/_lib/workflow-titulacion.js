@@ -57,9 +57,7 @@ export function tipoTrabajoLabel(envio = {}) {
 }
 
 export function carreraEnvio(envio = {}) {
-  return carreraCanonica(
-    envio.carreraNombre || envio.carrera || envio.nombreCarrera || envio.NombreCarrera
-  );
+  return carreraCanonica(envio);
 }
 
 export function nombresEnvio(envio = {}) {
