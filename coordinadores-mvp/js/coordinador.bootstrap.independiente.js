@@ -3,7 +3,7 @@
   'use strict';
 
   var VERSION='3.0.0';
-  var ASSET_VERSION='3.0.2';
+  var ASSET_VERSION='3.0.3';
 
   function texto(valor){return String(valor===null||valor===undefined?'':valor).trim();}
   function esLocal(){var host=texto(window.location&&window.location.hostname).toLowerCase();return ['localhost','127.0.0.1','0.0.0.0','::1','[::1]'].indexOf(host)>=0;}
