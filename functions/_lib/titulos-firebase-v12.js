@@ -34,6 +34,11 @@ const PENDIENTES_COORDINACION = new Set([
   'ENVIADO',
   'PENDIENTE'
 ]);
+const APROBADOS_COORDINACION = new Set([
+  'APROBADO_FINAL',
+  'APROBADO',
+  'REEMPLAZADO'
+]);
 const STOPWORDS_CARRERA = new Set([
   'UNIVERSITARIA', 'UNIVERSITARIO', 'TECNOLOGIA', 'TECNOLOGO',
   'SUPERIOR', 'EN', 'DE', 'DEL', 'LA', 'EL', 'Y', 'ONLINE', 'LINEA', 'TSU'
@@ -55,6 +60,7 @@ function splitList(value) {
 function normalizeStatus(value) {
   const status = text(value).toUpperCase().replace(/[^A-Z0-9]+/g, '_');
   if (!status) return '';
+  if (status === 'APROBADOS') return 'APROBADOS';
   if (status === 'PENDIENTE_INVESTIGADOR') return 'PENDIENTE_INVESTIGADOR';
   if (status === 'PENDIENTE_COORDINADOR') return 'PENDIENTE_COORDINADOR';
   if (status === 'PENDIENTE_REVISION') return 'PENDIENTE_REVISION';
@@ -75,6 +81,7 @@ function statusMatches(row, requested) {
   if (wanted === 'PENDIENTE_REVISION' || wanted === 'PENDIENTE_COORDINADOR') {
     return PENDIENTES_COORDINACION.has(current);
   }
+  if (wanted === 'APROBADOS') return APROBADOS_COORDINACION.has(current);
   return current === wanted;
 }
 
@@ -223,11 +230,8 @@ function addRows(map, rows) {
 }
 
 async function safeQuery(field, values, env) {
-  try {
-    return await queryIn('TITULOS', 'envios', field, values, 1000, env);
-  } catch (_error) {
-    return [];
-  }
+  if (!Array.isArray(values) || !values.length) return [];
+  return queryIn('TITULOS', 'envios', field, values, 1000, env);
 }
 
 async function indexedByCareers(careers, env) {
@@ -249,16 +253,20 @@ async function indexedByCareers(careers, env) {
   return [...map.values()];
 }
 
-async function indexedByPendingState(env) {
+async function indexedByStates(states, env) {
   const map = new Map();
-  const states = [...PENDIENTES_COORDINACION];
+  const values = [...new Set(states.map(text).filter(Boolean))];
   const rows = await Promise.all([
-    safeQuery('estadoProceso', states, env),
-    safeQuery('estado', states, env),
-    safeQuery('estadoFinal', states, env)
+    safeQuery('estadoProceso', values, env),
+    safeQuery('estado', values, env),
+    safeQuery('estadoFinal', values, env)
   ]);
   rows.forEach((list) => addRows(map, list));
   return [...map.values()];
+}
+
+async function indexedByPendingState(env) {
+  return indexedByStates([...PENDIENTES_COORDINACION], env);
 }
 
 function periodFromId(row) {
@@ -368,9 +376,16 @@ async function completeCoordinatorPopulation(payload, env) {
   if (!careers.length) return [];
 
   const requestedState = normalizeStatus(payload.estado);
-  const candidates = (requestedState === 'PENDIENTE_REVISION' || requestedState === 'PENDIENTE_COORDINADOR')
-    ? await indexedByPendingState(env)
-    : await indexedByCareers(careers, env);
+  let candidates;
+  if (requestedState === 'PENDIENTE_REVISION' || requestedState === 'PENDIENTE_COORDINADOR') {
+    candidates = await indexedByPendingState(env);
+  } else if (requestedState === 'DEVUELTO' || requestedState === 'PENDIENTE_INVESTIGADOR') {
+    candidates = await indexedByStates([requestedState], env);
+  } else {
+    /* Aprobados e históricos pueden contener etiquetas antiguas; para no omitir
+       casos se consulta por las carreras del coordinador y se filtra después. */
+    candidates = await indexedByCareers(careers, env);
+  }
   const periods = requestedPeriods(payload);
   const requestedType = text(payload.tipoTrabajo).toUpperCase();
 
