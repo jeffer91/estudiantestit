@@ -1,5 +1,6 @@
 /* Flujo compartido de Titulación: Coordinación -> Investigación -> aprobación final. */
 import { text } from './firestore-fixed.js';
+import { carreraCanonica } from './carreras-canonicas.js';
 
 export const ESTADOS_TITULACION = Object.freeze({
   PENDIENTE_COORDINADOR: 'PENDIENTE_COORDINADOR',
@@ -56,7 +57,9 @@ export function tipoTrabajoLabel(envio = {}) {
 }
 
 export function carreraEnvio(envio = {}) {
-  return text(envio.carreraNombre || envio.carrera || envio.nombreCarrera || envio.NombreCarrera);
+  return carreraCanonica(
+    envio.carreraNombre || envio.carrera || envio.nombreCarrera || envio.NombreCarrera
+  );
 }
 
 export function nombresEnvio(envio = {}) {
