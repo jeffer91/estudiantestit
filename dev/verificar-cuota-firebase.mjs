@@ -26,6 +26,7 @@ const coordinatorApi = read('coordinadores-mvp/js/coordinador.sheets.primary.js'
 const coordinatorWrapper = read('coordinadores-mvp/js/coordinador.envios.carreras.js');
 const titlesV6 = read('functions/_lib/titulos-firebase-v6.js');
 const titlesV7 = read('functions/_lib/titulos-firebase-v7.js');
+const titlesV12 = read('functions/_lib/titulos-firebase-v12.js');
 const history = read('functions/_lib/titulos-historial.js');
 const historyApi = read('functions/api/historial-titulos.js');
 const workApi = read('functions/api/trabajo-titulacion.js');
@@ -77,6 +78,16 @@ assert(
 assert(
   !/(?:listCollection|listEnviosCollection)\('TITULOS',\s*'envios',\s*\{\s*maxDocuments:\s*5000/.test(titlesV7),
   'La capa final de Coordinadores todavía puede leer 5.000 envíos para resolver una carrera.'
+);
+assert(
+  /indexedByPendingState/.test(titlesV12) && /indexedByStates/.test(titlesV12) &&
+  !/async function safeQuery[\s\S]{0,220}catch\s*\(/.test(titlesV12),
+  'La capa indexada final vuelve a ocultar errores o a perder consultas por estado.'
+);
+assert(
+  /lecturaGlobalColeccion:\s*false/.test(titlesV12) &&
+  !/listCollection\(\s*['"]TITULOS['"]\s*,\s*['"]envios['"]/.test(titlesV12),
+  'La capa v12 de Coordinadores vuelve a recorrer toda la colección envios.'
 );
 
 assert(
@@ -162,8 +173,16 @@ assert(
   'La prueba no está siguiendo la cadena real de módulos cargados por Coordinadores.'
 );
 assert(
-  /listarEnvios\(\{forzar:forzar===true,carreras:coordinador\.carreras\|\|\[\]\}\)/.test(coordinator),
-  'Coordinadores no consulta únicamente sus carreras asignadas.'
+  /listarEnvios\(\{[^}]*forzar:forzar===true[^}]*carreras:coordinador\.carreras\|\|\[\][^}]*estado:estadoSolicitado/.test(coordinator),
+  'Coordinadores no consulta únicamente sus carreras y el estado visible.'
+);
+assert(
+  /estadoConsultaVista/.test(coordinator) && /secuenciaCarga/.test(coordinator),
+  'Coordinadores no protege cambios rápidos de coordinador o vista.'
+);
+assert(
+  /AbortController/.test(coordinatorApi) && /cancelarConsultasEnvios/.test(coordinatorApi) && /REQUEST_TIMEOUT_MS/.test(coordinatorApi),
+  'Coordinadores no cancela consultas lentas o reemplazadas.'
 );
 assert(
   !/incluirTodos:\s*['"]?true['"]?/.test(coordinatorApi),
@@ -201,8 +220,9 @@ if (errors.length) {
 }
 
 console.log('[Cuota Firebase] Administrador consulta títulos por período.');
-console.log('[Cuota Firebase] Toda la cadena activa de Coordinadores conserva los filtros.');
-console.log('[Cuota Firebase] Compatibilidad de carreras acotada al período y sin lectura global.');
+console.log('[Cuota Firebase] Toda la cadena activa de Coordinadores conserva carrera y estado.');
+console.log('[Cuota Firebase] Consultas lentas se cancelan y las respuestas antiguas no pisan la vista actual.');
+console.log('[Cuota Firebase] Compatibilidad de carreras acotada y sin lectura global.');
 console.log('[Cuota Firebase] Historial completo consultado por envioId y con recuperación segura.');
 console.log('[Cuota Firebase] Trabajo de Titulación guarda historial atómico y carrera normalizada.');
 console.log('[Cuota Firebase] Requisitos evita lecturas duplicadas de catálogos.');
