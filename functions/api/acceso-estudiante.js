@@ -38,6 +38,8 @@ function flexible(object, names) {
 function normalizeState(value) {
   const state = text(value).toUpperCase().replace(/[^A-Z0-9]+/g, '_');
   if (!state) return 'SIN_ENVIO';
+  if (state === 'PENDIENTE_INVESTIGADOR') return 'PENDIENTE_INVESTIGADOR';
+  if (state === 'APROBADO_FINAL') return 'APROBADO_FINAL';
   if (['ENVIADO', 'PENDIENTE_SYNC', 'RESPALDADO', 'PENDIENTE'].includes(state)) {
     return 'PENDIENTE_REVISION';
   }
@@ -309,13 +311,17 @@ export async function onRequest({ request, env }) {
       flujoTitulos: 'CONSULTAR_ENVIO_CEDULA',
       mensaje: titles.permiteReenvio
         ? 'Tus propuestas fueron devueltas y pueden corregirse.'
-        : titles.estado === 'APROBADO' || titles.estado === 'REEMPLAZADO'
-          ? 'Tu tema de titulación fue aprobado por coordinación.'
-          : titles.tieneEnvio
-            ? 'Tus propuestas ya fueron enviadas y están siendo revisadas.'
-            : academic.respaldoUtilizado
-              ? 'Datos recuperados desde el respaldo institucional. No registras envíos anteriores en este período.'
-              : 'Estudiante encontrado. No registras envíos anteriores en este período.',
+        : titles.estado === 'PENDIENTE_INVESTIGADOR'
+          ? 'Tu título fue validado por Coordinación y está pendiente de revisión por Investigación.'
+          : titles.estado === 'APROBADO_FINAL'
+            ? 'Tu título fue aprobado. El proceso de revisión ha finalizado.'
+            : titles.estado === 'APROBADO' || titles.estado === 'REEMPLAZADO'
+              ? 'Tu tema de titulación fue validado por Coordinación.'
+              : titles.tieneEnvio
+                ? 'Tus propuestas ya fueron enviadas y están siendo revisadas.'
+                : academic.respaldoUtilizado
+                  ? 'Datos recuperados desde el respaldo institucional. No registras envíos anteriores en este período.'
+                  : 'Estudiante encontrado. No registras envíos anteriores en este período.',
       duracionMs: Date.now() - startedAt
     });
   } catch (error) {
