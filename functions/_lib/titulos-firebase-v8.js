@@ -35,6 +35,8 @@ const TITLE_FIELDS = [
 function normalizeStatus(value) {
   const normalized = text(value).toUpperCase().replace(/[^A-Z0-9]+/g, '_');
   if (!normalized) return '';
+  if (normalized === 'PENDIENTE_INVESTIGADOR') return 'PENDIENTE_INVESTIGADOR';
+  if (normalized === 'APROBADO_FINAL') return 'APROBADO_FINAL';
   if (normalized.includes('DEVUEL')) return 'DEVUELTO';
   if (normalized.includes('REEMPLAZ')) return 'REEMPLAZADO';
   if (normalized.includes('APROBAD')) return 'APROBADO';
@@ -86,7 +88,7 @@ function synchronizeStudentState(result) {
   if (!current || typeof current !== 'object') return result;
 
   const state = normalizeStatus(
-    current.estado || current.estadoFinal || current.estadoProceso ||
+    current.estadoProceso || current.estado || current.estadoFinal ||
     result.estadoEfectivo || result.estadoEnvio || result.estado || result.estadoFinal
   );
   if (!state) return result;
@@ -114,7 +116,11 @@ function synchronizeStudentState(result) {
     registro: envio,
     mensaje: state === 'DEVUELTO'
       ? 'El registro fue devuelto y puede corregirse.'
-      : result.mensaje
+      : state === 'PENDIENTE_INVESTIGADOR'
+        ? 'Validado por Coordinación. Pendiente de Investigación.'
+        : state === 'APROBADO_FINAL'
+          ? 'Tu título fue aprobado. El proceso de revisión ha finalizado.'
+          : result.mensaje
   };
 }
 
