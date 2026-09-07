@@ -30,7 +30,7 @@
   }
   function stateLabel(value){
     var key=text(value).toUpperCase().replace(/[^A-Z0-9]+/g,'_');
-    var labels={PENDIENTE_COORDINADOR:'Pendiente de Coordinación',PENDIENTE_REVISION:'Pendiente de Coordinación',PENDIENTE_INVESTIGADOR:'Pendiente de Investigación',DEVUELTO:'Devuelto',APROBADO_FINAL:'Aprobado',APROBADO:'Aprobado',REEMPLAZADO:'Aprobado con corrección'};
+    var labels={PENDIENTE_COORDINADOR:'Pendiente de Coordinación',PENDIENTE_REVISION:'Pendiente de Coordinación',PENDIENTE_INVESTIGADOR:'Pendiente de Investigación',DEVUELTO:'Devuelto',APROBADO_FINAL:'Aprobado',APROBADO:'Validado por Coordinación',REEMPLAZADO:'Validado por Coordinación'};
     return labels[key]||text(value)||'Sin estado';
   }
 
