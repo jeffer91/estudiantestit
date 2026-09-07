@@ -65,14 +65,26 @@
     }
     return copia;
   }
+  function comentarioResolucion(resolucion){
+    resolucion=resolucion||{};
+    var candidatos=[resolucion.comentarioCoordinador,resolucion.comentario,resolucion.observacion];
+    for(var i=0;i<candidatos.length;i+=1){
+      var valor=texto(candidatos[i]);
+      if(valor)return valor;
+    }
+    return'';
+  }
   function normalizarResolucion(res){
     var salida=Object.assign({},res||{});
-    var comentario=texto(salida.comentarioCoordinador||salida.comentario||salida.observacion);
-    if(comentario){
-      salida.comentarioCoordinador=comentario;
-      salida.comentario=comentario;
-      salida.observacion=comentario;
-    }
+    var comentario=comentarioResolucion(salida);
+    /*
+      El modal usa comentarioCoordinador, mientras que versiones anteriores del
+      servicio esperaban comentario u observacion. Se rellenan siempre las tres
+      claves para que aprobar y devolver compartan exactamente el mismo texto.
+    */
+    salida.comentarioCoordinador=comentario;
+    salida.comentario=comentario;
+    salida.observacion=comentario;
     return salida;
   }
 
