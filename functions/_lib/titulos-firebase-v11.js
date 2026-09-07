@@ -18,6 +18,8 @@ const CONSULT_ACTIONS = new Set([
 function normalizeStatus(value) {
   const status = text(value).toUpperCase().replace(/[^A-Z0-9]+/g, '_');
   if (!status) return '';
+  if (status === 'PENDIENTE_INVESTIGADOR') return 'PENDIENTE_INVESTIGADOR';
+  if (status === 'APROBADO_FINAL') return 'APROBADO_FINAL';
   if (status.includes('DEVUEL')) return 'DEVUELTO';
   if (status.includes('REEMPLAZ')) return 'REEMPLAZADO';
   if (status.includes('APROBAD')) return 'APROBADO';
@@ -142,7 +144,7 @@ function latestResolution(rows) {
 
 function effectiveState(current, resolution) {
   const currentState = normalizeStatus(
-    current && (current.estado || current.estadoFinal || current.estadoProceso)
+    current && (current.estadoProceso || current.estado || current.estadoFinal)
   );
 
   /* Un reenvío moderno vuelve a PENDIENTE_REVISION. No debemos revivir una
