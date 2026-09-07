@@ -15,6 +15,8 @@ function expect(condition, message) {
 
 const titles = read('functions/api/titulos.js');
 const titlesFirebase = read('functions/_lib/titulos-firebase.js');
+const titlesFirebaseV8 = read('functions/_lib/titulos-firebase-v8.js');
+const titlesFirebaseV11 = read('functions/_lib/titulos-firebase-v11.js');
 const requirementsFast = read('functions/_lib/requisitos-firebase-fast.js');
 const work = read('functions/api/trabajo-titulacion.js');
 const history = read('functions/api/historial-titulos.js');
@@ -23,6 +25,7 @@ const investigator = read('functions/api/investigadores.js');
 const coordinatorHtml = read('coordinadores-mvp/coordinador.html');
 const coordinatorState = read('coordinadores-mvp/js/coordinador.state.js');
 const coordinatorModal = read('coordinadores-mvp/js/coordinador.modal.js');
+const coordinatorApprovalText = read('coordinadores-mvp/js/coordinador.texto-aprobado.patch.js');
 const student = read('estudiantes-mvp/js/estudiante.consulta.revision.js');
 const workStudent = read('trabajo-titulacion-mvp/js/trabajo-titulacion.js');
 const publicHistory = read('estudiantes-mvp/js/titulos.historial.publico.js');
@@ -43,6 +46,14 @@ expect(/registerStudentSubmission/.test(titles) && /PENDIENTE_COORDINADOR/.test(
   'Artículo Académico no reinicia el flujo en Coordinación al reenviar.');
 expect(/getStudentBasicFast/.test(titlesFirebase) && !/import \{ getStudentBasic, listTitleCareers/.test(titlesFirebase),
   'El envío del estudiante volvió a usar la validación antigua de Estudiantes/EstudiantesPeriodo.');
+expect(/normalized === 'PENDIENTE_INVESTIGADOR'/.test(titlesFirebaseV8) &&
+  /normalized === 'APROBADO_FINAL'/.test(titlesFirebaseV8) &&
+  /current\.estadoProceso \|\| current\.estado/.test(titlesFirebaseV8),
+  'La consulta del estudiante degrada PENDIENTE_INVESTIGADOR o APROBADO_FINAL a un estado anterior.');
+expect(/status === 'PENDIENTE_INVESTIGADOR'/.test(titlesFirebaseV11) &&
+  /status === 'APROBADO_FINAL'/.test(titlesFirebaseV11) &&
+  /current\.estadoProceso \|\| current\.estado/.test(titlesFirebaseV11),
+  'La compatibilidad histórica degrada los estados de Investigación.');
 expect(/chooseEnrollmentForPeriod/.test(requirementsFast) && /requestedPeriod/.test(requirementsFast),
   'La validación UTET no respeta el período histórico solicitado por el estudiante.');
 expect(/registerReturnToStudent/.test(titles) && /requiereAccionDe:\s*'ESTUDIANTE'/.test(titles),
@@ -56,12 +67,12 @@ expect(/sanitizeHistory/.test(history) && /userRole === 'student'/.test(history)
 
 expect(/data-vista="validados"/.test(coordinatorHtml) &&
   /data-vista="aprobados"/.test(coordinatorHtml) &&
-  /Validar y enviar a Investigación/.test(coordinatorHtml),
-  'Coordinadores no expone Por revisar / Devueltos / Validados / Aprobados.');
+  /data-accion="aprobar-envio">Aprobado<\/button>/.test(coordinatorHtml),
+  'Coordinadores no expone Por revisar / Devueltos / Validados / Aprobados o el botón visible no dice Aprobado.');
 expect(/PENDIENTE_INVESTIGADOR/.test(coordinatorState) && /APROBADO_FINAL/.test(coordinatorState),
   'Coordinadores no distingue validado de aprobado final.');
-expect(/Validar y enviar a Investigación/.test(coordinatorModal),
-  'El modal de Coordinación puede volver a mostrar el texto antiguo después de un error.');
+expect(/TEXTO='Aprobado'/.test(coordinatorApprovalText) && /MutationObserver/.test(coordinatorApprovalText),
+  'El modal de Coordinación puede volver a mostrar el texto antiguo después de abrirse o guardar.');
 
 expect(/PENDIENTE_INVESTIGADOR/.test(student) && /APROBADO_FINAL/.test(student),
   'Estudiante no reconoce Investigación o la aprobación final.');
