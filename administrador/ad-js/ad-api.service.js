@@ -88,12 +88,13 @@
     if(!bridge)return Promise.resolve(value);
     return bridge.set(key,value,ttlMs).catch(function(){return null;}).then(function(){return value;});
   }
+  function marcarVistaAdmin(){forzarVistaAdminHasta=Date.now()+30*60*1000;}
   function forzarRed(options){
     options=options||{};
     cacheGeneration+=1;
     memoria.clear();enCurso.clear();
     forzarHasta=Date.now()+Math.max(0,Number(options.forzarMs===undefined?10000:options.forzarMs));
-    forzarVistaAdminHasta=Date.now()+30*60*1000;
+    marcarVistaAdmin();
     respaldoBloqueadoGeneracion=options.permitirRespaldo===false?cacheGeneration:-1;
     return Promise.resolve({ok:true});
   }
@@ -102,7 +103,7 @@
     cacheGeneration+=1;
     memoria.clear();enCurso.clear();
     forzarHasta=Date.now()+Math.max(0,Number(options.forzarMs===undefined?8000:options.forzarMs));
-    forzarVistaAdminHasta=Date.now()+30*60*1000;
+    if(options.forzarVistaAdmin===true)marcarVistaAdmin();
     respaldoBloqueadoGeneracion=-1;
     var bridge=puente();
     limpiezaEnCurso=limpiezaEnCurso.catch(function(){return{ok:false};}).then(function(){
@@ -133,12 +134,12 @@
     enCurso.set(key,task);
     return task.finally(function(){if(enCurso.get(key)===task)enCurso.delete(key);});
   }
-  function escritura(promesa){return Promise.resolve(promesa).then(function(result){return limpiarCache({forzarMs:5000}).then(function(){return result;});});}
+  function escritura(promesa,afectaVistaAdmin){return Promise.resolve(promesa).then(function(result){return limpiarCache({forzarMs:5000,forzarVistaAdmin:afectaVistaAdmin===true}).then(function(){return result;});});}
   function titulosLectura(a,d,m,ttl){return solicitarConCache('/api/titulos',a,d||{},ttl,function(){return solicitar('/api/titulos',a,d,m);});}
   function requisitosLectura(a,d,ttl){return solicitarConCache('/api/requisitos',a,d||{},ttl,function(){return solicitar('/api/requisitos',a,d,'POST');});}
   function adminGlobalLectura(a,d,ttl){return solicitarConCache('/api/estadisticas',a,d||{},ttl,function(){return solicitar('/api/estadisticas',a,d||{},'POST');});}
   function investigacionLectura(a,d,ttl){return solicitarConCache('/api/investigadores',a,d||{},ttl,function(){return solicitar('/api/investigadores',a,d||{},'POST');});}
-  function historialLectura(d){return solicitarConCache('/api/historial-titulos','CONSULTAR_HISTORIAL',d||{},TTL.titulo,function(){return solicitar('/api/historial-titulos','CONSULTAR_HISTORIAL',d||{},'POST');});}
+  function historialLectura(d){return solicitarConCache('/api/historial-titulos','CONSULTAR_HISTORIAL',d||{},TTL.titulo,function(){return solicitar('/api/historial-titulos',a,d||{},'POST');});}
   function clavesGet(action){return solicitarConCache('/api/claves',action,{},TTL.servicios,function(){return clavesGetRed(action);});}
   function iaGet(action,providerId){return solicitarConCache('/api/ia',action,{providerId:providerId||''},TTL.ia,function(){return iaGetRed(action,providerId);});}
   function lista(r,claves){if(Array.isArray(r))return r;r=r||{};for(var i=0;i<claves.length;i++)if(Array.isArray(r[claves[i]]))return r[claves[i]];if(r.data&&typeof r.data==='object')return lista(r.data,claves);if(r.resultado&&typeof r.resultado==='object')return lista(r.resultado,claves);return[];}
@@ -159,10 +160,10 @@
     guardarServicio:function(servicio){return escritura(clavesPost('admin-save',{service:servicio||{}}));},
     listarPeriodos:function(){return requisitosLectura('LISTAR_PERIODOS_TITULACION',{},TTL.periodos);},
     listarPeriodosAdmin:function(){return adminGlobalLectura('ADMIN_LISTAR_PERIODOS',{},TTL.periodos);},
-    guardarPeriodoAdmin:function(datos){return escritura(solicitar('/api/estadisticas','ADMIN_GUARDAR_PERIODO',datos||{},'POST'));},
+    guardarPeriodoAdmin:function(datos){return escritura(solicitar('/api/estadisticas','ADMIN_GUARDAR_PERIODO',datos||{},'POST'),true);},
     listarCarreras:function(periodoId){return requisitosLectura('LISTAR_CARRERAS_PERIODO',{periodoId:periodoId||''},TTL.carreras);},
     listarCarrerasAdmin:function(){return adminGlobalLectura('ADMIN_LISTAR_CARRERAS',{},TTL.carreras);},
-    asignarCarreraCoordinador:function(datos){return escritura(solicitar('/api/estadisticas','ADMIN_ASIGNAR_CARRERA_COORDINADOR',datos||{},'POST'));},
+    asignarCarreraCoordinador:function(datos){return escritura(solicitar('/api/estadisticas','ADMIN_ASIGNAR_CARRERA_COORDINADOR',datos||{},'POST'),true);},
     consultarEstudiante:function(cedula,periodoId){return solicitar('/api/titulos','CONSULTAR_ESTUDIANTE',{cedula:cedula,numeroIdentificacion:cedula,periodoId:periodoId||''},'GET');},
     listarCoordinadores:function(){return titulosLectura('LISTAR_COORDINADORES',{incluirInactivos:true},'GET',TTL.coordinadores);},
     listarInvestigadores:function(){return investigacionLectura('ADMIN_LISTAR_INVESTIGADORES',{},TTL.investigadores);},
@@ -171,14 +172,14 @@
     resetPinInvestigador:function(cedula){return escritura(solicitar('/api/investigadores','ADMIN_RESETEAR_PIN_INVESTIGADOR',{cedula:cedula},'POST'));},
     liberarRevisionInvestigacion:function(envioId){return escritura(solicitar('/api/investigadores','ADMIN_LIBERAR_REVISION_INVESTIGACION',{envioId:envioId},'POST'));},
     consultarHistorialTitulo:function(datos){return historialLectura(datos||{});},
-    guardarCoordinador:function(datos){return escritura(solicitar('/api/titulos','GUARDAR_COORDINADOR',datos||{},'POST'));},
-    cambiarEstadoCoordinador:function(datos){return escritura(solicitar('/api/titulos','CAMBIAR_ESTADO_COORDINADOR',datos||{},'POST'));},
-    asignarCarreras:function(datos){return escritura(solicitar('/api/titulos','ASIGNAR_CARRERA',datos||{},'POST'));},
+    guardarCoordinador:function(datos){return escritura(solicitar('/api/titulos','GUARDAR_COORDINADOR',datos||{},'POST'),true);},
+    cambiarEstadoCoordinador:function(datos){return escritura(solicitar('/api/titulos','CAMBIAR_ESTADO_COORDINADOR',datos||{},'POST'),true);},
+    asignarCarreras:function(datos){return escritura(solicitar('/api/titulos','ASIGNAR_CARRERA',datos||{},'POST'),true);},
     listarTitulos:function(filtros){return titulosLectura('LISTAR_ENVIOS_POR_CARRERA',filtros||{carreras:'',carrera:'',estado:'',periodo:''},'GET',TTL.titulos);},
     listarTitulosGlobal:function(filtros){var datos=datosVistaAdmin(filtros);return adminGlobalLectura('ADMIN_LISTA_GLOBAL_TITULOS',datos,TTL.global).then(function(result){window.ADAdminGlobalLast=result;return result;});},
     consultarTitulo:function(cedula,periodo){return titulosLectura('VERIFICAR_ENVIO',{cedula:cedula,numeroIdentificacion:cedula,periodo:periodo||''},'GET',TTL.titulo);},
-    devolverTitulo:function(datos){return escritura(solicitar('/api/titulos','GUARDAR_RESOLUCION',datos||{},'POST'));},
-    eliminarTitulo:function(datos){return escritura(solicitar('/api/titulos','ADMIN_ELIMINAR_TITULOS',datos||{},'POST'));},
+    devolverTitulo:function(datos){return escritura(solicitar('/api/titulos','GUARDAR_RESOLUCION',datos||{},'POST'),true);},
+    eliminarTitulo:function(datos){return escritura(solicitar('/api/titulos','ADMIN_ELIMINAR_TITULOS',datos||{},'POST'),true);},
     obtenerEstadisticas:function(filtros){var datos=datosVistaAdmin(filtros);return adminGlobalLectura('ADMIN_ESTADISTICAS_TITULOS',datos,TTL.estadisticas).then(function(result){window.ADAdminStatisticsLast=result;return result;});},
     exportarFirebaseTitulos:function(){return solicitar('/api/estadisticas','ADMIN_REPORTE_FIREBASE_TITULOS',{},'POST');},
     listarIA:function(){return iaGet('admin-list');},
