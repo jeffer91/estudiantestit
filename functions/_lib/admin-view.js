@@ -340,7 +340,12 @@ export async function saveAdminView(global = {}, env) {
   const records = Array.isArray(global.registros) ? global.registros : [];
   const outside = Array.isArray(global.fueraPoblacion) ? global.fueraPoblacion : [];
   const missing = records.filter((item) => status(item.estado) === 'NO_ENVIADO');
-  const statistics = calculateStatistics(global);
+  const calculated = calculateStatistics(global);
+  const statistics = {
+    resumen: calculated.resumen,
+    carreras: calculated.carreras,
+    coordinadores: calculated.coordinadores
+  };
 
   const makePages = (rows, kind) => splitPages(rows).map((page, index) => ({
     id: pageId(key, version, kind, index),
