@@ -139,7 +139,7 @@
   function requisitosLectura(a,d,ttl){return solicitarConCache('/api/requisitos',a,d||{},ttl,function(){return solicitar('/api/requisitos',a,d,'POST');});}
   function adminGlobalLectura(a,d,ttl){return solicitarConCache('/api/estadisticas',a,d||{},ttl,function(){return solicitar('/api/estadisticas',a,d||{},'POST');});}
   function investigacionLectura(a,d,ttl){return solicitarConCache('/api/investigadores',a,d||{},ttl,function(){return solicitar('/api/investigadores',a,d||{},'POST');});}
-  function historialLectura(d){return solicitarConCache('/api/historial-titulos','CONSULTAR_HISTORIAL',d||{},TTL.titulo,function(){return solicitar('/api/historial-titulos',a,d||{},'POST');});}
+  function historialLectura(d){return solicitarConCache('/api/historial-titulos','CONSULTAR_HISTORIAL',d||{},TTL.titulo,function(){return solicitar('/api/historial-titulos','CONSULTAR_HISTORIAL',d||{},'POST');});}
   function clavesGet(action){return solicitarConCache('/api/claves',action,{},TTL.servicios,function(){return clavesGetRed(action);});}
   function iaGet(action,providerId){return solicitarConCache('/api/ia',action,{providerId:providerId||''},TTL.ia,function(){return iaGetRed(action,providerId);});}
   function lista(r,claves){if(Array.isArray(r))return r;r=r||{};for(var i=0;i<claves.length;i++)if(Array.isArray(r[claves[i]]))return r[claves[i]];if(r.data&&typeof r.data==='object')return lista(r.data,claves);if(r.resultado&&typeof r.resultado==='object')return lista(r.resultado,claves);return[];}
