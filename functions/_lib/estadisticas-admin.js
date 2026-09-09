@@ -1,16 +1,22 @@
-/* Fachada administrativa v8 con resolución flexible de alias del catálogo.
- * El frontend puede enviar el ID canónico y el nombre legible, mientras los
- * registros históricos conservan un ID institucional corto. Antes de consultar
- * se añaden todas esas variantes para que ninguna quede fuera del cruce.
+/* Fachada administrativa optimizada.
+ *
+ * La reconstrucción completa UTET + TÍTULOS se conserva como fuente de verdad,
+ * pero el Administrador trabaja normalmente sobre una vista materializada por
+ * período. Esto evita repetir cruces costosos para Lista global y Estadísticas.
  */
 import {
   assignCareerCoordinator,
   buildAdminGlobalList as buildAdminGlobalListV8,
-  buildAdminStatistics as buildAdminStatisticsV8,
   listAdminCareers,
   listAdminPeriodsCatalog,
   saveAdminPeriod
 } from './admin-global-v8.js';
+import {
+  readAdminGlobalView,
+  readAdminStatisticsView,
+  saveAdminView,
+  statisticsFromGlobal
+} from './admin-view.js';
 import { samePeriod, text } from './firestore-fixed.js';
 
 export {
@@ -54,8 +60,6 @@ export function enrichAdminPeriodPayload(payload = {}, catalog = {}) {
     ...input,
     periodoId: text(input.periodoId) || canonical,
     periodoLabel: text(input.periodoLabel) || label,
-    /* El ID del documento es el alias más importante para datos antiguos,
-       por ejemplo 2026-02. Se conserva además de periodoId y periodoLabel. */
     periodo: documentId || existingPeriod || label || requested,
     documentId: text(input.documentId) || documentId
   };
@@ -72,22 +76,50 @@ async function resolveAdminPeriodPayload(payload, env) {
     const catalog = await listAdminPeriodsCatalog(env);
     return enrichAdminPeriodPayload(input, catalog);
   } catch (_error) {
-    /* Si el catálogo falla, la lista todavía puede intentar resolver con los
-       valores recibidos. No convertimos una lectura auxiliar en un bloqueo. */
     return input;
   }
 }
 
+async function rebuildGlobal(payload, env) {
+  const rebuilt = await buildAdminGlobalListV8(payload, env);
+  try {
+    return await saveAdminView(rebuilt, env);
+  } catch (_error) {
+    /* La vista es una optimización, nunca la fuente de verdad. Si no puede
+       guardarse, el Administrador sigue funcionando con el resultado real. */
+    return {
+      ...rebuilt,
+      vistaAdministrativa: false,
+      vistaError: true
+    };
+  }
+}
+
 export async function buildAdminGlobalList(payload = {}, env) {
-  return buildAdminGlobalListV8(
-    await resolveAdminPeriodPayload(payload, env),
-    env
-  );
+  const resolved = await resolveAdminPeriodPayload(payload, env);
+  if (resolved.forzarVista !== true) {
+    try {
+      const cached = await readAdminGlobalView(resolved, env);
+      if (cached) return cached;
+    } catch (_error) {
+      /* Si la vista está dañada o incompleta, se reconstruye desde las fuentes. */
+    }
+  }
+  return rebuildGlobal(resolved, env);
 }
 
 export async function buildAdminStatistics(payload = {}, env) {
-  return buildAdminStatisticsV8(
-    await resolveAdminPeriodPayload(payload, env),
-    env
-  );
+  const resolved = await resolveAdminPeriodPayload(payload, env);
+
+  if (resolved.forzarVista !== true) {
+    try {
+      const cached = await readAdminStatisticsView(resolved, env);
+      if (cached) return cached;
+    } catch (_error) {
+      /* La estadística puede reconstruirse a partir de la lista real. */
+    }
+  }
+
+  const global = await rebuildGlobal(resolved, env);
+  return statisticsFromGlobal(global);
 }
