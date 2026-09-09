@@ -96,27 +96,44 @@ async function rebuildGlobal(payload, env) {
 }
 
 export async function buildAdminGlobalList(payload = {}, env) {
+  if (payload.forzarVista !== true) {
+    try {
+      const direct = await readAdminGlobalView(payload, env);
+      if (direct) return direct;
+    } catch (_error) {
+      /* Si la vista está dañada o incompleta, se reconstruye desde las fuentes. */
+    }
+  }
+
   const resolved = await resolveAdminPeriodPayload(payload, env);
   if (resolved.forzarVista !== true) {
     try {
       const cached = await readAdminGlobalView(resolved, env);
       if (cached) return cached;
     } catch (_error) {
-      /* Si la vista está dañada o incompleta, se reconstruye desde las fuentes. */
+      /* Compatibilidad: el alias resuelto puede apuntar a una vista existente. */
     }
   }
   return rebuildGlobal(resolved, env);
 }
 
 export async function buildAdminStatistics(payload = {}, env) {
-  const resolved = await resolveAdminPeriodPayload(payload, env);
+  if (payload.forzarVista !== true) {
+    try {
+      const direct = await readAdminStatisticsView(payload, env);
+      if (direct) return direct;
+    } catch (_error) {
+      /* La estadística puede reconstruirse a partir de la lista real. */
+    }
+  }
 
+  const resolved = await resolveAdminPeriodPayload(payload, env);
   if (resolved.forzarVista !== true) {
     try {
       const cached = await readAdminStatisticsView(resolved, env);
       if (cached) return cached;
     } catch (_error) {
-      /* La estadística puede reconstruirse a partir de la lista real. */
+      /* Compatibilidad con aliases históricos del período. */
     }
   }
 
