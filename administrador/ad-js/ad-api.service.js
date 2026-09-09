@@ -7,6 +7,7 @@
   var enCurso=new Map();
   var cacheGeneration=0;
   var forzarHasta=0;
+  var forzarVistaAdminHasta=0;
   var respaldoBloqueadoGeneracion=-1;
   var limpiezaEnCurso=Promise.resolve({ok:true});
   var TTL={
@@ -92,6 +93,7 @@
     cacheGeneration+=1;
     memoria.clear();enCurso.clear();
     forzarHasta=Date.now()+Math.max(0,Number(options.forzarMs===undefined?10000:options.forzarMs));
+    forzarVistaAdminHasta=Date.now()+30*60*1000;
     respaldoBloqueadoGeneracion=options.permitirRespaldo===false?cacheGeneration:-1;
     return Promise.resolve({ok:true});
   }
@@ -100,6 +102,7 @@
     cacheGeneration+=1;
     memoria.clear();enCurso.clear();
     forzarHasta=Date.now()+Math.max(0,Number(options.forzarMs===undefined?8000:options.forzarMs));
+    forzarVistaAdminHasta=Date.now()+30*60*1000;
     respaldoBloqueadoGeneracion=-1;
     var bridge=puente();
     limpiezaEnCurso=limpiezaEnCurso.catch(function(){return{ok:false};}).then(function(){
@@ -139,9 +142,10 @@
   function clavesGet(action){return solicitarConCache('/api/claves',action,{},TTL.servicios,function(){return clavesGetRed(action);});}
   function iaGet(action,providerId){return solicitarConCache('/api/ia',action,{providerId:providerId||''},TTL.ia,function(){return iaGetRed(action,providerId);});}
   function lista(r,claves){if(Array.isArray(r))return r;r=r||{};for(var i=0;i<claves.length;i++)if(Array.isArray(r[claves[i]]))return r[claves[i]];if(r.data&&typeof r.data==='object')return lista(r.data,claves);if(r.resultado&&typeof r.resultado==='object')return lista(r.resultado,claves);return[];}
+  function datosVistaAdmin(datos){var out=Object.assign({},datos||{});if(Date.now()<forzarVistaAdminHasta){out.forzarVista=true;forzarVistaAdminHasta=0;}return out;}
 
   var api={
-    version:'3.3.9-electron.2',
+    version:'3.4.0-electron.3',
     base:base,
     esElectron:function(){return Boolean(puente());},
     limpiarCache:limpiarCache,
@@ -171,11 +175,11 @@
     cambiarEstadoCoordinador:function(datos){return escritura(solicitar('/api/titulos','CAMBIAR_ESTADO_COORDINADOR',datos||{},'POST'));},
     asignarCarreras:function(datos){return escritura(solicitar('/api/titulos','ASIGNAR_CARRERA',datos||{},'POST'));},
     listarTitulos:function(filtros){return titulosLectura('LISTAR_ENVIOS_POR_CARRERA',filtros||{carreras:'',carrera:'',estado:'',periodo:''},'GET',TTL.titulos);},
-    listarTitulosGlobal:function(filtros){return adminGlobalLectura('ADMIN_LISTA_GLOBAL_TITULOS',filtros||{},TTL.global).then(function(result){window.ADAdminGlobalLast=result;return result;});},
+    listarTitulosGlobal:function(filtros){var datos=datosVistaAdmin(filtros);return adminGlobalLectura('ADMIN_LISTA_GLOBAL_TITULOS',datos,TTL.global).then(function(result){window.ADAdminGlobalLast=result;return result;});},
     consultarTitulo:function(cedula,periodo){return titulosLectura('VERIFICAR_ENVIO',{cedula:cedula,numeroIdentificacion:cedula,periodo:periodo||''},'GET',TTL.titulo);},
     devolverTitulo:function(datos){return escritura(solicitar('/api/titulos','GUARDAR_RESOLUCION',datos||{},'POST'));},
     eliminarTitulo:function(datos){return escritura(solicitar('/api/titulos','ADMIN_ELIMINAR_TITULOS',datos||{},'POST'));},
-    obtenerEstadisticas:function(filtros){return adminGlobalLectura('ADMIN_ESTADISTICAS_TITULOS',filtros||{},TTL.estadisticas).then(function(result){window.ADAdminStatisticsLast=result;return result;});},
+    obtenerEstadisticas:function(filtros){var datos=datosVistaAdmin(filtros);return adminGlobalLectura('ADMIN_ESTADISTICAS_TITULOS',datos,TTL.estadisticas).then(function(result){window.ADAdminStatisticsLast=result;return result;});},
     exportarFirebaseTitulos:function(){return solicitar('/api/estadisticas','ADMIN_REPORTE_FIREBASE_TITULOS',{},'POST');},
     listarIA:function(){return iaGet('admin-list');},
     guardarIA:function(proveedor){return escritura(iaPost('admin-save',{provider:proveedor||{}}));},
