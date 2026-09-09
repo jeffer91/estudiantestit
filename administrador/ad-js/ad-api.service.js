@@ -94,7 +94,7 @@
     cacheGeneration+=1;
     memoria.clear();enCurso.clear();
     forzarHasta=Date.now()+Math.max(0,Number(options.forzarMs===undefined?10000:options.forzarMs));
-    marcarVistaAdmin();
+    if(options.forzarVistaAdmin===true)marcarVistaAdmin();
     respaldoBloqueadoGeneracion=options.permitirRespaldo===false?cacheGeneration:-1;
     return Promise.resolve({ok:true});
   }
@@ -146,7 +146,7 @@
   function datosVistaAdmin(datos){var out=Object.assign({},datos||{});if(Date.now()<forzarVistaAdminHasta){out.forzarVista=true;forzarVistaAdminHasta=0;}return out;}
 
   var api={
-    version:'3.4.0-electron.3',
+    version:'3.4.1-electron.4',
     base:base,
     esElectron:function(){return Boolean(puente());},
     limpiarCache:limpiarCache,
@@ -199,8 +199,9 @@
       var button=event.target&&event.target.closest?event.target.closest('[data-action],[data-v2-action]'):null;
       if(!button)return;
       var action=button.getAttribute('data-action')||button.getAttribute('data-v2-action')||'';
-      if(action==='diagnosticar')forzarRed({forzarMs:10000,permitirRespaldo:false});
-      else if(['refrescar','reload-periods','reload-careers','load-stats','actualizar-datos'].indexOf(action)>=0)forzarRed({forzarMs:10000,permitirRespaldo:true});
+      if(action==='diagnosticar')forzarRed({forzarMs:10000,permitirRespaldo:false,forzarVistaAdmin:false});
+      else if(['refrescar','actualizar-datos'].indexOf(action)>=0)forzarRed({forzarMs:10000,permitirRespaldo:true,forzarVistaAdmin:true});
+      else if(['reload-periods','reload-careers','load-stats'].indexOf(action)>=0)forzarRed({forzarMs:10000,permitirRespaldo:true,forzarVistaAdmin:false});
     },true);
   }
 
