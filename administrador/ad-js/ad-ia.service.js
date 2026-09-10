@@ -2,13 +2,21 @@
 (function(window){
   'use strict';
   var CATALOGO=[
-    {id:'gemini',nombre:'Google Gemini',tipo:'gemini',prioridad:1,modelo:'gemini-2.0-flash'},
-    {id:'groq',nombre:'Groq',tipo:'openai-compatible',prioridad:2,endpoint:'https://api.groq.com/openai/v1/chat/completions',modelo:'llama-3.1-8b-instant'},
-    {id:'cerebras',nombre:'Cerebras',tipo:'openai-compatible',prioridad:3,endpoint:'https://api.cerebras.ai/v1/chat/completions',modelo:'qwen-3-32b'},
-    {id:'nvidia',nombre:'NVIDIA NIM',tipo:'openai-compatible',prioridad:4,endpoint:'https://integrate.api.nvidia.com/v1/chat/completions',modelo:'meta/llama-3.1-8b-instruct'},
-    {id:'github_models',nombre:'GitHub Models',tipo:'openai-compatible',prioridad:5,endpoint:'https://models.github.ai/inference/chat/completions',modelo:'openai/gpt-4.1-mini'},
-    {id:'openrouter',nombre:'OpenRouter Free Router',tipo:'openai-compatible',prioridad:6,endpoint:'https://openrouter.ai/api/v1/chat/completions',modelo:'openrouter/free'},
-    {id:'huggingface',nombre:'Hugging Face Inference',tipo:'openai-compatible',prioridad:7,endpoint:'https://router.huggingface.co/v1/chat/completions',modelo:'Qwen/Qwen3-8B'}
+    {id:'cerebras',nombre:'Cerebras',tipo:'openai-compatible',prioridad:1,endpoint:'https://api.cerebras.ai/v1/chat/completions',modelo:'gpt-oss-120b'},
+    {id:'groq',nombre:'Groq',tipo:'openai-compatible',prioridad:2,endpoint:'https://api.groq.com/openai/v1/chat/completions',modelo:'openai/gpt-oss-20b'},
+    {id:'mistral',nombre:'Mistral AI',tipo:'openai-compatible',prioridad:3,endpoint:'https://api.mistral.ai/v1/chat/completions',modelo:'mistral-small-latest'},
+    {id:'gemini',nombre:'Gemini',tipo:'gemini',prioridad:4,modelo:'gemini-3.5-flash'},
+    {id:'cohere',nombre:'Cohere',tipo:'openai-compatible',prioridad:5,endpoint:'https://api.cohere.ai/compatibility/v1/chat/completions',modelo:'command-a-plus-05-2026'},
+    {id:'cloudflare',nombre:'Cloudflare Workers AI',tipo:'openai-compatible',prioridad:6,modelo:'@cf/meta/llama-3.2-3b-instruct'},
+    {id:'scaleway',nombre:'Scaleway Generative APIs',tipo:'openai-compatible',prioridad:7,endpoint:'https://api.scaleway.ai/v1/chat/completions',modelo:'gpt-oss-120b'},
+    {id:'openrouter',nombre:'OpenRouter',tipo:'openai-compatible',prioridad:8,endpoint:'https://openrouter.ai/api/v1/chat/completions',modelo:'openrouter/free'},
+    {id:'nvidia',nombre:'NVIDIA NIM',tipo:'openai-compatible',prioridad:9,endpoint:'https://integrate.api.nvidia.com/v1/chat/completions',modelo:'meta/llama-3.3-70b-instruct'},
+    {id:'sambanova',nombre:'SambaNova Cloud',tipo:'openai-compatible',prioridad:10,endpoint:'https://api.sambanova.ai/v1/chat/completions',modelo:'Meta-Llama-3.3-70B-Instruct'},
+    {id:'ovhcloud',nombre:'OVHcloud AI Endpoints',tipo:'openai-compatible',prioridad:11,endpoint:'https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/chat/completions',modelo:'gpt-oss-20b'},
+    {id:'fireworks',nombre:'Fireworks AI',tipo:'openai-compatible',prioridad:12,endpoint:'https://api.fireworks.ai/inference/v1/chat/completions',modelo:'accounts/fireworks/models/gpt-oss-120b'},
+    {id:'hyperbolic',nombre:'Hyperbolic',tipo:'openai-compatible',prioridad:13,endpoint:'https://api.hyperbolic.xyz/v1/chat/completions',modelo:'meta-llama/Meta-Llama-3.1-70B-Instruct'},
+    {id:'baseten',nombre:'Baseten',tipo:'openai-compatible',prioridad:14,endpoint:'https://inference.baseten.co/v1/chat/completions',modelo:'zai-org/GLM-5'},
+    {id:'huggingface',nombre:'Hugging Face',tipo:'openai-compatible',prioridad:15,endpoint:'https://router.huggingface.co/v1/chat/completions',modelo:'openai/gpt-oss-120b:cheapest'}
   ];
   function texto(v){return String(v===null||v===undefined?'':v).trim();}
   function numero(v,f){var n=Number(v);return Number.isFinite(n)?n:Number(f||0);}
@@ -19,7 +27,7 @@
   function leer(id){return solicitar('admin-read',{providerId:id}).then(function(r){return r.proveedor?normalizar(r.proveedor):null;});}
   function guardar(datos){return solicitar('admin-save',{provider:datos||{}}).then(function(r){return{ok:true,proveedor:normalizar(r.proveedor)};});}
   function cambiarEstado(id,activo){return solicitar('admin-toggle',{providerId:id,activo:activo===true});}
-  function sembrarCatalogo(){return Promise.all(CATALOGO.map(function(item){return guardar(Object.assign({},item,{activo:false})).catch(function(){return null;});})).then(function(resultados){return{ok:true,totalCreados:resultados.filter(Boolean).length};});}
+  function sembrarCatalogo(){return listar().then(function(actuales){var mapa={};(actuales||[]).forEach(function(p){mapa[p.id]=p;});var creados=0;var actualizados=0;var cadena=Promise.resolve();CATALOGO.forEach(function(item){cadena=cadena.then(function(){var actual=mapa[item.id]||null;var payload=Object.assign({},item,{activo:actual?actual.activo:false,timeoutMs:actual?actual.timeoutMs:45000,maxTokens:actual?actual.maxTokens:3000,temperatura:actual?actual.temperatura:0.3});return guardar(payload).then(function(){if(actual)actualizados+=1;else creados+=1;}).catch(function(){return null;});});});return cadena.then(function(){return{ok:true,totalCreados:creados,totalActualizados:actualizados,totalCatalogo:CATALOGO.length};});});}
   function probar(id){return solicitar('admin-test',{providerId:id,prompt:'Responde únicamente JSON válido. Genera exactamente tres títulos académicos de 15 a 25 palabras sobre mejora del aprendizaje mediante tecnología.'}).then(function(r){return{ok:true,proveedor:id,nombre:id,latenciaMs:Number(r.latencyMs||0),texto:r.text};});}
   window.ADIAService={catalogo:function(){return CATALOGO.slice();},listar:listar,leer:leer,guardar:guardar,cambiarEstado:cambiarEstado,sembrarCatalogo:sembrarCatalogo,probar:probar,limpiarProveedor:normalizar,proxyUrl:function(){return base()+'/api/ia';}};
 })(window);
