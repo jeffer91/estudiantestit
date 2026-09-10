@@ -111,6 +111,7 @@
   cargar('js/ia.recomendacion.ui.js?v=4.0.0');
   cargar('js/ia.recomendacion.variable.patch.js?v=1.0.0');
   cargar('js/ia.nueve.integracion.js?v=3.2.0');
+  cargar('js/ia.fallback.secuencial.patch.js?v=1.0.0');
   cargar('js/estudiante.arquitectura.v2.js?v=2.1.0');
   cargar('js/estudiante.envio.modal.js?v=1.0.1');
 
