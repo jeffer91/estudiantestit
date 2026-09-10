@@ -6,6 +6,144 @@ let providersCache = [];
 let providersCacheExpiresAt = 0;
 let providersPending = null;
 
+const CATALOGO_IA_15 = [
+  {
+    id: 'cerebras',
+    nombre: 'Cerebras',
+    tipo: 'openai-compatible',
+    prioridad: 1,
+    endpoint: 'https://api.cerebras.ai/v1/chat/completions',
+    modelo: 'gpt-oss-120b',
+    descripcion: 'Motor principal de alta capacidad.'
+  },
+  {
+    id: 'groq',
+    nombre: 'Groq',
+    tipo: 'openai-compatible',
+    prioridad: 2,
+    endpoint: 'https://api.groq.com/openai/v1/chat/completions',
+    modelo: 'openai/gpt-oss-20b',
+    descripcion: 'Motor rápido de respaldo prioritario.'
+  },
+  {
+    id: 'mistral',
+    nombre: 'Mistral AI',
+    tipo: 'openai-compatible',
+    prioridad: 3,
+    endpoint: 'https://api.mistral.ai/v1/chat/completions',
+    modelo: 'mistral-small-latest',
+    descripcion: 'Motor general de titulación.'
+  },
+  {
+    id: 'gemini',
+    nombre: 'Gemini',
+    tipo: 'gemini',
+    prioridad: 4,
+    endpoint: '',
+    modelo: 'gemini-3.5-flash',
+    descripcion: 'Motor Gemini para generación académica.'
+  },
+  {
+    id: 'cohere',
+    nombre: 'Cohere',
+    tipo: 'openai-compatible',
+    prioridad: 5,
+    endpoint: 'https://api.cohere.ai/compatibility/v1/chat/completions',
+    modelo: 'command-a-plus-05-2026',
+    descripcion: 'Motor Cohere mediante API compatible con OpenAI.'
+  },
+  {
+    id: 'cloudflare',
+    nombre: 'Cloudflare Workers AI',
+    tipo: 'openai-compatible',
+    prioridad: 6,
+    endpoint: '',
+    modelo: '@cf/meta/llama-3.2-3b-instruct',
+    descripcion: 'Requiere endpoint con Account ID de Cloudflare Workers AI.'
+  },
+  {
+    id: 'scaleway',
+    nombre: 'Scaleway Generative APIs',
+    tipo: 'openai-compatible',
+    prioridad: 7,
+    endpoint: 'https://api.scaleway.ai/v1/chat/completions',
+    modelo: 'gpt-oss-120b',
+    descripcion: 'Motor europeo compatible con OpenAI.'
+  },
+  {
+    id: 'openrouter',
+    nombre: 'OpenRouter',
+    tipo: 'openai-compatible',
+    prioridad: 8,
+    endpoint: 'https://openrouter.ai/api/v1/chat/completions',
+    modelo: 'openrouter/free',
+    descripcion: 'Router gratuito de respaldo.'
+  },
+  {
+    id: 'nvidia',
+    nombre: 'NVIDIA NIM',
+    tipo: 'openai-compatible',
+    prioridad: 9,
+    endpoint: 'https://integrate.api.nvidia.com/v1/chat/completions',
+    modelo: 'meta/llama-3.3-70b-instruct',
+    descripcion: 'Motor NVIDIA NIM de respaldo.'
+  },
+  {
+    id: 'sambanova',
+    nombre: 'SambaNova Cloud',
+    tipo: 'openai-compatible',
+    prioridad: 10,
+    endpoint: 'https://api.sambanova.ai/v1/chat/completions',
+    modelo: 'Meta-Llama-3.3-70B-Instruct',
+    descripcion: 'Motor SambaNova de respaldo.'
+  },
+  {
+    id: 'ovhcloud',
+    nombre: 'OVHcloud AI Endpoints',
+    tipo: 'openai-compatible',
+    prioridad: 11,
+    endpoint: 'https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/chat/completions',
+    modelo: 'gpt-oss-20b',
+    descripcion: 'Motor OVHcloud compatible con OpenAI.'
+  },
+  {
+    id: 'fireworks',
+    nombre: 'Fireworks AI',
+    tipo: 'openai-compatible',
+    prioridad: 12,
+    endpoint: 'https://api.fireworks.ai/inference/v1/chat/completions',
+    modelo: 'accounts/fireworks/models/gpt-oss-120b',
+    descripcion: 'Motor Fireworks AI de respaldo.'
+  },
+  {
+    id: 'hyperbolic',
+    nombre: 'Hyperbolic',
+    tipo: 'openai-compatible',
+    prioridad: 13,
+    endpoint: 'https://api.hyperbolic.xyz/v1/chat/completions',
+    modelo: 'meta-llama/Meta-Llama-3.1-70B-Instruct',
+    descripcion: 'Motor Hyperbolic de respaldo.'
+  },
+  {
+    id: 'baseten',
+    nombre: 'Baseten',
+    tipo: 'openai-compatible',
+    prioridad: 14,
+    endpoint: 'https://inference.baseten.co/v1/chat/completions',
+    modelo: 'zai-org/GLM-5',
+    descripcion: 'Motor Baseten Model APIs de respaldo.'
+  },
+  {
+    id: 'huggingface',
+    nombre: 'Hugging Face',
+    tipo: 'openai-compatible',
+    prioridad: 15,
+    endpoint: 'https://router.huggingface.co/v1/chat/completions',
+    modelo: 'openai/gpt-oss-120b:cheapest',
+    descripcion: 'Último motor de respaldo mediante Inference Providers.'
+  }
+];
+
 function providerId(value) {
   return text(value).toLowerCase().replace(/[^a-z0-9_-]/g, '');
 }
@@ -61,6 +199,50 @@ function publicMotor(provider, index) {
   };
 }
 
+function catalogNeedsSync(current, desired) {
+  if (!current) return true;
+  if (text(current.nombre) !== text(desired.nombre)) return true;
+  if (text(current.tipo || 'openai-compatible') !== text(desired.tipo || 'openai-compatible')) return true;
+  if (Number(current.prioridad || 999) !== Number(desired.prioridad || 999)) return true;
+  if (text(current.modelo || current.model) !== text(desired.modelo || desired.model)) return true;
+  if (text(desired.endpoint) && text(current.endpoint) !== text(desired.endpoint)) return true;
+  if (text(desired.descripcion) && text(current.descripcion) !== text(desired.descripcion)) return true;
+  return false;
+}
+
+async function ensureCatalog(env) {
+  const current = await listAiProviders(env, true);
+  const byId = new Map(
+    current.map((provider) => [providerId(provider.id || provider.proveedor || provider.nombre), provider])
+  );
+  let created = 0;
+  let updated = 0;
+
+  for (const desired of CATALOGO_IA_15) {
+    const existing = byId.get(desired.id);
+    if (!catalogNeedsSync(existing, desired)) continue;
+
+    await saveAiProvider(env, {
+      ...desired,
+      activo: existing ? existing.activo === true : false,
+      timeoutMs: Number(existing && existing.timeoutMs || 45000),
+      maxTokens: Number(existing && existing.maxTokens || 3000),
+      temperatura: Number(existing && existing.temperatura ?? 0.3)
+    });
+
+    if (existing) updated += 1;
+    else created += 1;
+  }
+
+  clearProvidersCache();
+  return {
+    proveedores: await listAiProviders(env, true),
+    created,
+    updated,
+    totalCatalogo: CATALOGO_IA_15.length
+  };
+}
+
 async function activeProviders(env, force = false) {
   const now = Date.now();
 
@@ -89,7 +271,7 @@ async function activeProviders(env, force = false) {
 
 function motorIndex(data, total) {
   const raw = text(data.motorId || data.providerId || data.provider || 'motor_1').toLowerCase();
-  const match = raw.match(/(?:motor[_-]?)?(\d+)/);
+  const match = raw.match(/(?:motor[_-]?)(\d+)/);
   const explicit = Number(data.motorIndex);
   let index = Number.isFinite(explicit) && explicit >= 0
     ? explicit
@@ -194,10 +376,15 @@ export async function onRequest({ request, env }) {
         return jsonReply(request, { ok: false, mensaje: 'Acción no permitida.' }, 403);
       }
       if (action === 'admin-list') {
-        clearProvidersCache();
+        const catalog = await ensureCatalog(env);
         return jsonReply(request, {
           ok: true,
-          proveedores: (await listAiProviders(env, true)).map(adminProvider)
+          proveedores: catalog.proveedores.map(adminProvider),
+          catalogo: {
+            total: catalog.totalCatalogo,
+            creados: catalog.created,
+            actualizados: catalog.updated
+          }
         });
       }
       if (action === 'admin-toggle') {
