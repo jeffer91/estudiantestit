@@ -225,9 +225,9 @@ async function ensureCatalog(env) {
     await saveAiProvider(env, {
       ...desired,
       activo: existing ? existing.activo === true : false,
-      timeoutMs: Number(existing && existing.timeoutMs || 45000),
-      maxTokens: Number(existing && existing.maxTokens || 3000),
-      temperatura: Number(existing && existing.temperatura ?? 0.3)
+      timeoutMs: Number((existing && existing.timeoutMs) || 45000),
+      maxTokens: Number((existing && existing.maxTokens) || 3000),
+      temperatura: Number((existing && existing.temperatura) ?? 0.3)
     });
 
     if (existing) updated += 1;
