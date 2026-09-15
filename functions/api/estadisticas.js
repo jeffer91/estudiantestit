@@ -7,6 +7,7 @@ import {
   saveAdminPeriod
 } from '../_lib/estadisticas-admin.js';
 import { buildFirebaseTitlesReport } from '../_lib/firebase-titulos-report.js';
+import { buildAdminReviewReport } from '../_lib/revisiones-admin.js';
 import { jsonReply, readJson, rejectUnknownOrigin, role, text } from '../_lib/http.js';
 
 export async function onRequestOptions(context) {
@@ -29,6 +30,7 @@ async function execute(action, data, env) {
   if (normalized === 'ADMIN_LISTAR_CARRERAS') return listAdminCareers(env);
   if (normalized === 'ADMIN_ASIGNAR_CARRERA_COORDINADOR') return assignCareerCoordinator(data, env);
   if (normalized === 'ADMIN_REPORTE_FIREBASE_TITULOS') return buildFirebaseTitlesReport(env);
+  if (normalized === 'ADMIN_REPORTE_REVISIONES') return buildAdminReviewReport(data, env);
   throw new Error('Acción administrativa no implementada: ' + action);
 }
 
@@ -45,7 +47,11 @@ export async function onRequestGet(context) {
     const result = await execute(action, {
       periodo: url.searchParams.get('periodo') || '',
       periodoId: url.searchParams.get('periodoId') || '',
-      carrera: url.searchParams.get('carrera') || ''
+      carrera: url.searchParams.get('carrera') || '',
+      rol: url.searchParams.get('rol') || '',
+      tipoTrabajo: url.searchParams.get('tipoTrabajo') || '',
+      revisorId: url.searchParams.get('revisorId') || '',
+      buscar: url.searchParams.get('buscar') || ''
     }, context.env);
     return jsonReply(context.request, result);
   } catch (error) {
