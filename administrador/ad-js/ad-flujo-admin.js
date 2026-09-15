@@ -131,10 +131,11 @@
     if(!installPanel())return;
     var modal=$('ad-v2-detail-modal');
     var panel=$('ad-admin-flow');
-    if(!modal||!panel||modal.hidden){panel.hidden=true;return;}
+    if(!modal||!panel)return;
+    if(modal.hidden){if(!panel.hidden)panel.hidden=true;return;}
     var student=currentStudent();
-    if(!student||!text(student.envioId)){panel.hidden=true;return;}
-    panel.hidden=false;
+    if(!student||!text(student.envioId)){if(!panel.hidden)panel.hidden=true;return;}
+    if(panel.hidden)panel.hidden=false;
 
     var cedula=text(student.cedula);
     if(lastCedula!==cedula){
@@ -153,7 +154,7 @@
     var alreadyApproved=current==='APROBADO_FINAL';
     var hasCoordinatorTitle=Boolean(text(student.tituloCoordinador));
     if(toCoordinator){toCoordinator.disabled=saving||alreadyCoordinator;toCoordinator.title=alreadyCoordinator?'El caso ya está en Coordinación.':'';}
-    if(toInvestigator){toInvestigator.disabled=saving||alreadyInvestigator||!hasCoordinatorTitle;toInvestigator.title=!hasCoordinatorTitle?'No existe un título validado por Coordinación.':(alreadyInvestigator?'El caso ya está en Investigación.':'');}
+    if(toInvestigator){toInvestigator.disabled=saving||alreadyCoordinator||alreadyInvestigator||!hasCoordinatorTitle;toInvestigator.title=alreadyCoordinator?'El caso espera una nueva revisión de Coordinación.':(!hasCoordinatorTitle?'No existe un título validado por Coordinación.':(alreadyInvestigator?'El caso ya está en Investigación.':''));}
     if(approve){approve.disabled=saving||alreadyApproved;approve.title=alreadyApproved?'El caso ya tiene aprobación final.':'';}
   }
 
