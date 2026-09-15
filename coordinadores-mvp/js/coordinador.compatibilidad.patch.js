@@ -55,10 +55,14 @@
   function carrerasCanonicas(valor){return unicas(lista(valor).map(canonica));}
   function evidenciaValidacionCoordinacion(envio){
     envio=envio||{};
-    var resultado=texto(envio.resultadoCoordinador).toUpperCase();
+    var raw=envio.raw&&typeof envio.raw==='object'?envio.raw:{};
+    var resultado=texto(envio.resultadoCoordinador||raw.resultadoCoordinador).toUpperCase();
+    var titulo=texto(envio.tituloCoordinador||raw.tituloCoordinador||raw.tituloValidadoCoordinador);
+    var fecha=texto(envio.fechaValidacionCoordinador||raw.fechaValidacionCoordinador);
     return verdadero(envio.validadoCoordinador)||
+      verdadero(raw.validadoCoordinador)||
       resultado.indexOf('APROBADO_')===0||
-      Boolean(texto(envio.tituloCoordinador)&&texto(envio.fechaValidacionCoordinador));
+      Boolean(titulo&&fecha);
   }
   function normalizarEstadoFlujo(envio){
     var actual=estado(envio&&envio.estadoProceso||envio&&envio.estado||envio&&envio.estadoFinal);
