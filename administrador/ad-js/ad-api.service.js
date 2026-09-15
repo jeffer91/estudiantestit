@@ -209,6 +209,7 @@
   cargarComplemento('./ad-js/ad-servicios.app.js?v=3.6.0','data-ad-servicios');
   cargarComplemento('./ad-js/ad-correo-outlook.js?v=3.6.0','data-ad-correo-outlook');
   cargarComplemento('./ad-js/ad-administracion-global.js?v=3.6.0','data-ad-administracion-global');
+  cargarComplemento('./ad-js/ad-flujo-admin.js?v=3.6.1','data-ad-flujo-admin');
   cargarComplemento('./ad-js/ad-pdf-firebase.js?v=3.6.0','data-ad-pdf-firebase');
   cargarComplemento('./ad-js/ad-version.js?v=3.6.0','data-ad-version');
 })(window);
