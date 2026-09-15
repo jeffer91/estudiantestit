@@ -1,4 +1,4 @@
-/* Compatibilidad de Coordinadores: comentarios de devolución y alias controlados de carreras. */
+/* Compatibilidad de Coordinadores: comentarios de devolución, alias de carreras y estado consolidado. */
 (function(window){
   'use strict';
 
@@ -21,6 +21,8 @@
 
   function texto(valor){return String(valor===null||valor===undefined?'':valor).replace(/\s+/g,' ').trim();}
   function firma(valor){return texto(valor).toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Z0-9]+/g,' ').replace(/\s+/g,' ').trim();}
+  function estado(valor){return firma(valor).replace(/ /g,'_');}
+  function verdadero(valor){return valor===true||['TRUE','SI','SÍ','1','YES'].indexOf(texto(valor).toUpperCase())>=0;}
   function lista(valor){
     if(Array.isArray(valor))return valor.map(texto).filter(Boolean);
     return texto(valor).split(/[,;|\n]+/).map(texto).filter(Boolean);
@@ -51,6 +53,25 @@
     return unicas(salida);
   }
   function carrerasCanonicas(valor){return unicas(lista(valor).map(canonica));}
+  function evidenciaValidacionCoordinacion(envio){
+    envio=envio||{};
+    var resultado=texto(envio.resultadoCoordinador).toUpperCase();
+    return verdadero(envio.validadoCoordinador)||
+      resultado.indexOf('APROBADO_')===0||
+      Boolean(texto(envio.tituloCoordinador)&&texto(envio.fechaValidacionCoordinador));
+  }
+  function normalizarEstadoFlujo(envio){
+    var actual=estado(envio&&envio.estadoProceso||envio&&envio.estado||envio&&envio.estadoFinal);
+    var previos=['PENDIENTE_REVISION','PENDIENTE_COORDINADOR','PENDIENTE_SYNC','ENVIADO','PENDIENTE','APROBADO','REEMPLAZADO'];
+    if(evidenciaValidacionCoordinacion(envio)&&previos.indexOf(actual)>=0){
+      envio.estado='PENDIENTE_INVESTIGADOR';
+      envio.estadoProceso='PENDIENTE_INVESTIGADOR';
+      envio.estadoFinal='PENDIENTE_INVESTIGADOR';
+      envio.requiereAccionDe='INVESTIGACION';
+      envio.puedeRevisar=false;
+    }
+    return envio;
+  }
   function normalizarEnvio(envio){
     if(!envio||typeof envio!=='object')return envio;
     var copia=Object.assign({},envio);
@@ -63,7 +84,7 @@
       copia.nombreCarrera=nombre;
       copia.carreraNombre=nombre;
     }
-    return copia;
+    return normalizarEstadoFlujo(copia);
   }
   function comentarioResolucion(resolucion){
     resolucion=resolucion||{};
@@ -122,7 +143,36 @@
     if(typeof original.consultarEnvioPorCedula==='function'){
       servicio.consultarEnvioPorCedula=function(){
         var args=Array.prototype.slice.call(arguments);
-        return Promise.resolve(original.consultarEnvioPorCedula.apply(original,args)).then(normalizarEnvio);
+        var idEsperado=texto(args[3]);
+        return Promise.resolve(original.consultarEnvioPorCedula.apply(original,args)).then(function(actual){
+          var normalizado=normalizarEnvio(actual);
+          var st=window.CoordinadorMVPState;
+          var listaActual=st&&typeof st.obtenerEnvios==='function'?st.obtenerEnvios():[];
+          var base=(Array.isArray(listaActual)?listaActual:[]).find(function(item){
+            var id=texto(item&&item.id||item&&item._docId||item&&item._clave);
+            return idEsperado&&id===idEsperado;
+          });
+          if(base){
+            base=normalizarEnvio(base);
+            /* La fila seleccionada proviene de la consulta filtrada por estado y
+               es la referencia del expediente abierto. Evitamos que una lectura
+               histórica por cédula vuelva a mostrarlo como "Por revisar". */
+            normalizado=Object.assign({},normalizado,{
+              id:base.id||normalizado.id,
+              _clave:base._clave||normalizado._clave,
+              estado:base.estado||normalizado.estado,
+              estadoProceso:base.estadoProceso||normalizado.estadoProceso,
+              estadoFinal:base.estadoFinal||normalizado.estadoFinal,
+              puedeRevisar:base.puedeRevisar,
+              requiereAccionDe:base.requiereAccionDe||normalizado.requiereAccionDe,
+              carrera:base.carrera||normalizado.carrera,
+              nombreCarrera:base.nombreCarrera||normalizado.nombreCarrera,
+              carreraNombre:base.carreraNombre||normalizado.carreraNombre,
+              codigoCarrera:base.codigoCarrera||normalizado.codigoCarrera
+            });
+          }
+          return normalizarEnvio(normalizado);
+        });
       };
     }
 
