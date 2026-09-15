@@ -5,7 +5,7 @@ import process from 'node:process';
 const root = process.cwd();
 const source = path.join(root, 'administrador');
 const output = path.join(root, '.pages-administrador');
-const VERSION_ADMIN = '3.6.0';
+const VERSION_ADMIN = '3.6.3';
 
 if (!fs.existsSync(source) || !fs.statSync(source).isDirectory()) {
   throw new Error('No se encontró la carpeta administrador.');
@@ -74,8 +74,7 @@ for (const required of [
   path.join(output, 'ad-js', 'ad-performance.patch.js'),
   path.join(output, 'ad-js', 'ad-trabajo-titulacion-admin.patch.js'),
   path.join(output, 'ad-js', 'ad-titulos-admin.patch.js'),
-  path.join(output, 'ad-js', 'ad-estadisticas-control.patch.js'),
-  path.join(output, 'ad-js', 'ad-estadisticas-dashboard.patch.js'),
+  path.join(output, 'ad-js', 'ad-estadisticas-minimal.js'),
   path.join(output, 'ad-js', 'ad-correo-outlook.js'),
   path.join(output, 'ad-js', 'ad-pdf-firebase.js'),
   path.join(output, 'ad-js', 'ad-version.js')
@@ -98,6 +97,6 @@ console.log('[Pages administrador] Carpeta preparada en .pages-administrador.');
 console.log(`[Pages administrador] Versión ${VERSION_ADMIN}.`);
 console.log('[Pages administrador] Ruta pública principal: /.');
 console.log('[Pages administrador] Web y Electron cargan los mismos complementos desde ad-servicios.app.js.');
-console.log('[Pages administrador] Incluye dashboard operativo de estadísticas, períodos, carreras, lista global, pendientes globales por coordinador, corrección administrativa de títulos, WhatsApp, Outlook, PDF y acciones administrativas para Trabajo de Titulación.');
+console.log('[Pages administrador] Incluye estadísticas minimalistas con General, Coordinadores e Investigadores, reportes PDF por revisor, períodos, carreras, lista global, corrección administrativa de títulos, WhatsApp, Outlook y acciones administrativas para Trabajo de Titulación.');
 console.log('[Pages administrador] La carpeta functions permanece en la raíz para habilitar /api/*.');
 console.log('[Pages administrador] Protege este proyecto con Cloudflare Access antes de usarlo en producción.');

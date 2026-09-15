@@ -2,7 +2,7 @@
 (function(window,document){
   'use strict';
 
-  var VERSION='3.6.2';
+  var VERSION='3.6.3';
   var servicios=[];
   function api(){return window.ADAPIService||null;}
   function $(id){return document.getElementById(id);}
@@ -31,7 +31,6 @@
     cargarComplemento('./ad-js/ad-performance.patch.js','data-ad-performance');
     cargarComplemento('./ad-js/ad-trabajo-titulacion-admin.patch.js','data-ad-trabajo-titulacion-admin');
     cargarComplemento('./ad-js/ad-titulos-admin.patch.js','data-ad-titulos-admin');
-    cargarComplemento('./ad-js/ad-estadisticas-control.patch.js','data-ad-estadisticas-control');
     cargarComplemento('./ad-js/ad-estadisticas-minimal.js','data-ad-estadisticas-minimal');
     cargarComplemento('./ad-js/ad-estado-coordinadores-v2.patch.js','data-ad-estado-coordinadores');
   }

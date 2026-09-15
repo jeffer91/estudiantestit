@@ -104,6 +104,9 @@ export async function buildAdminReviewReport(payload = {}, env) {
   }
 
   const eventos = await queryEqual('TITULOS', 'workflow_eventos', 'rol', rol, 10000, env);
+  if (eventos.length >= 10000) {
+    throw new Error('El historial alcanzó el límite seguro de 10.000 revisiones. Aplica filtros más específicos antes de generar el reporte.');
+  }
   const envios = await cargarEnvios(eventos.map((item) => item.envioId), env);
   const enviosById = new Map(envios.map((item) => [text(item.id), item]));
 
@@ -128,19 +131,22 @@ export async function buildAdminReviewReport(payload = {}, env) {
       tituloDespues: text(event.tituloDespues),
       observacion: text(event.observacion),
       fecha: text(event.fecha || event.actualizadoEn || event._updateTime),
-      cedula: text(envio.cedula || envio.numeroIdentificacion),
-      estudiante: text(envio.nombres || envio.estudiante || envio.nombreCompleto),
-      carrera: text(envio.carreraNombre || envio.carrera),
-      periodoId: text(envio.periodoId),
-      periodo: text(envio.periodoLabel || envio.periodoNombre || envio.periodo || envio.periodoId),
-      tipoTrabajo: tipoTrabajo(envio.tipoTrabajo),
-      tipoTrabajoLabel: tipoTrabajo(envio.tipoTrabajo) === 'TRABAJO_TITULACION' ? 'Trabajo de Titulación' : 'Artículo académico'
+      cedula: text(event.cedula || envio.cedula || envio.numeroIdentificacion),
+      estudiante: text(event.estudiante || event.nombres || envio.nombres || envio.estudiante || envio.nombreCompleto),
+      carrera: text(event.carrera || envio.carreraNombre || envio.carrera),
+      periodoId: text(event.periodoId || envio.periodoId),
+      periodo: text(event.periodo || event.periodoLabel || envio.periodoLabel || envio.periodoNombre || envio.periodo || envio.periodoId),
+      tipoTrabajo: tipoTrabajo(event.tipoTrabajo || envio.tipoTrabajo),
+      tipoTrabajoLabel: tipoTrabajo(event.tipoTrabajo || envio.tipoTrabajo) === 'TRABAJO_TITULACION'
+        ? 'Trabajo de Titulación'
+        : tipoTrabajo(event.tipoTrabajo || envio.tipoTrabajo) === 'ARTICULO_ACADEMICO'
+          ? 'Artículo académico'
+          : 'Sin tipo registrado'
     };
     row.clasificacion = clasificarRevision(row);
     return row;
   }).filter((row) => {
-    const envio = enviosById.get(row.envioId) || {};
-    if (!mismoPeriodo(envio, requestedPeriod)) return false;
+    if (!mismoPeriodo(row, requestedPeriod)) return false;
     if (requestedCareer && normal(row.carrera) !== requestedCareer) return false;
     if (requestedType && row.tipoTrabajo !== requestedType) return false;
     if (requestedReviewer && row.revisorId !== requestedReviewer && reviewerKey(row) !== requestedReviewer) return false;

@@ -5,7 +5,7 @@
   if(window.ADAdminStatsMinimal)return;
   window.ADAdminStatsMinimal=true;
 
-  var VERSION='3.6.2';
+  var VERSION='3.6.3';
   var JS_PDF='https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js';
   var AUTO_TABLE='https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js';
   var state={

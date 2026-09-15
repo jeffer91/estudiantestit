@@ -2,7 +2,7 @@
 (function(window,document){
   'use strict';
 
-  var VERSION='3.6.0';
+  var VERSION='3.6.3';
   var state={
     periodos:[],principal:null,carreras:[],coordinadores:[],investigadores:[],titulos:[],proveedores:[],
     investigacionResumen:{ultimoPorEnvio:{},bloqueos:[],revisiones:[]},
@@ -44,7 +44,7 @@
     document.querySelectorAll('[data-ad-view]').forEach(function(section){section.hidden=section.id!==id;});
     document.querySelectorAll('[data-ad-view-target]').forEach(function(link){var active=link.getAttribute('data-ad-view-target')===id;link.classList.toggle('is-active',active);if(active)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');});
     try{window.location.hash=id;}catch(error){}
-    if(id==='ad-seccion-estadisticas'&&!state.estadisticas&&state.periodos.length)cargarEstadisticas();
+    if(id==='ad-seccion-estadisticas'&&!window.ADAdminStatsMinimal&&!state.estadisticas&&state.periodos.length)cargarEstadisticas();
     if(id==='ad-seccion-investigadores'&&!state.investigadores.length)cargarInvestigadores();
   }
 

@@ -1,8 +1,6 @@
 /* Fachada administrativa optimizada.
- *
- * La reconstrucción completa UTET + TÍTULOS se conserva como fuente de verdad,
- * pero el Administrador trabaja normalmente sobre una vista materializada por
- * período. Esto evita repetir cruces costosos para Lista global y Estadísticas.
+ * La vista materializada se conserva como optimización, pero cada lectura se
+ * reconcilia con el documento real de envío para no perder estados del flujo.
  */
 import {
   assignCareerCoordinator,
@@ -13,10 +11,10 @@ import {
 } from './admin-global-v8.js';
 import {
   readAdminGlobalView,
-  readAdminStatisticsView,
   saveAdminView,
   statisticsFromGlobal
 } from './admin-view.js';
+import { reconcileAdminGlobalState } from './admin-global-state.js';
 import { samePeriod, text } from './firestore-fixed.js';
 
 export {
@@ -32,9 +30,7 @@ function periodItems(catalog) {
 
 export function enrichAdminPeriodPayload(payload = {}, catalog = {}) {
   const input = { ...(payload || {}) };
-  const requested = text(
-    input.periodoId || input.periodoLabel || input.periodo || input.documentId
-  );
+  const requested = text(input.periodoId || input.periodoLabel || input.periodo || input.documentId);
   if (!requested) return input;
 
   const items = periodItems(catalog);
@@ -50,12 +46,10 @@ export function enrichAdminPeriodPayload(payload = {}, catalog = {}) {
   );
 
   if (!target) return input;
-
   const canonical = text(target.id || target.periodoId || requested);
   const label = text(target.label || target.periodoLabel);
   const documentId = text(target.documentId);
   const existingPeriod = text(input.periodo);
-
   return {
     ...input,
     periodoId: text(input.periodoId) || canonical,
@@ -67,11 +61,8 @@ export function enrichAdminPeriodPayload(payload = {}, catalog = {}) {
 
 async function resolveAdminPeriodPayload(payload, env) {
   const input = { ...(payload || {}) };
-  const requested = text(
-    input.periodoId || input.periodoLabel || input.periodo || input.documentId
-  );
+  const requested = text(input.periodoId || input.periodoLabel || input.periodo || input.documentId);
   if (!requested) return input;
-
   try {
     const catalog = await listAdminPeriodsCatalog(env);
     return enrichAdminPeriodPayload(input, catalog);
@@ -80,18 +71,17 @@ async function resolveAdminPeriodPayload(payload, env) {
   }
 }
 
+async function reconciled(view, env) {
+  return view ? reconcileAdminGlobalState(view, env) : null;
+}
+
 async function rebuildGlobal(payload, env) {
-  const rebuilt = await buildAdminGlobalListV8(payload, env);
+  const raw = await buildAdminGlobalListV8(payload, env);
+  const rebuilt = await reconcileAdminGlobalState(raw, env);
   try {
     return await saveAdminView(rebuilt, env);
   } catch (_error) {
-    /* La vista es una optimización, nunca la fuente de verdad. Si no puede
-       guardarse, el Administrador sigue funcionando con el resultado real. */
-    return {
-      ...rebuilt,
-      vistaAdministrativa: false,
-      vistaError: true
-    };
+    return { ...rebuilt, vistaAdministrativa: false, vistaError: true };
   }
 }
 
@@ -99,44 +89,28 @@ export async function buildAdminGlobalList(payload = {}, env) {
   if (payload.forzarVista !== true) {
     try {
       const direct = await readAdminGlobalView(payload, env);
-      if (direct) return direct;
-    } catch (_error) {
-      /* Si la vista está dañada o incompleta, se reconstruye desde las fuentes. */
-    }
+      if (direct) return reconciled(direct, env);
+    } catch (_error) {}
   }
 
   const resolved = await resolveAdminPeriodPayload(payload, env);
   if (resolved.forzarVista !== true) {
     try {
       const cached = await readAdminGlobalView(resolved, env);
-      if (cached) return cached;
-    } catch (_error) {
-      /* Compatibilidad: el alias resuelto puede apuntar a una vista existente. */
-    }
+      if (cached) return reconciled(cached, env);
+    } catch (_error) {}
   }
   return rebuildGlobal(resolved, env);
 }
 
 export async function buildAdminStatistics(payload = {}, env) {
-  if (payload.forzarVista !== true) {
-    try {
-      const direct = await readAdminStatisticsView(payload, env);
-      if (direct) return direct;
-    } catch (_error) {
-      /* La estadística puede reconstruirse a partir de la lista real. */
-    }
-  }
-
-  const resolved = await resolveAdminPeriodPayload(payload, env);
-  if (resolved.forzarVista !== true) {
-    try {
-      const cached = await readAdminStatisticsView(resolved, env);
-      if (cached) return cached;
-    } catch (_error) {
-      /* Compatibilidad con aliases históricos del período. */
-    }
-  }
-
-  const global = await rebuildGlobal(resolved, env);
-  return statisticsFromGlobal(global);
+  const global = await buildAdminGlobalList(payload, env);
+  const statistics = statisticsFromGlobal(global);
+  const resumen = statistics.resumen || {};
+  return {
+    ...statistics,
+    mensaje: 'Estadísticas calculadas con el estado actual reconciliado: ' +
+      Number(resumen.esperados || 0) + ' estudiantes, ' +
+      Number(resumen.enviados || 0) + ' con envío.'
+  };
 }
