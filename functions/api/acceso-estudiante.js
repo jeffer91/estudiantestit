@@ -7,6 +7,14 @@ const TITLES_TIMEOUT_MS = 18000;
 const CACHE_TTL_MS = 10 * 60 * 1000;
 const NOT_FOUND_TTL_MS = 30 * 1000;
 const CACHE_LIMIT = 400;
+const CANONICAL_SOFTWARE_CAREER = 'UNIVERSITARIA EN DESARROLLO SOFTWARE Y CIBERSEGURIDAD';
+const SOFTWARE_CAREER_ALIASES = new Set([
+  'universitariaendesarrollosoftwareyciberseguridad',
+  'universitariaendesarrollodesoftwareyciberseguridad',
+  'universitariaensoftwareyciberseguridad',
+  'desarrollodesoftwareyciberseguridad',
+  'desarrollosoftwareyciberseguridad'
+]);
 const academicCache = new Map();
 const academicInflight = new Map();
 
@@ -35,6 +43,28 @@ function flexible(object, names) {
   return undefined;
 }
 
+function canonicalCareer(value) {
+  const raw = text(value);
+  if (!raw) return '';
+  return SOFTWARE_CAREER_ALIASES.has(normalizedKey(raw))
+    ? CANONICAL_SOFTWARE_CAREER
+    : raw;
+}
+
+function canonicalizeStudent(student) {
+  if (!student || typeof student !== 'object') return student;
+  const career = canonicalCareer(flexible(student, [
+    'NombreCarrera', 'nombreCarrera', 'carrera', 'Carrera'
+  ]));
+  if (!career) return student;
+  return {
+    ...student,
+    NombreCarrera: career,
+    nombreCarrera: career,
+    carrera: career
+  };
+}
+
 function normalizeState(value) {
   const state = text(value).toUpperCase().replace(/[^A-Z0-9]+/g, '_');
   if (!state) return 'SIN_ENVIO';
@@ -50,8 +80,34 @@ function normalizeState(value) {
   return state;
 }
 
+function trueValue(value) {
+  return value === true || ['TRUE', 'SI', 'SÍ', '1', 'YES'].includes(text(value).toUpperCase());
+}
+
+function hasCoordinatorValidation(result, envio) {
+  const sources = [envio, result].filter((item) => item && typeof item === 'object');
+  return sources.some((item) => {
+    const resultado = text(item.resultadoCoordinador).toUpperCase();
+    return trueValue(item.validadoCoordinador) ||
+      resultado.startsWith('APROBADO_') ||
+      Boolean(text(item.tituloCoordinador) && text(item.fechaValidacionCoordinador));
+  });
+}
+
+function hasInvestigationResolution(result, envio) {
+  const sources = [envio, result].filter((item) => item && typeof item === 'object');
+  return sources.some((item) =>
+    normalizeState(item.estadoProceso || item.estado || item.estadoFinal) === 'APROBADO_FINAL' ||
+    Boolean(
+      text(item.resultadoInvestigacion) ||
+      text(item.fechaResolucionInvestigacion) ||
+      text(item.tituloFinalInvestigacion)
+    )
+  );
+}
+
 function studentFrom(result) {
-  return result && (result.estudiante || result.registro) || null;
+  return canonicalizeStudent(result && (result.estudiante || result.registro) || null);
 }
 
 function completeAcademic(result) {
@@ -185,10 +241,22 @@ function normalizeTitles(result) {
   const found = Boolean(
     result && (result.tieneEnvio === true || result.encontradoEnvio === true || result.existe === true) && envio
   );
-  const state = normalizeState(
-    result && (result.estadoEfectivo || result.estadoEnvio || result.estado || result.estadoFinal) ||
-    envio && (envio.estado || envio.estadoFinal)
+  let state = normalizeState(
+    envio && (envio.estadoProceso || envio.estado || envio.estadoFinal) ||
+    result && (result.estadoEfectivo || result.estadoEnvio || result.estado || result.estadoFinal)
   );
+
+  /* Coordinación puede guardar APROBADO/REEMPLAZADO como resultado de su
+     decisión, pero el proceso general todavía debe quedar en Investigación. */
+  if (
+    found &&
+    hasCoordinatorValidation(result, envio) &&
+    !hasInvestigationResolution(result, envio) &&
+    ['PENDIENTE_REVISION', 'APROBADO', 'REEMPLAZADO'].includes(state)
+  ) {
+    state = 'PENDIENTE_INVESTIGADOR';
+  }
+
   const resolution = result && result.resolucion || (
     envio && (envio.resolucionActualId || envio.fechaResolucion || envio.coordinador)
       ? {
@@ -278,7 +346,13 @@ export async function onRequest({ request, env }) {
 
     const titles = normalizeTitles(titlesResult);
     const combined = titles.envio
-      ? { ...titles.envio, ...(titles.resolucion || {}) }
+      ? {
+          ...titles.envio,
+          ...(titles.resolucion || {}),
+          estado: titles.estado,
+          estadoFinal: titles.estado,
+          estadoProceso: titles.estado
+        }
       : null;
 
     return jsonReply(request, {
