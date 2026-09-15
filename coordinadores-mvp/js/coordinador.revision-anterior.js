@@ -28,13 +28,25 @@
   }
   function stateLabel(value){
     var key=text(value).toUpperCase().replace(/[^A-Z0-9]+/g,'_');
-    var labels={PENDIENTE_REVISION:'Pendiente de revisión',DEVUELTO:'Devuelto',APROBADO:'Aprobado',REEMPLAZADO:'Aprobado con corrección'};
+    var labels={
+      PENDIENTE_REVISION:'Pendiente de revisión',
+      PENDIENTE_COORDINADOR:'Pendiente de revisión',
+      PENDIENTE_INVESTIGADOR:'Validado por Coordinación',
+      DEVUELTO:'Devuelto',
+      APROBADO:'Validado por Coordinación',
+      REEMPLAZADO:'Validado por Coordinación · con corrección',
+      APROBADO_FINAL:'Aprobado final'
+    };
     return labels[key]||text(value)||'Sin estado';
   }
   function envioId(envio){
     envio=object(envio);
     var raw=object(envio.raw);
     return text(envio.id||envio._clave||envio.envioId||raw.id||raw._id||raw._docId||raw.envioId);
+  }
+  function estadoActual(envio){
+    envio=object(envio);
+    return text(envio.estadoProceso||envio.estado||envio.estadoFinal).toUpperCase().replace(/[^A-Z0-9]+/g,'_');
   }
 
   function installStyles(){
@@ -129,7 +141,7 @@
     var revisions=Array.isArray(history.revisiones)?history.revisiones:[];
     if(!revisions.length)return'<p class="previous-review__notice">Todavía no existen comentarios de revisiones anteriores.</p>';
     return'<div class="previous-review__timeline">'+revisions.slice().reverse().map(function(item){
-      return'<article class="previous-review__item"><div class="previous-review__item-head"><strong>Revisión '+Number(item.numeroResolucion||1)+' · '+escapeHtml(stateLabel(item.estado))+'</strong><small>'+escapeHtml(dateLabel(item.fechaResolucion))+'</small></div><small>'+escapeHtml(text(item.coordinador)||'Coordinador no registrado')+'</small><p>'+escapeHtml(text(item.comentario||item.observacion)||'Sin comentario registrado.')+'</p></article>';
+      return'<article class="previous-review__item"><div class="previous-review__item-head"><strong>Revisión '+Number(item.numeroResolucion||1)+' · '+escapeHtml(stateLabel(item.estado))+'</strong><small>'+escapeHtml(dateLabel(item.fechaResolucion))+'</small></div><small>'+escapeHtml(text(item.coordinador)||'Coordinación de Titulación')+'</small><p>'+escapeHtml(text(item.comentario||item.observacion)||'Sin comentario registrado.')+'</p></article>';
     }).join('')+'</div>';
   }
 
@@ -140,6 +152,14 @@
       var titles=[item.titulo1,item.titulo2,item.titulo3].filter(function(value){return text(value);});
       return'<div class="previous-review__version"><div class="previous-review__item-head"><strong>Envío '+Number(item.numeroVersion||1)+'</strong><small>'+escapeHtml(dateLabel(item.fechaEnvio))+'</small></div>'+(titles.length?'<ul>'+titles.map(function(title,index){return'<li>'+escapeHtml(title)+(Number(item.tituloPreferidoNumero)===index+1?' · Favorito':'')+'</li>';}).join('')+'</ul>':'<p>Sin detalle de títulos.</p>')+'</div>';
     }).join('')+'</div>';
+  }
+
+  function noticeFor(envio){
+    var current=estadoActual(envio);
+    if(current==='PENDIENTE_INVESTIGADOR')return'La validación de Coordinación ya fue registrada y el expediente se encuentra pendiente de Investigación. Esta vista es de consulta.';
+    if(current==='APROBADO_FINAL')return'El expediente ya cuenta con aprobación final. Esta vista conserva el historial completo.';
+    if(current==='DEVUELTO')return'El expediente fue devuelto al estudiante. Los comentarios anteriores se conservan en el historial.';
+    return'El campo inferior registra una nueva decisión. Los comentarios anteriores no se reemplazan.';
   }
 
   function render(history,envio){
@@ -153,7 +173,7 @@
       '<div class="previous-review__head"><div><p class="previous-review__eyebrow">Historial del proceso</p><h3>Envíos y revisiones anteriores</h3></div><span class="previous-review__badge">VERSIÓN '+sends+'</span></div>'+
       '<div class="previous-review__counts"><div class="previous-review__count"><strong>'+sends+'</strong><span>Envíos</span></div><div class="previous-review__count"><strong>'+resends+'</strong><span>Reenvíos</span></div><div class="previous-review__count"><strong>'+reviews+'</strong><span>Revisiones</span></div></div>'+
       revisionsHtml(history)+versionsHtml(history)+
-      '<p class="previous-review__notice">El campo inferior registra una nueva decisión. Los comentarios anteriores no se reemplazan.</p>';
+      '<p class="previous-review__notice">'+escapeHtml(noticeFor(envio))+'</p>';
   }
 
   function renderLoading(envio){
