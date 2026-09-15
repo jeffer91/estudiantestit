@@ -14,7 +14,9 @@ function sanitizeHistory(result, userRole) {
   const sanitized = { ...result };
   sanitized.revisiones = (result.revisiones || []).map((item) => ({
     ...item,
-    coordinador: ''
+    /* El estudiante no necesita identificar al revisor. Coordinadores sí deben
+       ver quién registró cada decisión para mantener trazabilidad. */
+    coordinador: userRole === 'student' ? '' : item.coordinador
   }));
 
   const cleanWorkflow = (result.eventosWorkflow || result.lineaTiempo || []).map((item) => {
