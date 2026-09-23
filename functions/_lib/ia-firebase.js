@@ -50,15 +50,23 @@ async function ensureSecret(secretId) {
   return secretId;
 }
 
-async function saveCredentialSecret(id, credential) {
+async function addCredentialVersion(secretId, credential) {
   const value = text(credential);
-  if (!value) return '';
-  const secretId = providerSecretId(id);
-  await ensureSecret(secretId);
+  const id = text(secretId);
+  if (!id || !value) return id;
   await secretClient.addSecretVersion({
-    parent: secretResource(secretId),
+    parent: secretResource(id),
     payload: { data: Buffer.from(value, 'utf8') }
   });
+  return id;
+}
+
+async function saveCredentialSecret(id, credential, existingSecretId = '') {
+  const value = text(credential);
+  if (!value) return text(existingSecretId);
+  const secretId = text(existingSecretId) || providerSecretId(id);
+  if (!text(existingSecretId)) await ensureSecret(secretId);
+  await addCredentialVersion(secretId, value);
   return secretId;
 }
 
@@ -98,7 +106,7 @@ export async function listProviders(includeInactive = false, env) {
         maxTokens: Number(row.maxTokens || 3000),
         temperatura: Number(row.temperatura ?? 0.3),
         descripcion: text(row.descripcion),
-        apiKeyConfigurada: Boolean(secretId || legacyCredential),
+        apiKeyConfigurada: row.secretConfigurado === true || Boolean(legacyCredential),
         endpointConfigurado: Boolean(text(row.endpoint)),
         ultimaPruebaOk: row.ultimaPruebaOk === true,
         ultimaPruebaEn: text(row.ultimaPruebaEn),
@@ -122,7 +130,7 @@ export async function saveProvider(provider = {}, env) {
   let secretId = text(current.secretId);
 
   if (credentialToStore) {
-    secretId = await saveCredentialSecret(id, credentialToStore);
+    secretId = await saveCredentialSecret(id, credentialToStore, secretId);
   }
 
   const activeValue = provider.activo === false || text(provider.estado).toUpperCase() === 'INACTIVO'
@@ -135,6 +143,9 @@ export async function saveProvider(provider = {}, env) {
     endpoint: text(provider.endpoint || current.endpoint),
     modelo: text(provider.modelo || provider.model || current.modelo),
     secretId,
+    secretConfigurado: incomingCredential
+      ? true
+      : current.apiKeyConfigurada === true,
     credencial: null,
     apiKey: null,
     token: null,
@@ -148,42 +159,57 @@ export async function saveProvider(provider = {}, env) {
     actualizadoEn: nowIso()
   }, { merge: true }, env);
 
-  return { ...saved, id, secretId, apiKeyConfigurada: Boolean(secretId) };
+  return {
+    ...saved,
+    id,
+    secretId,
+    apiKeyConfigurada: incomingCredential
+      ? true
+      : current.apiKeyConfigurada === true
+  };
 }
 
 export async function migrateProviderSecrets(env) {
   const providers = await listProviders(true, env);
   let migrated = 0;
   let cleaned = 0;
+  let provisioned = 0;
 
   for (const provider of providers) {
     const legacy = text(provider.credencial);
     let secretId = text(provider.secretId);
-
-    if (legacy) {
-      if (!secretId) {
-        secretId = await saveCredentialSecret(provider.id, legacy);
-        migrated += 1;
-      }
-      await setDocument('TITULOS', 'ia', provider.id, {
-        secretId,
-        credencial: null,
-        apiKey: null,
-        token: null,
-        actualizadoEn: nowIso()
-      }, { merge: true }, env);
-      cleaned += 1;
+    if (!secretId) {
+      secretId = providerSecretId(provider.id);
+      await ensureSecret(secretId);
+      provisioned += 1;
     }
+
+    let configured = provider.apiKeyConfigurada === true;
+    if (legacy) {
+      await addCredentialVersion(secretId, legacy);
+      migrated += 1;
+      configured = true;
+    }
+
+    await setDocument('TITULOS', 'ia', provider.id, {
+      secretId,
+      secretConfigurado: configured,
+      credencial: null,
+      apiKey: null,
+      token: null,
+      actualizadoEn: nowIso()
+    }, { merge: true }, env);
+
+    if (legacy) cleaned += 1;
   }
 
   return {
     ok: true,
     total: providers.length,
     migrados: migrated,
+    secretosProvisionados: provisioned,
     limpiadosFirestore: cleaned,
-    mensaje: migrated
-      ? `Se migraron ${migrated} credenciales de IA a Secret Manager.`
-      : 'No quedaron credenciales de IA pendientes de migrar.'
+    mensaje: `Secret Manager listo para ${providers.length} proveedores. ${migrated} credenciales migradas desde Firestore.`
   };
 }
 
