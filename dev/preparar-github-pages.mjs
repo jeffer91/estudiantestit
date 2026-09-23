@@ -10,6 +10,7 @@ const repository = parts[1] || 'estudiantestit';
 const basePath = '/' + repository;
 const siteOrigin = 'https://' + owner + '.github.io';
 const siteBase = siteOrigin + basePath;
+const buildId = String(process.env.GITHUB_SHA || 'v4').slice(0, 12);
 
 const apps = [
   ['estudiantes-mvp', 'estudiantes'],
@@ -46,6 +47,10 @@ copyEntry('administrador', 'ad-index.html');
 function removeCloudflareFiles(directory) {
   for (const item of fs.readdirSync(directory, { withFileTypes: true })) {
     const full = path.join(directory, item.name);
+    if (item.isDirectory() && ['.wrangler', 'node_modules', '.git'].includes(item.name)) {
+      fs.rmSync(full, { recursive: true, force: true });
+      continue;
+    }
     if (item.isDirectory()) removeCloudflareFiles(full);
     else if (['_headers', '_redirects', '_routes.json'].includes(item.name)) fs.rmSync(full, { force: true });
   }
@@ -64,6 +69,15 @@ function patchText(value) {
     out = out.split('`/' + route + '/').join('`' + basePath + '/' + route + '/');
   }
   return out;
+}
+
+function cacheBust(html) {
+  return html.replace(
+    /(src|href)=(["'])(?!https?:\/\/|\/\/|data:|#)([^"'?#]+\.(?:js|css))(?:\?[^"']*)?\2/gi,
+    function(_match, attr, quote, url) {
+      return attr + '=' + quote + url + '?v=' + buildId + quote;
+    }
+  );
 }
 
 function inject(html, protectedPanel) {
@@ -93,6 +107,7 @@ function patchDirectory(directory) {
       const relative = path.relative(output, full).replace(/\\/g, '/');
       const isProtected = relative.startsWith('administrador/') || relative.startsWith('coordinadores/');
       value = inject(value, isProtected);
+      value = cacheBust(value);
     }
     fs.writeFileSync(full, value, 'utf8');
   }
@@ -123,3 +138,4 @@ fs.writeFileSync(path.join(output, '404.html'), notFound, 'utf8');
 
 console.log('[GitHub Pages] Sitio generado en .github-pages-site');
 console.log('[GitHub Pages] URL prevista: ' + siteBase + '/');
+console.log('[GitHub Pages] Build ID: ' + buildId);
