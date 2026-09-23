@@ -13,3 +13,8 @@ build/
 Thumbs.db
 .vscode/
 .wrangler/
+.github-pages-site/
+functions/node_modules/
+functions/.firebase/
+firebase-debug.log
+firebase-debug.*.log
