@@ -17,29 +17,36 @@ function assert(condition, message) {
 
 const firestore = read('functions/_lib/firestore.js');
 const http = read('functions/_lib/http.js');
+const gateway = read('functions/index.js');
+const rules = read('firestore.rules');
+const authClient = read('github-pages/firebase-auth-client.js');
 const titles = read('functions/_lib/titulos-firebase.js');
+const titlesApi = read('functions/api/titulos.js');
+const workApi = read('functions/api/trabajo-titulacion.js');
 const access = read('functions/api/acceso-estudiante.js');
 const adminApi = read('administrador/ad-js/ad-api.service.js');
 const packageJson = read('package.json');
 
 assert(/titulos-ec2fa/.test(firestore), 'No está configurado Firebase Títulos.');
 assert(/utet-4387a/.test(firestore), 'No está configurado Firebase UTET.');
-assert(/apiKey/.test(firestore) && /AIza[0-9A-Za-z_-]{20,}/.test(firestore), 'Faltan las configuraciones web de Firebase.');
-assert(/publicApiUrl/.test(firestore), 'Firestore no tiene modo de acceso con configuración web.');
-assert(/serviceAccount/.test(firestore) && /oauth2\.googleapis\.com\/token/.test(firestore), 'Firestore no conserva OAuth opcional para producción.');
-assert(/token \? url : publicApiUrl/.test(firestore), 'Firestore no selecciona entre OAuth y configuración web.');
-assert(/requestHost/.test(http) && /titulos-administrador\.pages\.dev/.test(http), 'Los roles no se determinan por el dominio de destino.');
-assert(/endsWith\(['"]\.['"]\s*\+\s*projectHost/.test(http), 'Los roles no contemplan dominios de vista previa de Pages.');
-assert(!/origin\.includes\(['"]titulos-administrador/.test(http), 'El rol administrador todavía confía en el encabezado Origin.');
-assert(/window\.location&&window\.location\.origin/.test(adminApi), 'El administrador no usa su API del mismo dominio.');
-assert(!/API_PUBLICA=['"]https:\/\/titulos\.pages\.dev/.test(adminApi), 'El administrador todavía envía escrituras al dominio público de estudiantes.');
-assert(/wrangler pages dev \.pages-local/.test(packageJson), 'El entorno local no indica la carpeta estática a Wrangler.');
-assert(/deploy:administrador/.test(packageJson), 'No existe un despliegue independiente para Administrador.');
+assert(/GoogleAuth/.test(firestore) && /Application Default Credentials|ADC/.test(firestore), 'Firestore no usa ADC/IAM.');
+assert(/Authorization[^\n]+Bearer/.test(firestore), 'Firestore no envía autorización Bearer con ADC.');
+assert(!/private_key|client_email|createSignedJwt|oauth2\.googleapis\.com\/token/.test(firestore), 'Firestore todavía contiene lógica de cuenta de servicio JSON.');
+assert(/verifyIdToken/.test(gateway), 'Firebase Functions no verifica el ID token.');
+assert(/collection\(['"]usuarios['"]\)/.test(gateway), 'Firebase Functions no consulta el perfil/rol autenticado.');
+assert(/__verifiedRole/.test(gateway) && /__verifiedUser/.test(gateway), 'El gateway no propaga identidad verificada a las APIs.');
+assert(/allow read, write: if false/.test(rules), 'Firestore no está cerrado al navegador.');
+assert(/Auth\.Persistence\.NONE/.test(authClient), 'Administrador/Coordinadores persisten la sesión en el origen compartido.');
+assert(/window\.top!==window\.self/.test(authClient), 'Las pantallas privilegiadas no bloquean ejecución embebida.');
+assert(/trustedCoordinatorCareers/.test(workApi), 'Trabajo de Titulación no limita Coordinación por carreras.');
+assert(/assertCoordinatorWriteAccess/.test(titlesApi), 'Artículo Académico no verifica carrera antes de escribir.');
+assert(/window\.TITULOS_API_BASE/.test(adminApi), 'El Administrador no permite usar la API Firebase configurada.');
+assert(/wrangler pages dev \.pages-local/.test(packageJson), 'El entorno local legado dejó de estar documentado para rollback.');
 assert(!/\bsetCached\s*\(/.test(access), 'La consulta inicial llama una función de caché inexistente.');
 assert(/function setCache\(key, value\)/.test(access), 'La consulta inicial no define la caché académica correctamente.');
-assert(/return setCache\(key, \{/.test(access), 'La consulta inicial no guarda sus resultados académicos en caché.');
+assert(/return setCache\(key, \{/.test(access), 'La consulta inicial no guarda resultados académicos en caché.');
 assert(/academicInflight\.set\(key, task\)/.test(access), 'La consulta inicial no evita solicitudes académicas duplicadas.');
-assert(/if \(requested\)[\s\S]*if \(!candidates\.length\) return null;/.test(titles), 'Una consulta de período podría devolver un envío perteneciente a otro período.');
+assert(/if \(requested\)[\s\S]*if \(!candidates\.length\) return null;/.test(titles), 'Una consulta de período podría devolver un envío de otro período.');
 assert(/RESOLUTION_STATES/.test(titles), 'Las resoluciones no limitan los estados permitidos.');
 assert(/commitDocuments\('TITULOS'/.test(titles), 'Los envíos y resoluciones no usan escrituras atómicas.');
 
@@ -50,4 +57,4 @@ if (errors.length) {
   process.exit(1);
 }
 
-console.log('[Firebase/Auth] Correcto: configuración web para pruebas, OAuth opcional, roles, períodos exactos y escrituras atómicas.');
+console.log('[Firebase/Auth] Correcto: ADC/IAM, Auth verificada, Firestore cerrado y permisos por carrera.');

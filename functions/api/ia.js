@@ -1,4 +1,5 @@
 import { generateAi, listAiProviders, saveAiProvider, toggleAiProvider } from '../_lib/claves.js';
+import { migrateProviderSecrets } from '../_lib/ia-firebase.js';
 import { corsHeaders, jsonReply, originAllowed, requestOrigin, role, text } from '../_lib/http.js';
 
 const PROVIDERS_CACHE_MS = 30000;
@@ -399,6 +400,9 @@ export async function onRequest({ request, env }) {
           ok: true,
           proveedor: adminProvider(result.proveedor || result.data || data.provider || {})
         });
+      }
+      if (action === 'admin-migrate-secrets') {
+        return jsonReply(request, await migrateProviderSecrets(env));
       }
       if (action === 'admin-test') {
         const result = await generateAi(

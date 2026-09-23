@@ -1,0 +1,46 @@
+name: Publicar Firebase Functions
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'functions/**'
+      - 'firebase.json'
+      - 'firestore.rules'
+      - '.firebaserc'
+      - '.github/workflows/publicar-firebase.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: firebase-functions-main
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && vars.GCP_SERVICE_ACCOUNT != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Autenticar Google Cloud sin secretos persistentes
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Instalar dependencias de Functions
+        run: npm --prefix functions install
+
+      - name: Publicar Functions
+        run: npx --yes firebase-tools deploy --only functions,firestore:rules --project titulos-ec2fa

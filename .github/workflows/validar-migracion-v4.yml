@@ -1,0 +1,77 @@
+name: Validar migración v4
+
+on:
+  push:
+    branches:
+      - migracion-github-firebase-v4
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Instalar dependencias del proyecto
+        run: npm ci
+
+      - name: Construir GitHub Pages
+        run: npm run build:github-pages
+
+      - name: Verificar rutas principales
+        shell: bash
+        run: |
+          test -f .github-pages-site/index.html
+          test -f .github-pages-site/estudiantes/index.html
+          test -f .github-pages-site/trabajo-titulacion/index.html
+          test -f .github-pages-site/coordinadores/index.html
+          test -f .github-pages-site/investigadores/index.html
+          test -f .github-pages-site/administrador/index.html
+          test -f .github-pages-site/assets/runtime-config.js
+          test -f .github-pages-site/assets/firebase-auth-client.js
+          test ! -d .github-pages-site/estudiantes/.wrangler
+          grep -q "cloudfunctions.net" .github-pages-site/assets/runtime-config.js
+          grep -q "firebase-auth-client.js?v=" .github-pages-site/administrador/index.html
+          grep -q "firebase-auth-client.js?v=" .github-pages-site/coordinadores/index.html
+
+      - name: Instalar dependencias de Firebase Functions
+        run: npm --prefix functions install --no-audit --no-fund
+
+      - name: Validar sintaxis del backend
+        shell: bash
+        run: |
+          node --check functions/index.js
+          node --check functions/_lib/http.js
+          node --check functions/_lib/firestore.js
+          node --check functions/_lib/ia-firebase.js
+          node --check functions/api/titulos.js
+          node --check functions/api/ia.js
+          node --check functions/api/investigadores.js
+          node --check functions/api/estadisticas.js
+          node --check functions/api/trabajo-titulacion.js
+          node --check github-pages/firebase-auth-client.js
+          node --check dev/preparar-github-pages.mjs
+
+      - name: Verificar arquitectura segura
+        shell: bash
+        run: |
+          ! grep -R "TITULOS_FIREBASE_SERVICE_ACCOUNT\|UTET_FIREBASE_SERVICE_ACCOUNT" functions
+          grep -q "allow read, write: if false" firestore.rules
+          grep -q "Auth.Persistence.NONE" github-pages/firebase-auth-client.js
+          grep -q "trustedCoordinatorCareers" functions/api/trabajo-titulacion.js
+          grep -q "assertCoordinatorWriteAccess" functions/api/titulos.js
+
+      - name: Importar Firebase Functions
+        run: node -e "import('./functions/index.js').then(() => console.log('Firebase Functions OK'))"

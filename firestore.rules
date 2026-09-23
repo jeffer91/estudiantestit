@@ -1,0 +1,11 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // La web nunca accede directamente a Firestore.
+    // Todas las lecturas y escrituras pasan por Firebase Functions con IAM.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

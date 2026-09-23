@@ -6,6 +6,7 @@ import { enrichAdminPeriodPayload } from '../functions/_lib/estadisticas-admin.j
 const originalFetch = globalThis.fetch;
 const calls = [];
 let scenario = 'canonical';
+const testEnv = { FIRESTORE_ACCESS_TOKEN: 'unit-test-token' };
 
 function responseJson(value, status = 200) {
   return new Response(JSON.stringify(value), {
@@ -178,7 +179,7 @@ try {
   const result = await buildAdminGlobalList({
     periodoId: '2026-02__2026-08',
     periodo: 'Febrero 2026 a Agosto 2026'
-  }, {});
+  }, testEnv);
 
   assert.equal(result.total, 3, 'Debe unir matrículas guardadas con distintos campos de período.');
   assert.equal(result.totalEnviosPeriodo, 1);
@@ -210,7 +211,7 @@ try {
     periodoId: '2025-10__2026-03',
     periodoLabel: 'Octubre 2025 a Marzo 2026',
     periodo: '2026-10'
-  }, {});
+  }, testEnv);
 
   assert.equal(
     aliasResult.total,

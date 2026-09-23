@@ -1,108 +1,142 @@
-# Configuración de Firebase para las tres aplicaciones
+# Configuración Firebase — arquitectura v4
 
-La arquitectura usa dos proyectos:
+La arquitectura objetivo usa dos proyectos:
 
 - **Firebase Títulos:** `titulos-ec2fa`
 - **Firebase UTET:** `utet-4387a`
 
-Las aplicaciones web no se conectan directamente a Firestore. Las lecturas y escrituras pasan por Cloudflare Pages Functions, que se autentican ante Google mediante cuentas de servicio.
+Las cinco interfaces se publican en GitHub Pages. El navegador no accede directamente a Firestore ni conoce secretos del servidor. Todas las operaciones protegidas pasan por Firebase Functions.
 
-## 1. Cuentas de servicio
+## 1. Identidad del servidor
 
-Crea dos cuentas de servicio separadas:
+Firebase Functions usa **Application Default Credentials (ADC)** de su propia identidad de ejecución. Ya no se utilizan archivos JSON de cuentas de servicio dentro de la aplicación.
 
-1. **Títulos:** permiso mínimo para leer y escribir Firestore en `titulos-ec2fa`.
-2. **UTET:** permiso mínimo de solo lectura para Firestore en `utet-4387a`.
+La identidad de ejecución debe tener:
 
-Descarga cada archivo JSON y consérvalo fuera del repositorio. No lo envíes por correo, chat ni lo guardes dentro de las carpetas publicadas.
+- lectura y escritura de Firestore en `titulos-ec2fa`;
+- **solo lectura** de Firestore en `utet-4387a`;
+- acceso a las versiones de los secretos de IA;
+- permiso para agregar nuevas versiones de secretos de IA.
 
-## 2. Secretos en Cloudflare Pages
+Para la migración inicial de las credenciales IA se necesita temporalmente permiso para crear los secretos. Después de aprovisionarlos, ese permiso de creación debe retirarse.
 
-Los dos secretos deben existir en cada uno de estos proyectos de Pages:
+## 2. Secretos
 
-- `titulos`
-- `titulos-coordinadores`
-- `titulos-administrador`
+Las claves reales de proveedores IA se almacenan en **Google Secret Manager del proyecto Firebase Títulos**.
 
-Los nombres exactos son:
+Formato:
 
 ```text
-TITULOS_FIREBASE_SERVICE_ACCOUNT
-UTET_FIREBASE_SERVICE_ACCOUNT
+titulos-ia-<proveedor>
 ```
 
-Ejemplo para Estudiantes:
+Ejemplos:
 
-```powershell
-npx wrangler pages secret put TITULOS_FIREBASE_SERVICE_ACCOUNT --project-name titulos
-npx wrangler pages secret put UTET_FIREBASE_SERVICE_ACCOUNT --project-name titulos
+```text
+titulos-ia-groq
+titulos-ia-gemini
+titulos-ia-nvidia
 ```
 
-Repite los mismos dos comandos cambiando `--project-name` por `titulos-coordinadores` y `titulos-administrador`.
+Firestore conserva únicamente configuración no secreta: proveedor, modelo, endpoint, prioridad, estado y `secretId`.
 
-Cuando Wrangler solicite el valor, pega el contenido JSON completo de la cuenta de servicio correspondiente. No escribas el JSON directamente dentro del comando porque podría quedar guardado en el historial de la terminal.
+El Administrador tiene la acción **Migrar secretos**, que:
 
-## 3. Desarrollo local
+1. aprovisiona los secretos de los proveedores existentes;
+2. copia cualquier credencial heredada desde Firestore a Secret Manager;
+3. elimina `credencial`, `apiKey` y `token` de los documentos de Firestore.
 
-Copia el archivo de ejemplo:
+## 3. Firebase Authentication
 
-```powershell
-Copy-Item .dev.vars.example .dev.vars
+Administrador y Coordinadores usan Firebase Authentication con Email/Password.
+
+Los perfiles y permisos se leen desde:
+
+```text
+usuarios/{uid}
 ```
 
-Reemplaza los valores de ejemplo con los JSON reales convertidos a una sola línea. `.dev.vars` está excluido por `.gitignore` y nunca debe subirse.
+Administrador:
 
-Después ejecuta:
-
-```powershell
-npm run check
-npm run dev:cloudflare
+```json
+{
+  "role": "ADMIN",
+  "nombre": "Administrador"
+}
 ```
 
-Rutas locales:
+Coordinador:
 
-- Estudiantes: `http://127.0.0.1:8788/estudiantes-mvp/estudiante.html`
-- Coordinadores: `http://127.0.0.1:8788/coordinadores-mvp/coordinador.html`
-- Administrador: `http://127.0.0.1:8788/administrador/ad-index.html`
-
-## 4. Protección del administrador y coordinadores
-
-Antes de publicar, protege estos dos proyectos con Cloudflare Access:
-
-- `titulos-administrador.pages.dev`
-- `titulos-coordinadores.pages.dev`
-
-El dominio de Estudiantes puede permanecer público. El administrador y coordinadores no deben depender únicamente de que la URL sea difícil de adivinar.
-
-## 5. Reglas de Firestore
-
-Las reglas web de Firestore pueden permanecer cerradas. La aplicación usa OAuth e IAM desde el servidor, por lo que no necesita abrir Firestore al navegador.
-
-La cuenta de servicio de Títulos debe tener permisos IAM de lectura y escritura. La cuenta de UTET debe tener únicamente permisos IAM de lectura.
-
-## 6. Validación y despliegue
-
-```powershell
-npm run check
-npm run build:estudiantes
-npm run build:coordinadores
-npm run build:administrador
+```json
+{
+  "role": "COORDINADOR",
+  "nombre": "Nombre del coordinador",
+  "coordinadorId": "id-del-coordinador",
+  "carreras": ["Carrera 1", "Carrera 2"]
+}
 ```
 
-Publicación:
+Las reglas de Firestore incluidas en el repositorio niegan toda lectura y escritura directa desde clientes. Por ello un usuario web no puede cambiar su propio rol ni sus carreras.
 
-```powershell
-npm run deploy:estudiantes
-npm run deploy:coordinadores
-npm run deploy:administrador
-```
+Las sesiones privilegiadas de GitHub Pages se mantienen solo en memoria del navegador; no se persisten en localStorage ni sessionStorage.
 
-Después de publicar, ejecuta el diagnóstico del Administrador y comprueba:
+Investigación conserva durante la transición su acceso por cédula + PIN y sus sesiones actuales.
 
-- PING Títulos: OK
-- PING UTET: OK
-- Consulta de un estudiante real: nombre, carrera y período
-- Celular visible únicamente en Administrador
-- Envío de prueba almacenado en `envios` y `versiones_envio`
-- Aprobación o devolución almacenada en `resoluciones` y reflejada en `envios`
-- Proveedor de IA listado y probado desde Administrador
+## 4. Permisos de carrera
+
+El backend aplica los permisos de Coordinación. El navegador no decide qué carrera puede revisar un usuario.
+
+El servidor:
+
+- obtiene las carreras desde el perfil autenticado;
+- filtra los listados;
+- verifica el expediente antes de aprobar, corregir o devolver;
+- aplica la misma restricción a Artículo Académico y Trabajo de Titulación.
+
+## 5. Protección del uso de IA
+
+La API pública de IA:
+
+- acepta generación desde los orígenes web autorizados;
+- aplica límites por IP en Firestore;
+- limita 30 generaciones por 10 minutos y 180 por 24 horas;
+- nunca devuelve la API key de un proveedor.
+
+La colección técnica de límites usa `expiraEn`. Conviene activar una política TTL sobre ese campo para limpiar automáticamente registros antiguos.
+
+## 6. Reglas Firestore
+
+`firestore.rules` usa una política **deny all** para clientes web.
+
+Firebase Functions accede mediante IAM/ADC y no depende de las reglas web.
+
+## 7. Despliegue
+
+GitHub Actions publica:
+
+- las cinco interfaces en GitHub Pages;
+- Firebase Functions y las reglas Firestore en `titulos-ec2fa`.
+
+El despliegue a Google usa GitHub OIDC / Workload Identity Federation. No requiere guardar una llave JSON de Google en GitHub.
+
+Variables del repositorio:
+
+- `GCP_WORKLOAD_IDENTITY_PROVIDER`
+- `GCP_SERVICE_ACCOUNT`
+
+## 8. Validación antes de retirar Cloudflare
+
+No eliminar los despliegues actuales hasta verificar:
+
+- consulta de estudiante UTET;
+- Artículo Académico;
+- Trabajo de Titulación;
+- Coordinación por carreras;
+- Investigación;
+- Administrador;
+- historial y auditoría;
+- estadísticas;
+- PDF/Excel;
+- IA y sus fallbacks.
+
+Cloudflare se retira únicamente después de completar estas pruebas en la nueva arquitectura.

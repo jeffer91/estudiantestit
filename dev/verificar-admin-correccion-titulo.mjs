@@ -4,6 +4,7 @@ import { executeTitulosAction } from '../functions/_lib/titulos-firebase-v7-core
 const originalFetch = globalThis.fetch;
 const calls = [];
 const commits = [];
+const testEnv = { FIRESTORE_ACCESS_TOKEN: 'unit-test-token' };
 
 function responseJson(value, status = 200) {
   return new Response(JSON.stringify(value), {
@@ -88,7 +89,7 @@ try {
     tituloElegido: 'Título aprobado anterior',
     tituloCorregido: correctedTitle,
     observacion: 'Corrección del título final realizada desde Administrador.'
-  }, 'admin', {});
+  }, 'admin', testEnv);
 
   assert.equal(result.ok, true);
   assert.equal(result.envioId, 'envio-exacto');
@@ -124,7 +125,7 @@ try {
       estado: 'REEMPLAZADO',
       tituloElegido: 'Título anterior',
       tituloCorregido: 'Título corregido que no debe guardarse'
-    }, 'admin', {}),
+    }, 'admin', testEnv),
     /no pertenece al estudiante/i,
     'Debe bloquear un envioId que corresponda a otra cédula.'
   );

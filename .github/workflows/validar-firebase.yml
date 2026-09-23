@@ -23,6 +23,9 @@ jobs:
         with:
           node-version: '24'
 
+      - name: Instalar dependencias de Firebase Functions
+        run: npm --prefix functions install --no-audit --no-fund
+
       - name: Revisar sintaxis, arquitectura y acceso
         run: npm run check
 
