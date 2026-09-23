@@ -1,7 +1,7 @@
 {
   "name": "estudiantestit",
   "private": true,
-  "version": "4.0.0-migration",
+  "version": "3.6.3",
   "type": "module",
   "main": "electron/administrador/main.cjs",
   "scripts": {
