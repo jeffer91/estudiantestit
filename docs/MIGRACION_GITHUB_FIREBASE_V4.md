@@ -1,130 +1,118 @@
-# Migración v4: GitHub Pages + Firebase
+# Migración v4 — GitHub Pages + Firebase
 
-## Objetivo
+## Arquitectura final
 
-Mover las cinco interfaces a GitHub Pages y mover el backend de Cloudflare Pages Functions a Firebase Functions, manteniendo Firestore y el flujo actual.
+Las cinco interfaces se mantienen separadas:
 
-Sitio previsto:
+1. `/estudiantes/`
+2. `/trabajo-titulacion/`
+3. `/coordinadores/`
+4. `/investigadores/`
+5. `/administrador/`
 
-- https://jeffer91.github.io/estudiantestit/
-- /estudiantes/
-- /trabajo-titulacion/
-- /coordinadores/
-- /investigadores/
-- /administrador/
-
-API prevista:
-
-- https://us-central1-titulos-ec2fa.cloudfunctions.net/api/titulos
-- https://us-central1-titulos-ec2fa.cloudfunctions.net/api/requisitos
-- https://us-central1-titulos-ec2fa.cloudfunctions.net/api/investigadores
-- https://us-central1-titulos-ec2fa.cloudfunctions.net/api/estadisticas
-- https://us-central1-titulos-ec2fa.cloudfunctions.net/api/ia
-
-## Secretos
-
-Todos los secretos del servidor quedan en Google Secret Manager/Firebase Functions.
-
-### Cuentas de servicio existentes
-
-Copiar una sola vez los valores que hoy están en Cloudflare:
-
-```bash
-firebase functions:secrets:set TITULOS_FIREBASE_SERVICE_ACCOUNT --project titulos-ec2fa
-firebase functions:secrets:set UTET_FIREBASE_SERVICE_ACCOUNT --project titulos-ec2fa
-```
-
-Después de validar la migración, esos secretos pueden eliminarse de Cloudflare.
-
-### Proveedores de IA
-
-Las credenciales nuevas ya no se guardan en Firestore. Se guardan como secretos con nombres:
+Base prevista:
 
 ```text
-titulos-ia-<proveedor>
+https://jeffer91.github.io/estudiantestit/
 ```
 
-Firestore conserva solamente nombre, modelo, endpoint, estado, prioridad y `secretId`.
+La API se ejecuta en Firebase Functions:
 
-El Administrador incluye **Migrar secretos**. Esa acción mueve cualquier credencial antigua que todavía esté en la colección `ia` hacia Secret Manager y deja los campos de credenciales de Firestore en null.
+```text
+https://us-central1-titulos-ec2fa.cloudfunctions.net/api/
+```
 
-La cuenta de ejecución de Firebase Functions necesita permisos para leer/crear versiones de secretos durante la migración. Para la primera migración se puede conceder temporalmente Secret Manager Admin y después reducirlo a los permisos mínimos.
+Los datos continúan en Firestore Títulos y Firestore UTET.
+
+## Seguridad aplicada
+
+- Firebase Functions usa ADC/IAM: no existen secretos JSON de cuentas de servicio en la nueva arquitectura.
+- UTET se consulta con permiso IAM de solo lectura.
+- Claves IA en Google Secret Manager.
+- Firestore bloqueado para acceso directo del navegador.
+- Administrador y Coordinadores con Firebase Authentication.
+- Roles y carreras comprobados en backend.
+- Trabajo de Titulación y Artículo Académico restringidos a las carreras asignadas.
+- Sesiones privilegiadas solo en memoria del navegador.
+- Pantallas privilegiadas rechazan ejecución embebida.
+- Uso público de IA limitado por origen e IP.
+- Investigación conserva temporalmente PIN + sesión para evitar romper el flujo actual.
+- Reportes administrativos sanitizan tokens, PIN hashes y secretos.
+
+## Secretos IA
+
+El Administrador contiene **Migrar secretos**.
+
+La primera ejecución:
+
+- crea los contenedores de secretos para los proveedores existentes;
+- mueve las credenciales antiguas de Firestore a Secret Manager;
+- limpia los campos sensibles de Firestore.
+
+Después de la migración, retirar el permiso de creación de secretos de la identidad de ejecución y conservar únicamente los permisos mínimos necesarios para leer secretos y agregar nuevas versiones.
 
 ## Firebase Authentication
 
-Administrador y Coordinadores pasan a Firebase Authentication.
+Habilitar Email/Password y crear `usuarios/{uid}` en Firestore.
 
-1. En Firebase Console > Authentication habilitar **Email/Password**.
-2. Crear los usuarios.
-3. En Firestore, colección `usuarios`, crear un documento cuyo ID sea el UID de Firebase Auth.
+Ejemplo Administrador:
 
-Administrador:
+```json
+{"role":"ADMIN","nombre":"Administrador"}
+```
+
+Ejemplo Coordinador:
 
 ```json
 {
-  "role": "ADMIN",
-  "nombre": "Administrador"
+  "role":"COORDINADOR",
+  "nombre":"Nombre",
+  "coordinadorId":"id",
+  "carreras":["Carrera autorizada"]
 }
 ```
 
-Coordinador:
-
-```json
-{
-  "role": "COORDINADOR",
-  "nombre": "Nombre del coordinador",
-  "coordinadorId": "id-del-coordinador",
-  "carreras": ["Carrera 1", "Carrera 2"]
-}
-```
-
-Investigación conserva temporalmente su PIN y sesiones actuales; su API también queda en Firebase Functions.
-
-## Despliegue de Functions sin secretos en GitHub
-
-El workflow `.github/workflows/publicar-firebase.yml` utiliza GitHub OIDC + Google Workload Identity Federation. No guarda una llave JSON en GitHub.
-
-Configurar como **Repository Variables**:
-
-- `GCP_WORKLOAD_IDENTITY_PROVIDER`
-- `GCP_SERVICE_ACCOUNT`
-
-La cuenta usada por GitHub debe poder desplegar Firebase Functions.
+El navegador no puede editar esta colección porque `firestore.rules` niega todo acceso directo.
 
 ## GitHub Pages
 
-El workflow `.github/workflows/publicar-github-pages.yml` genera un único sitio estático mediante:
+El build `npm run build:github-pages`:
 
-```bash
-npm run build:github-pages
-```
+- genera los cinco accesos;
+- adapta rutas al prefijo `/estudiantestit/`;
+- elimina `_headers`, `_redirects`, `_routes.json` y residuos `.wrangler`;
+- inyecta la URL de Firebase Functions;
+- versiona JS/CSS con el SHA del commit para evitar caché obsoleta;
+- inyecta Firebase Authentication solo en Administrador y Coordinadores.
 
-El build copia las cinco aplicaciones, crea sus `index.html`, elimina archivos propios de Cloudflare e inyecta la configuración de API y Firebase Auth.
+## Orden de activación
 
-En GitHub > Settings > Pages seleccionar **GitHub Actions** como fuente.
+1. Mantener Cloudflare activo.
+2. Configurar IAM de la identidad de ejecución.
+3. Habilitar Firebase Authentication y crear usuarios/roles.
+4. Desplegar Firebase Functions y reglas Firestore.
+5. Ejecutar **Migrar secretos** desde Administrador.
+6. Probar los cinco accesos.
+7. Validar un caso real de punta a punta.
+8. Activar GitHub Pages como entrada oficial.
+9. Retirar Cloudflare y sus secretos únicamente al final.
 
-## Orden seguro de cambio
+## Pruebas obligatorias
 
-1. Mantener los sitios Cloudflare actuales activos.
-2. Desplegar Firebase Functions.
-3. Configurar Authentication y usuarios.
-4. Ejecutar la migración de secretos de IA.
-5. Probar `/api/health`, Estudiantes, Trabajo de Titulación, Coordinadores, Investigación y Administrador.
-6. Activar GitHub Pages.
-7. Validar un flujo real completo.
-8. Solo entonces retirar Cloudflare Pages/Functions y sus secretos.
-
-## Pruebas obligatorias antes del corte
-
-- Consulta de estudiante UTET.
-- Envío de Artículo Académico.
-- Envío de Trabajo de Titulación.
-- Validación/devolución por Coordinación.
-- Toma y resolución por Investigación.
-- Aprobación directa y devoluciones desde Administrador.
-- Historial de `workflow_eventos`.
+- Consulta UTET.
+- Envío y reenvío de Artículo Académico.
+- Envío y reenvío de Trabajo de Titulación.
+- Coordinador sin carrera: acceso rechazado a expedientes.
+- Coordinador con carrera: solo ve y modifica sus expedientes.
+- Investigación: login, bloqueo, heartbeat, liberar revisión y resolución.
+- Administrador: devolver a Coordinación/Investigación, aprobar y eliminar.
+- Historial `workflow_eventos`.
 - Estadísticas.
-- Exportación PDF/Excel.
+- Exportaciones PDF/Excel.
 - WhatsApp/Outlook.
-- Prueba de cada proveedor IA.
-- Acceso denegado cuando un usuario no posee el rol correcto.
+- Proveedores IA y fallback.
+- Límite de uso IA.
+- Usuario sin rol administrativo intentando acceder al Administrador.
+- Firestore directo desde navegador: acceso denegado.
+
+No se elimina información de Firebase durante la migración.
