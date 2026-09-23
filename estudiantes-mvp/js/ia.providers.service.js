@@ -8,8 +8,10 @@
   function esArchivo(){return texto(window.location&&window.location.protocol).toLowerCase()==='file:';}
   function proxyUrl(){
     var forzada=texto(window.ESTUDIANTE_IA_PROXY_URL||'');
+    var base=texto(window.TITULOS_API_BASE||'');
     var origen;
     if(forzada)return forzada;
+    if(base)return base.replace(/\/$/,'')+'/api/ia';
     if(esLocal())return 'http://127.0.0.1:8788/api/ia';
     if(esArchivo())return 'https://titulos.pages.dev/api/ia';
     origen=texto(window.location&&window.location.origin);
