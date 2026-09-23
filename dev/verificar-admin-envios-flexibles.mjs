@@ -4,6 +4,7 @@ import { enrichAdminPeriodPayload } from '../functions/_lib/estadisticas-admin.j
 
 const originalFetch = globalThis.fetch;
 const calls = [];
+const testEnv = { FIRESTORE_ACCESS_TOKEN: 'unit-test-token' };
 
 function responseJson(value, status = 200) {
   return new Response(JSON.stringify(value), {
@@ -143,7 +144,7 @@ try {
   const result = await buildAdminGlobalList({
     periodoId: '2026-02__2026-08',
     periodoLabel: 'Febrero 2026 a Agosto 2026'
-  }, {});
+  }, testEnv);
 
   assert.equal(result.total, 1);
   assert.equal(result.registros[0].cedula, '1717094096');
