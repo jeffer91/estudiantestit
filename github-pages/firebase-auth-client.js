@@ -5,6 +5,15 @@
   var required=path.indexOf('/administrador/')>=0?'admin':(path.indexOf('/coordinadores/')>=0?'coordinator':'');
   if(!required)return;
 
+  /* GitHub Pages usa un solo origen para los cinco módulos. Las pantallas
+     privilegiadas no persisten el token en localStorage/sessionStorage y
+     rechazan ejecución embebida para reducir el riesgo de cruce entre rutas. */
+  if(window.top!==window.self){
+    try{window.top.location.replace(window.location.href);}catch(_error){window.location.replace(window.location.href);}
+    return;
+  }
+  try{if(window.opener)window.opener=null;}catch(_error){}
+
   var apiBase=String(window.TITULOS_API_BASE||'').replace(/\/$/,'');
   var nativeFetch=window.fetch.bind(window);
   var gateResolve;
@@ -12,6 +21,7 @@
   var currentUser=null;
   var currentRole='';
   var ready=false;
+  var authReady=Promise.resolve();
 
   function text(value){return String(value===null||value===undefined?'':value).trim();}
   function allowed(role){return required==='admin'?role==='admin':(role==='coordinator'||role==='admin');}
@@ -62,7 +72,9 @@
       var email=text(document.getElementById('titulos-auth-email').value);
       var password=document.getElementById('titulos-auth-password').value;
       setMessage('Verificando acceso...');
-      window.firebase.auth().signInWithEmailAndPassword(email,password).catch(function(error){
+      authReady.then(function(){
+        return window.firebase.auth().signInWithEmailAndPassword(email,password);
+      }).catch(function(error){
         setMessage(error&&error.message?error.message:'No se pudo iniciar sesión.');
       });
     });
@@ -124,20 +136,29 @@
       return;
     }
     if(!window.firebase.apps.length)window.firebase.initializeApp(config);
-    window.firebase.auth().onAuthStateChanged(function(user){
-      if(!user){
-        currentUser=null;
-        currentRole='';
-        showLogin('');
-        return;
-      }
-      setMessage('Validando permisos...');
-      verify(user).catch(function(error){
-        currentUser=null;
-        currentRole='';
-        showLogin(error&&error.message?error.message:'Acceso no autorizado.');
-      });
+    var auth=window.firebase.auth();
+    authReady=auth.setPersistence(window.firebase.auth.Auth.Persistence.NONE).catch(function(error){
+      showLogin('No se pudo activar el modo seguro de sesión.');
+      throw error;
     });
+    authReady.then(function(){
+      auth.onAuthStateChanged(function(user){
+        if(!user){
+          currentUser=null;
+          currentRole='';
+          showLogin('');
+          return;
+        }
+        setMessage('Validando permisos...');
+        verify(user).catch(function(error){
+          currentUser=null;
+          currentRole='';
+          auth.signOut().catch(function(){});
+          showLogin(error&&error.message?error.message:'Acceso no autorizado.');
+        });
+      });
+    }).catch(function(){});
+
   }
 
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});
