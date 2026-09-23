@@ -62,7 +62,9 @@ function documentName(project, collectionName, documentId) {
   return `projects/${config.projectId}/databases/(default)/documents/${collectionName}/${documentId}`;
 }
 
-async function accessToken() {
+async function accessToken(env) {
+  const injected = text(env && env.FIRESTORE_ACCESS_TOKEN);
+  if (injected) return injected;
   if (!authClientPromise) authClientPromise = googleAuth.getClient();
   const client = await authClientPromise;
   const tokenResult = await client.getAccessToken();
@@ -78,7 +80,7 @@ async function firestoreFetch(project, url, options = {}, _env) {
      - titulos-ec2fa: lectura/escritura según la identidad de ejecución.
      - utet-4387a: solo lectura, concedida explícitamente en IAM. */
   projectConfig(project);
-  const token = await accessToken();
+  const token = await accessToken(_env);
   const headers = new Headers(options.headers || {});
   headers.set('Authorization', `Bearer ${token}`);
   if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
