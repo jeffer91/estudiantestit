@@ -186,6 +186,7 @@
     guardarIA:function(proveedor){return escritura(iaPost('admin-save',{provider:proveedor||{}}));},
     cambiarEstadoIA:function(providerId,activo){return escritura(iaPost('admin-toggle',{providerId:providerId,activo:activo===true}));},
     probarIA:function(providerId,prompt){return iaPost('admin-test',{providerId:providerId,prompt:prompt||'Responde únicamente: conexión correcta.'});},
+    migrarSecretosIA:function(){return escritura(iaPost('admin-migrate-secrets',{}));},
     extraerServicios:function(r){return lista(r,['servicios','registros']);},
     extraerPeriodos:function(r){return lista(r,['periodos','periods','registros']);},
     extraerCarreras:function(r){return lista(r,['carreras','registros']);},
