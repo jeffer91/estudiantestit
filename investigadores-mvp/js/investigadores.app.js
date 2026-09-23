@@ -1,10 +1,11 @@
 (function(window,document){'use strict';
+function apiBase(){var forced=String(window.TITULOS_API_BASE||'').trim();if(forced)return forced.replace(/\/$/,'');var origin=String(window.location&&window.location.origin||'').trim();return origin&&origin!=='null'?origin:'https://titulos-investigadores.pages.dev';}
 var state={sesion:'',investigador:null,carreras:[],carreraActual:'',pendientes:[],revision:null,heartbeat:null,modoAcceso:'consulta'};
 function $(id){return document.getElementById(id)}
 function text(v){return String(v==null?'':v).trim()}
 function norm(v){return text(v).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').replace(/\s+/g,' ').trim()}
 function esc(v){return text(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;')}
-function api(action,data){return fetch('/api/investigadores',{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json','X-Titulos-App':'investigadores'},body:JSON.stringify({accion:action,datos:Object.assign({},data||{},state.sesion?{sesion:state.sesion}:{})})}).then(function(r){return r.json().then(function(j){if(!r.ok||j.ok===false)throw new Error(j.mensaje||'No se pudo completar la operación.');return j})})}
+function api(action,data){return fetch(apiBase()+'/api/investigadores',{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json','X-Titulos-App':'investigadores'},body:JSON.stringify({accion:action,datos:Object.assign({},data||{},state.sesion?{sesion:state.sesion}:{})})}).then(function(r){return r.json().then(function(j){if(!r.ok||j.ok===false)throw new Error(j.mensaje||'No se pudo completar la operación.');return j})})}
 function status(id,msg,type){var el=$(id);if(!el)return;el.textContent=msg||'';el.className='status '+(type||'')}
 function view(name){['login','dashboard','career','review'].forEach(function(v){var el=$(v+'View');if(el)el.hidden=v!==name})}
 function guardarSesion(){try{sessionStorage.setItem('investigacion_sesion',state.sesion);sessionStorage.setItem('investigacion_nombre',state.investigador&&state.investigador.nombre||'')}catch(e){}}
@@ -53,6 +54,6 @@ $('volverDespuesBtn').addEventListener('click',cargarCarreras);$('siguienteBtn')
 $('resultadoVolverBtn').addEventListener('click',function(){cerrarResultadoModal();cargarCarreras()});
 $('resultadoSiguienteBtn').addEventListener('click',function(){cerrarResultadoModal();siguiente()});
 $('salirBtn').addEventListener('click',function(){var revision=state.revision,job=revision?api('LIBERAR_REVISION',{envioId:revision.id}).catch(function(){}):Promise.resolve();detenerHeartbeat();state.revision=null;job.then(function(){return api('LOGOUT',{}).catch(function(){})}).finally(function(){limpiarSesion();$('salirBtn').hidden=true;view('login')})});
-window.addEventListener('beforeunload',function(){if(!state.revision||!state.sesion)return;try{navigator.sendBeacon('/api/investigadores',new Blob([JSON.stringify({accion:'LIBERAR_REVISION',datos:{sesion:state.sesion,envioId:state.revision.id}})],{type:'application/json'}))}catch(e){}});
+window.addEventListener('beforeunload',function(){if(!state.revision||!state.sesion)return;try{navigator.sendBeacon(apiBase()+'/api/investigadores',new Blob([JSON.stringify({accion:'LIBERAR_REVISION',datos:{sesion:state.sesion,envioId:state.revision.id}})],{type:'application/json'}))}catch(e){}});
 (function restore(){try{state.sesion=sessionStorage.getItem('investigacion_sesion')||'';var n=sessionStorage.getItem('investigacion_nombre')||'';if(state.sesion){state.investigador={nombre:n};$('salirBtn').hidden=false;cargarCarreras()}}catch(e){}})();
 })(window,document);
