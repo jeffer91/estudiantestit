@@ -1,8 +1,8 @@
 import { onRequest } from 'firebase-functions/v2/https';
-import { defineSecret } from 'firebase-functions/params';
 import { getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
+import { createHash } from 'node:crypto';
 
 import * as accesoEstudiante from './api/acceso-estudiante.js';
 import * as adminFlujo from './api/admin-flujo.js';
@@ -18,9 +18,6 @@ import * as titulos from './api/titulos.js';
 import * as trabajoTitulacion from './api/trabajo-titulacion.js';
 
 if (!getApps().length) initializeApp();
-
-const TITULOS_FIREBASE_SERVICE_ACCOUNT = defineSecret('TITULOS_FIREBASE_SERVICE_ACCOUNT');
-const UTET_FIREBASE_SERVICE_ACCOUNT = defineSecret('UTET_FIREBASE_SERVICE_ACCOUNT');
 
 const ROUTES = new Map([
   ['acceso-estudiante', accesoEstudiante],
@@ -79,10 +76,7 @@ function sendJson(req, res, status, data) {
 }
 
 function runtimeEnv() {
-  return {
-    TITULOS_FIREBASE_SERVICE_ACCOUNT: TITULOS_FIREBASE_SERVICE_ACCOUNT.value(),
-    UTET_FIREBASE_SERVICE_ACCOUNT: UTET_FIREBASE_SERVICE_ACCOUNT.value()
-  };
+  return Object.create(null);
 }
 
 async function authContext(req) {
@@ -161,7 +155,65 @@ function buildWebRequest(req, auth) {
     enumerable: false,
     configurable: false
   });
+  Object.defineProperty(request, '__verifiedOrigin', {
+    value: text(req.headers.origin),
+    enumerable: false,
+    configurable: false
+  });
+  Object.defineProperty(request, '__verifiedClientIp', {
+    value: text(req.ip || req.socket && req.socket.remoteAddress),
+    enumerable: false,
+    configurable: false
+  });
   return request;
+}
+
+function rateLimitKey(value) {
+  return createHash('sha256').update(text(value) || 'sin-ip').digest('hex').slice(0, 32);
+}
+
+async function enforcePublicIaRateLimit(req, auth) {
+  if (auth.authenticated || routeName(req) !== 'ia' || text(req.method).toUpperCase() !== 'POST') return;
+
+  const origin = text(req.headers.origin);
+  if (!origin || !ALLOWED_ORIGINS.has(origin)) {
+    const error = new Error('La generación pública de IA requiere una aplicación autorizada.');
+    error.status = 403;
+    throw error;
+  }
+
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const action = text(body.action || body.accion).toLowerCase();
+  if (action === 'list') return;
+
+  const now = Date.now();
+  const identity = rateLimitKey(req.ip || req.socket && req.socket.remoteAddress);
+  const buckets = [
+    { key: '10m_' + Math.floor(now / 600000), max: 30, expiresAt: new Date(now + 20 * 60000) },
+    { key: 'day_' + Math.floor(now / 86400000), max: 180, expiresAt: new Date(now + 2 * 86400000) }
+  ];
+  const db = getFirestore();
+
+  await db.runTransaction(async (transaction) => {
+    const refs = buckets.map((bucket) => db.collection('_rate_limits_ia').doc(identity + '_' + bucket.key));
+    const snapshots = [];
+    for (const ref of refs) snapshots.push(await transaction.get(ref));
+
+    snapshots.forEach((snapshot, index) => {
+      const bucket = buckets[index];
+      const count = Number(snapshot.exists && snapshot.data() && snapshot.data().count || 0);
+      if (count >= bucket.max) {
+        const error = new Error('Se alcanzó temporalmente el límite de uso de IA. Intenta más tarde.');
+        error.status = 429;
+        throw error;
+      }
+      transaction.set(refs[index], {
+        count: count + 1,
+        actualizadoEn: new Date(),
+        expiraEn: bucket.expiresAt
+      }, { merge: true });
+    });
+  });
 }
 
 async function invokeModule(module, request, env) {
@@ -189,11 +241,7 @@ async function pipeWebResponse(webResponse, res) {
 export const api = onRequest({
   region: 'us-central1',
   timeoutSeconds: 120,
-  memory: '512MiB',
-  secrets: [
-    TITULOS_FIREBASE_SERVICE_ACCOUNT,
-    UTET_FIREBASE_SERVICE_ACCOUNT
-  ]
+  memory: '512MiB'
 }, async (req, res) => {
   const origin = text(req.headers.origin);
   if (origin && !ALLOWED_ORIGINS.has(origin)) {
@@ -208,6 +256,7 @@ export const api = onRequest({
   try {
     const auth = await authContext(req);
     const name = routeName(req);
+    await enforcePublicIaRateLimit(req, auth);
 
     if (name === 'health') {
       return sendJson(req, res, 200, {
@@ -239,6 +288,7 @@ export const api = onRequest({
   } catch (error) {
     const message = text(error && error.message || error) || 'No se pudo completar la solicitud.';
     const authError = /token|auth|authorization|sesión|session/i.test(message);
-    return sendJson(req, res, authError ? 401 : 500, { ok: false, mensaje: message });
+    const status = Number(error && error.status) || (authError ? 401 : 500);
+    return sendJson(req, res, status, { ok: false, mensaje: message });
   }
 });
