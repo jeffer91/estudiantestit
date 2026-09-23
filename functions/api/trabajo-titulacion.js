@@ -371,8 +371,45 @@ async function guardarEnvio(payload, env) {
   };
 }
 
-async function listar(payload, env, userRole = 'coordinator') {
+function normalCareer(value) {
+  return text(value).toLowerCase().normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function trustedCoordinatorCareers(verifiedUser) {
+  return new Set(
+    (verifiedUser && Array.isArray(verifiedUser.carreras) ? verifiedUser.carreras : [])
+      .map(normalCareer)
+      .filter(Boolean)
+  );
+}
+
+function rowCareer(row) {
+  return normalCareer(row && (row.carrera || row.carreraNombre || row.nombreCarrera));
+}
+
+function assertCoordinatorCareer(row, verifiedUser) {
+  if (!verifiedUser) return;
+  const allowed = trustedCoordinatorCareers(verifiedUser);
+  if (!allowed.size) throw new Error('Tu usuario no tiene carreras asignadas para revisión.');
+  const career = rowCareer(row);
+  if (!career || !allowed.has(career)) {
+    const error = new Error('Este expediente no pertenece a una carrera asignada a tu usuario.');
+    error.status = 403;
+    throw error;
+  }
+}
+
+async function listar(payload, env, userRole = 'coordinator', verifiedUser = null) {
   let rows = await listarTrabajosTitulacionUnificados(env);
+  if (userRole === 'coordinator' && verifiedUser) {
+    const allowed = trustedCoordinatorCareers(verifiedUser);
+    if (!allowed.size) rows = [];
+    else rows = rows.filter((row) => allowed.has(rowCareer(row)));
+  }
   const requestedStatus = text(payload.estado) ? estado(payload.estado, '') : '';
   if (requestedStatus) rows = rows.filter((row) => estado(row.estado) === requestedStatus);
   rows.sort((a, b) => {
@@ -383,13 +420,14 @@ async function listar(payload, env, userRole = 'coordinator') {
   return { ok: true, envios: rows.map((row) => publico(row, userRole)), tipoTrabajo: TIPO, total: rows.length };
 }
 
-async function guardarResolucion(payload, env, userRole) {
+async function guardarResolucion(payload, env, userRole, verifiedUser = null) {
   const cedula = cedulaEstricta(payload.cedula || payload.numeroIdentificacion);
   if (!cedula) throw new Error('La cédula debe contener exactamente 10 dígitos.');
   const envio = payload.envioId
     ? await buscarPorId(payload.envioId, env)
     : await buscarPorCedula(cedula, [payload.periodoId, payload.periodoLabel, payload.periodo], env);
   if (!envio) throw new Error('No se encontró el Trabajo de Titulación del estudiante.');
+  if (userRole === 'coordinator') assertCoordinatorCareer(envio, verifiedUser);
 
   const status = estado(payload.estadoFinal || payload.estado, 'APROBADO');
   if (!ESTADOS_RESOLUCION.has(status)) throw new Error('La resolución debe ser APROBADO, REEMPLAZADO o DEVUELTO.');
@@ -409,7 +447,9 @@ async function guardarResolucion(payload, env, userRole) {
     Number(envio.numeroRevisiones || 0)
   ) + 1;
   const resolucionId = eventoId(`${envio.id}__r${String(numeroResolucion).padStart(3, '0')}`);
-  const coordinador = text(payload.coordinador || payload.nombreCoordinador);
+  const coordinador = userRole === 'coordinator' && verifiedUser
+    ? text(verifiedUser.nombre || verifiedUser.email)
+    : text(payload.coordinador || payload.nombreCoordinador);
   const fecha = text(payload.fechaResolucion) || nowIso();
   const pasaInvestigacion = userRole === 'coordinator' && status !== 'DEVUELTO';
   const estadoGlobal = pasaInvestigacion ? 'PENDIENTE_INVESTIGADOR' : status;
@@ -482,7 +522,9 @@ async function guardarResolucion(payload, env, userRole) {
       data: {
         envioId: envio.id,
         rol: 'COORDINADOR',
-        revisorId: text(payload.coordinadorId || payload.idCoordinador),
+        revisorId: userRole === 'coordinator' && verifiedUser
+          ? text(verifiedUser.coordinadorId || verifiedUser.uid)
+          : text(payload.coordinadorId || payload.idCoordinador),
         revisorNombre: coordinador,
         accion: status === 'REEMPLAZADO' ? 'CORREGIR_VALIDAR' : 'VALIDAR',
         resultado: resultadoCoordinador,
@@ -530,13 +572,16 @@ async function processRequest(context) {
   const action = normalizeAction(body.accion || body.action);
   const payload = body.datos || body.data || {};
   const userRole = role(request);
+  const verifiedUser = request && request.__verifiedUser ? request.__verifiedUser : null;
   const coordinatorOnly = new Set([
     'LISTAR_ENVIOS_TRABAJO_TITULACION',
-    'GUARDAR_RESOLUCION_TRABAJO_TITULACION',
-    'MIGRAR_TRABAJOS_TITULACION'
+    'GUARDAR_RESOLUCION_TRABAJO_TITULACION'
   ]);
   if (coordinatorOnly.has(action) && !['coordinator', 'admin'].includes(userRole)) {
     return jsonReply(request, { ok: false, mensaje: 'Acción no autorizada.' }, 403);
+  }
+  if (action === 'MIGRAR_TRABAJOS_TITULACION' && userRole !== 'admin') {
+    return jsonReply(request, { ok: false, mensaje: 'Migración exclusiva del administrador.' }, 403);
   }
 
   try {
@@ -544,8 +589,8 @@ async function processRequest(context) {
     if (action === 'MIGRAR_TRABAJOS_TITULACION') return jsonReply(request, await migrarTrabajosTitulacionLegados(env));
     if (action === 'CONSULTAR_ENVIO_TRABAJO_TITULACION') return jsonReply(request, await consultar(payload, env, userRole));
     if (action === 'ENVIO_TRABAJO_TITULACION') return jsonReply(request, await guardarEnvio(payload, env));
-    if (action === 'LISTAR_ENVIOS_TRABAJO_TITULACION') return jsonReply(request, await listar(payload, env, userRole));
-    if (action === 'GUARDAR_RESOLUCION_TRABAJO_TITULACION') return jsonReply(request, await guardarResolucion(payload, env, userRole));
+    if (action === 'LISTAR_ENVIOS_TRABAJO_TITULACION') return jsonReply(request, await listar(payload, env, userRole, verifiedUser));
+    if (action === 'GUARDAR_RESOLUCION_TRABAJO_TITULACION') return jsonReply(request, await guardarResolucion(payload, env, userRole, verifiedUser));
     return jsonReply(request, { ok: false, mensaje: 'Acción no reconocida.' }, 400);
   } catch (error) {
     return jsonReply(request, {
