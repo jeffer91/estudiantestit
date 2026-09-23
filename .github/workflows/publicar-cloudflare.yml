@@ -1,9 +1,6 @@
-name: Publicar en Cloudflare Pages
+name: LEGADO - Publicar en Cloudflare Pages
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 concurrency:
