@@ -7,7 +7,7 @@
   function text(value){return String(value===null||value===undefined?'':value).replace(/\s+/g,' ').trim();}
   function cedula(value){var digits=String(value||'').replace(/\D/g,'');return digits.length===10?digits:'';}
   function normal(value){return text(value).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();}
-  function apiBase(){var origin=text(window.location&&window.location.origin);if(['http://localhost:5500','http://127.0.0.1:5500'].indexOf(origin)>=0)return'http://127.0.0.1:8788';return origin&&origin!=='null'?origin:'https://titulos.pages.dev';}
+  function apiBase(){var forced=text(window.TITULOS_API_BASE||'');if(forced)return forced.replace(/\/$/,'');var origin=text(window.location&&window.location.origin);if(['http://localhost:5500','http://127.0.0.1:5500'].indexOf(origin)>=0)return'http://127.0.0.1:8788';return origin&&origin!=='null'?origin:'https://titulos.pages.dev';}
   function request(path,action,data){
     return fetch(apiBase()+path,{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json','X-Titulos-App':'estudiantes'},body:JSON.stringify({accion:action,metodo:'POST',datos:data||{}})}).then(function(response){
       return response.text().then(function(body){var json={};try{json=body?JSON.parse(body):{};}catch(error){throw new Error('El sistema respondió en un formato no válido.');}if(!response.ok||json.ok===false)throw new Error(json.mensaje||json.error||('Error HTTP '+response.status));return json;});
