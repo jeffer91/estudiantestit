@@ -1,21 +1,21 @@
-/* Cliente Firestore REST para Cloudflare Pages Functions.
-   Usa cuentas de servicio cuando existen y, para pruebas locales, usa
-   las configuraciones web provistas por Firebase y respeta sus reglas. */
+/* Cliente Firestore REST para Firebase Functions.
+   Usa Application Default Credentials (ADC) de la identidad de ejecución.
+   No almacena ni procesa llaves JSON de cuentas de servicio. */
+
+import { GoogleAuth } from 'google-auth-library';
 
 export const FIREBASE_PROJECTS = Object.freeze({
   TITULOS: Object.freeze({
-    projectId: 'titulos-ec2fa',
-    apiKey: 'AIzaSyDkSOhJ552LwxQtt8GhP5iDJk49y0t4mOg'
+    projectId: 'titulos-ec2fa'
   }),
   UTET: Object.freeze({
-    projectId: 'utet-4387a',
-    apiKey: 'AIzaSyCaHf1C0BB0X_H3BDZ1o-UDAsPmLTjsZLA'
+    projectId: 'utet-4387a'
   })
 });
 
-const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
 const FIRESTORE_SCOPE = 'https://www.googleapis.com/auth/datastore';
-const tokenCache = new Map();
+const googleAuth = new GoogleAuth({ scopes: [FIRESTORE_SCOPE] });
+let authClientPromise = null;
 
 export function text(value) {
   return String(value === null || value === undefined ? '' : value).trim();
@@ -62,160 +62,27 @@ function documentName(project, collectionName, documentId) {
   return `projects/${config.projectId}/databases/(default)/documents/${collectionName}/${documentId}`;
 }
 
-function readEnv(env, name) {
-  return env && Object.prototype.hasOwnProperty.call(env, name) ? env[name] : undefined;
+async function accessToken() {
+  if (!authClientPromise) authClientPromise = googleAuth.getClient();
+  const client = await authClientPromise;
+  const tokenResult = await client.getAccessToken();
+  const token = typeof tokenResult === 'string'
+    ? tokenResult
+    : tokenResult && tokenResult.token;
+  if (!text(token)) throw new Error('Firebase Functions no pudo obtener credenciales ADC de Google Cloud.');
+  return text(token);
 }
 
-function parseServiceAccount(raw, bindingName) {
-  if (!raw) return null;
-  let value = raw;
-  if (typeof value === 'string') {
-    try {
-      value = JSON.parse(value);
-    } catch (_error) {
-      throw new Error(`${bindingName} debe contener el JSON completo de una cuenta de servicio.`);
-    }
-  }
-  if (!value || typeof value !== 'object') {
-    throw new Error(`${bindingName} no contiene una cuenta de servicio válida.`);
-  }
-  const clientEmail = text(value.client_email || value.clientEmail);
-  const privateKey = text(value.private_key || value.privateKey).replace(/\\n/g, '\n');
-  if (!clientEmail || !privateKey) {
-    throw new Error(`${bindingName} debe incluir client_email y private_key.`);
-  }
-  return {
-    clientEmail,
-    privateKey,
-    privateKeyId: text(value.private_key_id || value.privateKeyId),
-    projectId: text(value.project_id || value.projectId)
-  };
-}
-
-function serviceAccount(env, project) {
-  const config = projectConfig(project);
-  const names = config.key === 'TITULOS'
-    ? ['TITULOS_FIREBASE_SERVICE_ACCOUNT', 'FIREBASE_TITULOS_SERVICE_ACCOUNT']
-    : ['UTET_FIREBASE_SERVICE_ACCOUNT', 'FIREBASE_UTET_SERVICE_ACCOUNT'];
-
-  for (const name of names) {
-    const parsed = parseServiceAccount(readEnv(env, name), name);
-    if (parsed) return parsed;
-  }
-
-  return parseServiceAccount(readEnv(env, 'FIREBASE_SERVICE_ACCOUNT'), 'FIREBASE_SERVICE_ACCOUNT');
-}
-
-function bytesToBase64Url(bytes) {
-  let binary = '';
-  const chunk = 0x8000;
-  for (let index = 0; index < bytes.length; index += chunk) {
-    binary += String.fromCharCode(...bytes.subarray(index, Math.min(index + chunk, bytes.length)));
-  }
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
-}
-
-function stringToBase64Url(value) {
-  return bytesToBase64Url(new TextEncoder().encode(value));
-}
-
-function pemToArrayBuffer(pem) {
-  const base64 = pem
-    .replace(/-----BEGIN PRIVATE KEY-----/g, '')
-    .replace(/-----END PRIVATE KEY-----/g, '')
-    .replace(/\s+/g, '');
-  if (!base64) throw new Error('La clave privada de Firebase está vacía.');
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-  return bytes.buffer;
-}
-
-async function createSignedJwt(account) {
-  const now = Math.floor(Date.now() / 1000);
-  const header = {
-    alg: 'RS256',
-    typ: 'JWT',
-    ...(account.privateKeyId ? { kid: account.privateKeyId } : {})
-  };
-  const payload = {
-    iss: account.clientEmail,
-    scope: FIRESTORE_SCOPE,
-    aud: TOKEN_ENDPOINT,
-    iat: now,
-    exp: now + 3600
-  };
-  const unsigned = `${stringToBase64Url(JSON.stringify(header))}.${stringToBase64Url(JSON.stringify(payload))}`;
-  const key = await crypto.subtle.importKey(
-    'pkcs8',
-    pemToArrayBuffer(account.privateKey),
-    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
-    false,
-    ['sign']
-  );
-  const signature = await crypto.subtle.sign(
-    'RSASSA-PKCS1-v1_5',
-    key,
-    new TextEncoder().encode(unsigned)
-  );
-  return `${unsigned}.${bytesToBase64Url(new Uint8Array(signature))}`;
-}
-
-async function accessToken(env, project) {
-  const config = projectConfig(project);
-  const account = serviceAccount(env, project);
-  if (!account) return '';
-
-  const cacheKey = `${config.key}|${account.clientEmail}`;
-  const cached = tokenCache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now() + 60 * 1000) return cached.token;
-
-  const assertion = await createSignedJwt(account);
-  const response = await fetch(TOKEN_ENDPOINT, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-      assertion
-    }).toString()
-  });
-  const raw = await response.text();
-  let data = {};
-  try {
-    data = raw ? JSON.parse(raw) : {};
-  } catch (_error) {
-    throw new Error('Google OAuth respondió en un formato no válido.');
-  }
-  if (!response.ok || !data.access_token) {
-    throw new Error(
-      `No se pudo autenticar Firebase ${config.projectId}: ` +
-      text(data.error_description || data.error || `HTTP ${response.status}`)
-    );
-  }
-
-  const expiresIn = Math.max(300, Number(data.expires_in || 3600));
-  const result = {
-    token: data.access_token,
-    expiresAt: Date.now() + expiresIn * 1000
-  };
-  tokenCache.set(cacheKey, result);
-  return result.token;
-}
-
-function publicApiUrl(project, url) {
-  const config = projectConfig(project);
-  const parsed = new URL(url);
-  if (!parsed.searchParams.has('key')) parsed.searchParams.set('key', config.apiKey);
-  return parsed.toString();
-}
-
-async function firestoreFetch(project, url, options = {}, env) {
-  const token = await accessToken(env, project);
+async function firestoreFetch(project, url, options = {}, _env) {
+  /* El mismo token ADC sirve para ambos proyectos. El acceso real lo decide IAM:
+     - titulos-ec2fa: lectura/escritura según la identidad de ejecución.
+     - utet-4387a: solo lectura, concedida explícitamente en IAM. */
+  projectConfig(project);
+  const token = await accessToken();
   const headers = new Headers(options.headers || {});
-  if (token) headers.set('Authorization', `Bearer ${token}`);
+  headers.set('Authorization', `Bearer ${token}`);
   if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
-  const target = token ? url : publicApiUrl(project, url);
-  return fetch(target, { ...options, headers });
+  return fetch(url, { ...options, headers });
 }
 
 export function encodeValue(value) {
@@ -509,12 +376,11 @@ export async function commitDocuments(project, writes, env) {
 
 export async function pingProject(project, env) {
   const config = projectConfig(project);
-  const account = serviceAccount(env, project);
   await listCollection(project, '__ping_inexistente__', { pageSize: 1, maxDocuments: 1 }, env);
   return {
     ok: true,
     projectId: config.projectId,
-    autenticacion: account ? 'service-account-oauth' : 'firebase-web-config-reglas'
+    autenticacion: 'google-cloud-adc-iam'
   };
 }
 
