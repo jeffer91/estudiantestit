@@ -7,6 +7,7 @@ on:
     paths:
       - 'functions/**'
       - 'firebase.json'
+      - 'firestore.rules'
       - '.firebaserc'
       - '.github/workflows/publicar-firebase.yml'
   workflow_dispatch:
@@ -42,4 +43,4 @@ jobs:
         run: npm --prefix functions install
 
       - name: Publicar Functions
-        run: npx --yes firebase-tools deploy --only functions --project titulos-ec2fa
+        run: npx --yes firebase-tools deploy --only functions,firestore:rules --project titulos-ec2fa
