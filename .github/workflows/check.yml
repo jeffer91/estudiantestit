@@ -15,6 +15,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '24'
+      - name: Instalar dependencias de Firebase Functions
+        run: npm --prefix functions install --no-audit --no-fund
       - name: Verificar proyecto completo
         run: npm run check
       - name: Verificar build de Estudiantes
