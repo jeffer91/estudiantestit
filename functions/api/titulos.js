@@ -990,6 +990,7 @@ export async function onRequest({ request, env }) {
     const input = await readJson(request);
     const action = normalizeAction(input.accion || input.action || input.tipo);
     const userRole = role(request);
+    const verifiedUser = request && request.__verifiedUser ? request.__verifiedUser : null;
 
     if (!action) throw new Error('No se indicó una acción.');
     if (!allowed(userRole, action)) {
@@ -1019,6 +1020,26 @@ export async function onRequest({ request, env }) {
     const payload = { ...input, ...nested };
     delete payload.token;
     delete payload.acceso;
+
+    /* En Firebase Functions la identidad del coordinador viene de Firebase Auth.
+       No confiamos en un nombre/carrera enviado por el navegador cuando existe
+       una sesión verificada. La ruta Cloudflare heredada sigue funcionando sin
+       este bloque durante la transición. */
+    if (userRole === 'coordinator' && verifiedUser) {
+      const trustedCareers = Array.isArray(verifiedUser.carreras)
+        ? verifiedUser.carreras.map(text).filter(Boolean)
+        : [];
+      payload.coordinadorId = text(verifiedUser.coordinadorId || verifiedUser.uid);
+      payload.idCoordinador = payload.coordinadorId;
+      payload.coordinador = text(verifiedUser.nombre || verifiedUser.email || payload.coordinador);
+      payload.nombreCoordinador = payload.coordinador;
+      if (trustedCareers.length) {
+        payload.carreras = trustedCareers;
+        if (payload.carrera && !trustedCareers.some((item) => item.toLowerCase() === text(payload.carrera).toLowerCase())) {
+          payload.carrera = '';
+        }
+      }
+    }
 
     /* La escritura es la autoridad final. No hacemos una segunda consulta
        obligatoria aquí antes de ENVIO_ESTUDIANTE: el servicio de Firebase
@@ -1055,6 +1076,19 @@ export async function onRequest({ request, env }) {
     if (userRole === 'admin' && action === 'GUARDAR_RESOLUCION') {
       result = await registerReturnToStudent(payload, result, env, userRole);
       result = await registerAdminFinalCorrection(payload, result, env);
+    }
+    if (userRole === 'coordinator' && verifiedUser && action === 'LISTAR_COORDINADORES') {
+      const id = text(verifiedUser.coordinadorId || verifiedUser.uid);
+      const nombre = text(verifiedUser.nombre || verifiedUser.email).toLowerCase();
+      const filterOwn = (items) => (Array.isArray(items) ? items : []).filter((item) => {
+        const itemId = text(item && (item.id || item.idRegistro || item.coordinadorId));
+        const itemName = text(item && (item.nombre || item.coordinador)).toLowerCase();
+        return (id && itemId === id) || (nombre && itemName === nombre);
+      });
+      if (result && typeof result === 'object') {
+        if (Array.isArray(result.coordinadores)) result.coordinadores = filterOwn(result.coordinadores);
+        if (Array.isArray(result.registros)) result.registros = filterOwn(result.registros);
+      }
     }
     if (WRITE_ACTIONS.has(action)) clearCaches();
     return jsonReply(request, result);
