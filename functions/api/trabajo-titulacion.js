@@ -596,7 +596,7 @@ async function processRequest(context) {
     return jsonReply(request, {
       ok: false,
       mensaje: error && error.message ? error.message : 'No se pudo completar la operación.'
-    }, error && error.duplicado ? 409 : 500);
+    }, Number(error && error.status) || (error && error.duplicado ? 409 : 500));
   }
 }
 
