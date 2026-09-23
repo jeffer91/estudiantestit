@@ -41,6 +41,10 @@ jobs:
           test -f .github-pages-site/administrador/index.html
           test -f .github-pages-site/assets/runtime-config.js
           test -f .github-pages-site/assets/firebase-auth-client.js
+          test ! -d .github-pages-site/estudiantes/.wrangler
+          grep -q "cloudfunctions.net" .github-pages-site/assets/runtime-config.js
+          grep -q "firebase-auth-client.js?v=" .github-pages-site/administrador/index.html
+          grep -q "firebase-auth-client.js?v=" .github-pages-site/coordinadores/index.html
 
       - name: Instalar dependencias de Firebase Functions
         run: npm --prefix functions install --no-audit --no-fund
@@ -56,6 +60,18 @@ jobs:
           node --check functions/api/ia.js
           node --check functions/api/investigadores.js
           node --check functions/api/estadisticas.js
+          node --check functions/api/trabajo-titulacion.js
+          node --check github-pages/firebase-auth-client.js
+          node --check dev/preparar-github-pages.mjs
+
+      - name: Verificar arquitectura segura
+        shell: bash
+        run: |
+          ! grep -R "TITULOS_FIREBASE_SERVICE_ACCOUNT\|UTET_FIREBASE_SERVICE_ACCOUNT" functions
+          grep -q "allow read, write: if false" firestore.rules
+          grep -q "Auth.Persistence.NONE" github-pages/firebase-auth-client.js
+          grep -q "trustedCoordinatorCareers" functions/api/trabajo-titulacion.js
+          grep -q "assertCoordinatorWriteAccess" functions/api/titulos.js
 
       - name: Importar Firebase Functions
         run: node -e "import('./functions/index.js').then(() => console.log('Firebase Functions OK'))"
