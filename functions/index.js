@@ -188,31 +188,41 @@ async function enforcePublicIaRateLimit(req, auth) {
 
   const now = Date.now();
   const identity = rateLimitKey(req.ip || req.socket && req.socket.remoteAddress);
-  const buckets = [
-    { key: '10m_' + Math.floor(now / 600000), max: 30, expiresAt: new Date(now + 20 * 60000) },
-    { key: 'day_' + Math.floor(now / 86400000), max: 180, expiresAt: new Date(now + 2 * 86400000) }
-  ];
   const db = getFirestore();
+  const ref = db.collection('_rate_limits_ia').doc(identity);
 
   await db.runTransaction(async (transaction) => {
-    const refs = buckets.map((bucket) => db.collection('_rate_limits_ia').doc(identity + '_' + bucket.key));
-    const snapshots = [];
-    for (const ref of refs) snapshots.push(await transaction.get(ref));
+    const snapshot = await transaction.get(ref);
+    const data = snapshot.exists ? snapshot.data() || {} : {};
 
-    snapshots.forEach((snapshot, index) => {
-      const bucket = buckets[index];
-      const count = Number(snapshot.exists && snapshot.data() && snapshot.data().count || 0);
-      if (count >= bucket.max) {
-        const error = new Error('Se alcanzó temporalmente el límite de uso de IA. Intenta más tarde.');
-        error.status = 429;
-        throw error;
-      }
-      transaction.set(refs[index], {
-        count: count + 1,
-        actualizadoEn: new Date(),
-        expiraEn: bucket.expiresAt
-      }, { merge: true });
-    });
+    let shortStart = Number(data.shortStart || 0);
+    let shortCount = Number(data.shortCount || 0);
+    let dayStart = Number(data.dayStart || 0);
+    let dayCount = Number(data.dayCount || 0);
+
+    if (!shortStart || now - shortStart >= 10 * 60 * 1000) {
+      shortStart = now;
+      shortCount = 0;
+    }
+    if (!dayStart || now - dayStart >= 24 * 60 * 60 * 1000) {
+      dayStart = now;
+      dayCount = 0;
+    }
+
+    if (shortCount >= 30 || dayCount >= 180) {
+      const error = new Error('Se alcanzó temporalmente el límite de uso de IA. Intenta más tarde.');
+      error.status = 429;
+      throw error;
+    }
+
+    transaction.set(ref, {
+      shortStart,
+      shortCount: shortCount + 1,
+      dayStart,
+      dayCount: dayCount + 1,
+      actualizadoEn: new Date(),
+      expiraEn: new Date(now + 48 * 60 * 60 * 1000)
+    }, { merge: true });
   });
 }
 
