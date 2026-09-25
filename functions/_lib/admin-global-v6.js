@@ -1,7 +1,7 @@
 /* Administración global para la estructura vigente de Firebase UTET.
  * Población académica: matriculas + Estudiante.
  * Envíos y estados: Firebase Títulos.
- * Conserva respaldo temporal para EstudiantesPeriodo/Estudiantes.
+ * Usa exclusivamente las colecciones vigentes matriculas y Estudiante.
  */
 import {
   assignCareerCoordinator,
