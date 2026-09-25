@@ -110,12 +110,7 @@ export async function pingProject(project, env) {
   if (key === 'TITULOS') {
     await base.listCollection(key, 'configuracion', { pageSize: 1, maxDocuments: 1 }, env);
   } else {
-    try {
-      await base.listCollection(key, 'Estudiante', { pageSize: 1, maxDocuments: 1 }, env);
-    } catch (_error) {
-      /* Compatibilidad temporal con la estructura anterior. */
-      await base.listCollection(key, 'Estudiantes', { pageSize: 1, maxDocuments: 1 }, env);
-    }
+    await base.listCollection(key, 'Estudiante', { pageSize: 1, maxDocuments: 1 }, env);
   }
   return {
     ok: true,
