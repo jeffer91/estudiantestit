@@ -191,16 +191,21 @@ async function directStudentDocument(cedula, env) {
 
   const variants = canonical.startsWith('0') ? [canonical, canonical.slice(1)] : [canonical];
 
+  /* Estructura oficial UTET: colección Estudiante y documento identificado por cédula. */
   for (const id of variants) {
     const current = await getDocument('UTET', 'Estudiante', id, env);
     if (current) return current;
   }
 
-  /* Compatibilidad temporal con la colección anterior. */
-  for (const id of variants) {
-    const legacy = await getDocument('UTET', 'Estudiantes', id, env);
-    if (legacy) return legacy;
+  /* Respaldo dentro de la misma colección por si un registro histórico no usa
+     la cédula como documentId, pero conserva alguno de los identificadores. */
+  for (const field of ['cedula', 'firebaseDocumentId', 'id', 'numeroIdentificacion']) {
+    for (const value of variants) {
+      const found = await queryField('UTET', 'Estudiante', field, value, 5, env);
+      if (found.length) return found[0];
+    }
   }
+
   return null;
 }
 
