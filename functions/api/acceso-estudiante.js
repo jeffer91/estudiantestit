@@ -1,6 +1,5 @@
 import { runService } from '../_lib/claves.js';
 import { getStudentBasicFast } from '../_lib/requisitos-firebase-fast.js';
-import { getStudentFromSheets } from '../_lib/requisitos-sheets-fallback.js';
 import { corsHeaders, jsonReply, readJson, rejectUnknownOrigin, text } from '../_lib/http.js';
 
 const TITLES_TIMEOUT_MS = 18000;
@@ -151,11 +150,20 @@ async function lookupAcademic(env, cedula) {
 
   const task = (async () => {
     let firebaseResult = null;
-    let firebaseError = null;
+
     try {
       firebaseResult = await getStudentBasicFast(cedula, {}, env);
     } catch (error) {
-      firebaseError = error;
+      const wrapped = new Error(
+        text(error && error.message) ||
+        'No fue posible consultar Firebase UTET en este momento.'
+      );
+      wrapped.sources = [{
+        fuente: 'FIREBASE_UTET',
+        estado: 'error',
+        mensaje: text(error && error.message)
+      }];
+      throw wrapped;
     }
 
     if (firebaseResult && completeAcademic(firebaseResult)) {
@@ -167,39 +175,14 @@ async function lookupAcademic(env, cedula) {
       });
     }
 
-    let sheetsResult = null;
-    let sheetsError = null;
-    try {
-      sheetsResult = await getStudentFromSheets(cedula, env);
-    } catch (error) {
-      sheetsError = error;
-    }
-
-    if (sheetsResult && completeAcademic(sheetsResult)) {
-      return setCache(key, {
-        ...sheetsResult,
-        fuentePrincipal: 'GOOGLE_SHEETS_ESTUDIANTES',
-        respaldoUtilizado: true,
-        consultaFirebaseUtet: firebaseError ? 'error' : firebaseResult && firebaseResult.encontrado ? 'incompleto' : 'sin_registro',
-        consultaGoogleSheets: 'ok'
-      });
-    }
-
     if (firebaseResult && firebaseResult.encontrado === true) {
-      const error = new Error('Encontramos al estudiante, pero faltan la carrera o el período académico.');
-      error.sources = [
-        { fuente: 'FIREBASE_UTET', estado: 'incompleto' },
-        { fuente: 'GOOGLE_SHEETS_ESTUDIANTES', estado: sheetsError ? 'error' : 'incompleto' }
-      ];
-      throw error;
-    }
-
-    if (firebaseError && sheetsError) {
-      const error = new Error('No fue posible consultar los datos académicos en este momento.');
-      error.sources = [
-        { fuente: 'FIREBASE_UTET', estado: 'error', mensaje: text(firebaseError.message) },
-        { fuente: 'GOOGLE_SHEETS_ESTUDIANTES', estado: 'error', mensaje: text(sheetsError.message) }
-      ];
+      const error = new Error(
+        'Encontramos al estudiante en Firebase UTET, pero faltan la carrera o el período académico.'
+      );
+      error.sources = [{
+        fuente: 'FIREBASE_UTET',
+        estado: 'incompleto'
+      }];
       throw error;
     }
 
@@ -209,9 +192,10 @@ async function lookupAcademic(env, cedula) {
       existe: false,
       cedula,
       numeroIdentificacion: cedula,
-      fuentePrincipal: sheetsResult ? 'GOOGLE_SHEETS_ESTUDIANTES' : 'FIREBASE_UTET',
-      respaldoUtilizado: Boolean(sheetsResult),
-      mensaje: 'No encontramos un estudiante con esa cédula.'
+      fuentePrincipal: 'FIREBASE_UTET',
+      respaldoUtilizado: false,
+      consultaFirebaseUtet: 'sin_registro',
+      mensaje: 'No encontramos un estudiante con esa cédula en Firebase UTET.'
     });
   })().finally(() => academicInflight.delete(key));
 
@@ -312,7 +296,7 @@ export async function onRequest({ request, env }) {
         ok: true,
         consultaCompleta: true,
         consultas: {
-          requisitos: academic.fuentePrincipal === 'GOOGLE_SHEETS_ESTUDIANTES' ? 'respaldo_sin_registro' : 'sin_registro',
+          requisitos: 'sin_registro',
           titulos: 'no_consultado'
         },
         duracionMs: Date.now() - startedAt
@@ -336,7 +320,7 @@ export async function onRequest({ request, env }) {
           mensaje: text(error && error.message) || 'Consulta no disponible.'
         }],
         consultas: {
-          requisitos: academic.respaldoUtilizado ? 'google_sheets_ok' : 'firebase_utet_ok',
+          requisitos: 'firebase_utet_ok',
           titulos: 'error'
         },
         mensaje: 'Tus datos fueron encontrados, pero no pudimos verificar el estado de tus propuestas. Intenta nuevamente.',
@@ -374,7 +358,7 @@ export async function onRequest({ request, env }) {
       permiteReenvio: titles.permiteReenvio,
       consultaCompleta: true,
       consultas: {
-        requisitos: academic.respaldoUtilizado ? 'google_sheets_ok' : 'firebase_utet_ok',
+        requisitos: 'firebase_utet_ok',
         titulos: 'ok',
         envios: titles.tieneEnvio ? 'encontrado' : 'sin_registro',
         resoluciones: titles.tieneResolucion ? 'encontrada' : 'sin_registro'
@@ -393,9 +377,7 @@ export async function onRequest({ request, env }) {
               ? 'Tu tema de titulación fue validado por Coordinación.'
               : titles.tieneEnvio
                 ? 'Tus propuestas ya fueron enviadas y están siendo revisadas.'
-                : academic.respaldoUtilizado
-                  ? 'Datos recuperados desde el respaldo institucional. No registras envíos anteriores en este período.'
-                  : 'Estudiante encontrado. No registras envíos anteriores en este período.',
+                : 'Estudiante verificado en Firebase UTET. No registras envíos anteriores en este período.',
       duracionMs: Date.now() - startedAt
     });
   } catch (error) {
