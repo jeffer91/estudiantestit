@@ -133,8 +133,8 @@ try {
   assert.equal(global.lecturaEstudiantesAgrupada, true);
   assert.equal(
     calls.filter((call) => call.target.includes('documents:batchGet')).length,
-    2,
-    '300 estudiantes deben agruparse en dos lecturas maestras.'
+    1,
+    '300 estudiantes deben resolverse en una sola lectura maestra de Estudiante.'
   );
   assert.ok(
     calls.length < 10,
