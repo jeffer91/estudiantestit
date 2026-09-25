@@ -8,16 +8,12 @@ import {
 } from '../_lib/estadisticas-admin.js';
 import { buildFirebaseTitlesReport } from '../_lib/firebase-titulos-report.js';
 import { buildAdminReviewReport } from '../_lib/revisiones-admin.js';
-import { jsonReply, readJson, rejectUnknownOrigin, role, text } from '../_lib/http.js';
+import { corsHeaders, jsonReply, readJson, rejectUnknownOrigin, role, text } from '../_lib/http.js';
 
 export async function onRequestOptions(context) {
   return new Response(null, {
     status: 204,
-    headers: {
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, X-Titulos-App',
-      'Access-Control-Max-Age': '86400'
-    }
+    headers: corsHeaders(context.request)
   });
 }
 
