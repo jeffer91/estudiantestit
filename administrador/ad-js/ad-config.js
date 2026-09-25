@@ -37,7 +37,7 @@ Función:
     },
 
     colecciones: {
-      estudiantes: "Estudiantes",
+      estudiantes: "Estudiante",
       titulosConfig: "titulos_config",
       coordinadores: "titulos_coordinadores",
       titulos: "titulos",
@@ -52,8 +52,8 @@ Función:
     campos: {
       cedula: "cedula",
       numeroIdentificacion: "numeroIdentificacion",
-      nombreCarrera: "NombreCarrera",
-      codigoCarrera: "CodigoCarrera",
+      nombreCarrera: "nombreCarreraActual",
+      codigoCarrera: "codigoCarreraActual",
       periodoId: "periodoId",
       periodoLabel: "periodoLabel",
       estadoMatricula: "estadoMatricula"
