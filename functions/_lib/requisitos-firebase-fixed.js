@@ -94,11 +94,7 @@ export async function pullRequisitos(action, payload = {}, env) {
   const normalizedAction = text(action).toLowerCase();
 
   if (normalizedAction === 'ping') {
-    try {
-      await listCollection('UTET', 'Estudiante', { pageSize: 1, maxDocuments: 1 }, env);
-    } catch (_error) {
-      await listCollection('UTET', 'Estudiantes', { pageSize: 1, maxDocuments: 1 }, env);
-    }
+    await listCollection('UTET', 'Estudiante', { pageSize: 1, maxDocuments: 1 }, env);
     return {
       ok: true,
       servicio: 'REQUISITOS',

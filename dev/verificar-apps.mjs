@@ -88,8 +88,6 @@ const studentSheets = read('estudiantes-mvp/js/sheets.service.js');
 const studentAccess = read('functions/api/acceso-estudiante.js');
 const studentFirebaseFast = read('functions/_lib/requisitos-firebase-fast.js');
 const studentFirebaseFastCode = withoutComments(studentFirebaseFast);
-const studentSheetsFallback = read('functions/_lib/requisitos-sheets-fallback.js');
-const appsScriptFast = read('google-apps-script/REQUISITOS_CONSULTA_RAPIDA.gs');
 const studentBuild = read('dev/preparar-pages-estudiantes.mjs');
 const localBuild = read('dev/preparar-pages-local.mjs');
 const coordinatorBuild = read('dev/preparar-pages-coordinadores.mjs');
@@ -139,25 +137,19 @@ assert(/segundaLecturaEnviosEliminada:\s*true/.test(adminGlobal), 'Administrador
 
 assert(/\/api\/acceso-estudiante/.test(read('estudiantes-mvp/js/estudiante.consulta.revision.js')), 'Estudiantes no usa la consulta unificada.');
 assert(/getStudentBasicFast/.test(studentAccess), 'La consulta unificada no usa la lectura rápida de Firebase UTET.');
-assert(/getStudentFromSheets/.test(studentAccess), 'La consulta unificada no tiene respaldo en Google Sheets.');
+assert(!/getStudentFromSheets|GOOGLE_SHEETS_ESTUDIANTES/.test(studentAccess), 'Estudiantes todavía usa Google Sheets como fuente de identidad académica.');
 assert(!/Promise\.allSettled/.test(studentAccess), 'Estudiantes todavía consulta UTET y Títulos en paralelo.');
 assert(studentAccess.indexOf('lookupAcademic') < studentAccess.indexOf('queryTitles'), 'Firebase Títulos se consulta antes de conocer los datos académicos.');
 assert(/CONSULTAR_ENVIO_CEDULA/.test(studentAccess) && /scope:\s*'period'/.test(studentAccess), 'Firebase Títulos no se consulta por cédula y período exactos.');
-assert(/GOOGLE_SHEETS_ESTUDIANTES/.test(studentAccess), 'La respuesta no identifica el respaldo institucional.');
+assert(/fuentePrincipal:\s*'FIREBASE_UTET'/.test(studentAccess), 'La consulta unificada no identifica Firebase UTET como fuente académica autoritativa.');
 
 assert(/getDocument\('UTET', 'Estudiante', id/.test(studentFirebaseFastCode), 'Firebase UTET no prioriza Estudiante/{cedula}.');
-assert(/getDocument\('UTET', 'Estudiantes', id/.test(studentFirebaseFastCode), 'No existe compatibilidad temporal con la colección Estudiantes.');
+assert(!/getDocument\('UTET', 'Estudiantes', id/.test(studentFirebaseFastCode), 'El lector académico todavía consulta la colección heredada Estudiantes.');
 assert(/queryField\('UTET', 'matriculas'/.test(studentFirebaseFastCode), 'La consulta académica no resuelve el período desde matriculas.');
 assert(/listCollection\('UTET', 'matriculas'/.test(studentFirebaseFastCode), 'La consulta académica no contempla matrículas con referencias o IDs compuestos.');
 assert(!/currentPeriod\s*\(/.test(studentFirebaseFastCode), 'La consulta académica todavía asigna un período global sin una matrícula del estudiante.');
 assert(/nombreCarreraActual/.test(studentFirebaseFast) && /codigoCarreraActual/.test(studentFirebaseFast), 'El lector de estudiantes no reconoce los campos vigentes de carrera.');
 assert(/payloadJson/.test(studentFirebaseFast), 'La consulta rápida no aprovecha payloadJson.');
-assert(/consultar_estudiante_rapido/.test(studentSheetsFallback), 'El respaldo no usa la acción rápida de Apps Script.');
-assert(/sheetName:\s*'Estudiantes'/.test(studentSheetsFallback), 'El respaldo no está limitado a la hoja Estudiantes.');
-assert(!/pull_bl2|MatriculasPeriodo|Requisitos|Notas/.test(studentSheetsFallback), 'El respaldo descarga tablas que no necesita.');
-assert(/getSheetByName\("Estudiantes"\)/.test(appsScriptFast), 'Apps Script no consulta únicamente la hoja Estudiantes.');
-assert(/createTextFinder/.test(appsScriptFast), 'Apps Script no busca la cédula con TextFinder.');
-assert(!/ensureAllSheets_|handlePullBL2_/.test(appsScriptFast), 'La consulta rápida de Apps Script ejecuta procesos pesados.');
 assert(/VERSION\s*=\s*'2\.5\.0'/.test(studentBuild), 'El build de Estudiantes no usa la versión 2.5.0.');
 assert(/VERSION_ESTUDIANTES\s*=\s*'2\.5\.0'/.test(localBuild), 'El entorno local no usa Estudiantes 2.5.0.');
 
@@ -165,9 +157,10 @@ assert(/currentEnrollments/.test(adminGlobal) && /queryPeriodRows\('UTET', 'matr
 assert(
   /batchGetDocuments\('UTET'/.test(adminGlobal) &&
   /collectionName: 'Estudiante'/.test(adminGlobal) &&
-  /collectionName: 'Estudiantes'/.test(adminGlobal),
-  'Administrador no agrupa los datos maestros de Estudiante con compatibilidad temporal.'
+  !/collectionName: 'Estudiantes'/.test(adminGlobal),
+  'Administrador debe obtener los datos maestros únicamente desde Estudiante.'
 );
+assert(!/EstudiantesPeriodo/.test(adminGlobal), 'Administrador todavía usa la colección heredada EstudiantesPeriodo.');
 assert(!/getDocument\('UTET', 'Estudiante'/.test(adminGlobal), 'Administrador volvió a consultar un documento por estudiante.');
 assert(/nombreCarreraActual/.test(adminGlobal) && /codigoCarreraActual/.test(adminGlobal), 'Administrador no reconoce los campos actuales de carrera.');
 assert(/correoInstitucional/.test(adminGlobal) && /correoPersonal/.test(adminGlobal), 'Administrador no conserva los correos actuales para los recordatorios.');
@@ -192,7 +185,7 @@ if (errors.length) {
   process.exit(1);
 }
 
-console.log('[Apps] Estudiantes: Estudiante + matriculas en Firebase UTET, con Google Sheets como respaldo y Títulos al final.');
+console.log('[Apps] Estudiantes: Estudiante + matriculas en Firebase UTET como fuente académica autoritativa, con Títulos al final.');
 console.log('[Apps] Trabajo de Titulación: comparte el lector académico de UTET y guarda envíos unificados.');
 console.log('[Apps] Coordinadores: permanece aislado de UTET y trabaja únicamente sobre Firebase Títulos.');
 console.log('[Apps] Investigación: cola compartida sobre Firebase Títulos, PIN y bloqueo concurrente.');

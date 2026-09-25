@@ -257,12 +257,7 @@ async function scanPeriodRows(project, collectionName, requestedPeriod, env) {
 async function currentEnrollments(payload, requestedPeriod, env) {
   let rows = await queryPeriodRows('UTET', 'matriculas', payload, env);
   if (!rows.length) rows = await scanPeriodRows('UTET', 'matriculas', requestedPeriod, env);
-  if (rows.length) return { rows, source: 'matriculas' };
-
-  /* Compatibilidad temporal durante la transición de estructura. */
-  rows = await queryPeriodRows('UTET', 'EstudiantesPeriodo', payload, env);
-  if (!rows.length) rows = await scanPeriodRows('UTET', 'EstudiantesPeriodo', requestedPeriod, env);
-  return { rows, source: rows.length ? 'EstudiantesPeriodo' : 'matriculas' };
+  return { rows, source: 'matriculas' };
 }
 
 function studentDocumentVariants(id) {
@@ -280,11 +275,9 @@ function completeEnrollmentProfile(row) {
 
 function studentFromBatch(id, index) {
   const variants = studentDocumentVariants(id);
-  for (const collectionName of ['Estudiante', 'Estudiantes']) {
-    for (const value of variants) {
-      const current = index.get(`${collectionName}/${value}`);
-      if (current && rowActive(current)) return current;
-    }
+  for (const value of variants) {
+    const current = index.get(`Estudiante/${value}`);
+    if (current && rowActive(current)) return current;
   }
   return null;
 }
@@ -302,7 +295,6 @@ async function baseStudentsForEnrollments(rows, env) {
   idsToFetch.forEach((id) => {
     studentDocumentVariants(id).forEach((documentId) => {
       references.push({ collectionName: 'Estudiante', documentId });
-      references.push({ collectionName: 'Estudiantes', documentId });
     });
   });
 
