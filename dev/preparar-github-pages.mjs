@@ -91,6 +91,41 @@ injectApiBase('administrador/ad-index.html', 'https://titulos-administrador.page
   'administrador/_redirects', 'administrador/_headers'
 ].forEach(removeIfExists);
 
+
+function redirectPage(relativePath, target, title) {
+  const safeTarget = JSON.stringify(target);
+  const safeTitle = String(title || 'Sistema de Titulación')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const html = [
+    '<!doctype html>',
+    '<html lang="es"><head><meta charset="utf-8">',
+    '<meta name="viewport" content="width=device-width,initial-scale=1">',
+    '<meta name="robots" content="noindex">',
+    '<title>' + safeTitle + '</title>',
+    '<style>html,body{height:100%;margin:0;font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#f5f7fb;color:#172033}.wrap{height:100%;display:grid;place-items:center;padding:24px;box-sizing:border-box}.card{max-width:560px;background:white;border:1px solid #dfe5ef;border-radius:18px;padding:28px;text-align:center;box-shadow:0 12px 40px rgba(20,30,55,.08)}a{color:#0b57d0;font-weight:700}</style>',
+    '</head><body><main class="wrap"><div class="card">',
+    '<h1>' + safeTitle + '</h1>',
+    '<p>Conectando con el sistema y verificando la información en Firebase…</p>',
+    '<p><a id="continuar" href="' + target + '">Continuar</a></p>',
+    '</div></main>',
+    '<script>(function(){var base=' + safeTarget + ';var suffix=(window.location.search||"")+(window.location.hash||"");var url=base+suffix;document.getElementById("continuar").href=url;window.location.replace(url);})();</script>',
+    '</body></html>'
+  ].join('\n');
+  write(relativePath, html);
+}
+
+// Los frontends Cloudflare ya hablan con Firebase mediante Pages Functions en el
+// mismo origen. Desde GitHub Pages se usa una entrada estable y se evita que CORS
+// bloquee la consulta académica.
+redirectPage('estudiantes/index.html', 'https://titulos.pages.dev/estudiantes/estudiante', 'Estudiantes');
+redirectPage('estudiantes/estudiante.html', 'https://titulos.pages.dev/estudiantes/estudiante', 'Estudiantes');
+redirectPage('trabajo-titulacion/index.html', 'https://titulos.pages.dev/trabajo-titulacion/', 'Trabajo de Titulación');
+redirectPage('coordinadores/index.html', 'https://titulos-coordinadores.pages.dev/', 'Coordinadores');
+redirectPage('coordinadores/coordinador.html', 'https://titulos-coordinadores.pages.dev/', 'Coordinadores');
+redirectPage('investigadores/index.html', 'https://titulos-investigadores.pages.dev/', 'Investigadores');
+redirectPage('administrador/index.html', 'https://titulos-administrador.pages.dev/', 'Administrador');
+redirectPage('administrador/ad-index.html', 'https://titulos-administrador.pages.dev/', 'Administrador');
+
 const home = [
   '<!doctype html>',
   '<html lang="es"><head><meta charset="utf-8">',
