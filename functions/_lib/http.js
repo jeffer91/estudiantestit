@@ -6,6 +6,7 @@ export const ALLOWED_ORIGINS = new Set([
   'https://titulos-administrador.pages.dev',
   'https://titulos-coordinadores.pages.dev',
   'https://titulos-investigadores.pages.dev',
+  'https://jeffer91.github.io',
   'https://coordinadores.pages.dev',
   'http://127.0.0.1:5500',
   'http://localhost:5500',
