@@ -50,8 +50,162 @@
     return window.EstudianteMVPMemoria || null;
   }
 
+  function crearPaginacionPropuestasFallback() {
+    var propuestaActual = 1;
+    var opciones = {};
+
+    function normalizarNumero(numero) {
+      numero = Number(numero || 1);
+      if (numero < 1) return 1;
+      if (numero > 3) return 3;
+      return numero;
+    }
+
+    function mostrar(numero, config) {
+      var paneles = document.querySelectorAll('[data-propuesta-panel]');
+      var dots = document.querySelectorAll('[data-propuesta-dot]');
+      var textoIndice = document.getElementById('propuestaIndiceTexto');
+
+      config = config || {};
+      propuestaActual = normalizarNumero(numero);
+
+      Array.prototype.forEach.call(paneles, function (panel) {
+        var actual = Number(panel.getAttribute('data-propuesta-panel') || 0);
+        var activo = actual === propuestaActual;
+        panel.hidden = !activo;
+        panel.classList.toggle('is-active', activo);
+      });
+
+      Array.prototype.forEach.call(dots, function (dot) {
+        var actual = Number(dot.getAttribute('data-propuesta-dot') || 0);
+        dot.classList.toggle('is-active', actual === propuestaActual);
+      });
+
+      if (textoIndice) {
+        textoIndice.textContent = 'Propuesta ' + propuestaActual + ' de 3';
+      }
+
+      if (typeof opciones.alCambiar === 'function') {
+        opciones.alCambiar(propuestaActual);
+      }
+
+      if (!config.sinScroll) {
+        var panelPaso = document.querySelector('[data-step-panel="propuestas"]');
+        if (panelPaso && typeof panelPaso.scrollIntoView === 'function') {
+          panelPaso.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }
+
+      return propuestaActual;
+    }
+
+    function guardarPropuestaActual() {
+      if (typeof opciones.alGuardarPropuesta === 'function') {
+        opciones.alGuardarPropuesta(propuestaActual);
+      }
+    }
+
+    function validarActual() {
+      if (typeof opciones.alValidarPropuesta === 'function') {
+        return opciones.alValidarPropuesta(propuestaActual) || {
+          ok: false,
+          mensaje: 'Completa la propuesta actual.'
+        };
+      }
+
+      return { ok: true };
+    }
+
+    function iniciar(configuracion) {
+      opciones = configuracion || {};
+      return mostrar(opciones.propuestaInicial || 1, { sinScroll: true });
+    }
+
+    function manejarAccion(accion) {
+      var validacion;
+
+      if (accion === 'propuesta-anterior') {
+        guardarPropuestaActual();
+        return mostrar(propuestaActual - 1);
+      }
+
+      if (accion === 'propuesta-siguiente') {
+        guardarPropuestaActual();
+        validacion = validarActual();
+
+        if (!validacion.ok) {
+          var ui = obtenerUI();
+          if (ui && typeof ui.mostrarEstado === 'function') {
+            ui.mostrarEstado(
+              '#estadoPropuestas',
+              validacion.mensaje || 'Completa la propuesta actual.',
+              'error'
+            );
+          }
+          if (validacion.selector) {
+            var campo = document.querySelector(validacion.selector);
+            if (campo && typeof campo.focus === 'function') campo.focus();
+          }
+          return false;
+        }
+
+        return mostrar(propuestaActual + 1);
+      }
+
+      if (accion === 'propuesta-ver-resumen') {
+        guardarPropuestaActual();
+        validacion = validarActual();
+
+        if (!validacion.ok) {
+          var uiResumen = obtenerUI();
+          if (uiResumen && typeof uiResumen.mostrarEstado === 'function') {
+            uiResumen.mostrarEstado(
+              '#estadoPropuestas',
+              validacion.mensaje || 'Completa la propuesta actual.',
+              'error'
+            );
+          }
+          if (validacion.selector) {
+            var campoResumen = document.querySelector(validacion.selector);
+            if (campoResumen && typeof campoResumen.focus === 'function') {
+              campoResumen.focus();
+            }
+          }
+          return false;
+        }
+
+        if (typeof opciones.alVerResumen === 'function') {
+          opciones.alVerResumen();
+        }
+        return true;
+      }
+
+      return false;
+    }
+
+    return Object.freeze({
+      iniciar: iniciar,
+      mostrar: mostrar,
+      obtenerActual: function () { return propuestaActual; },
+      guardarPropuestaActual: guardarPropuestaActual,
+      validarPropuestaActual: validarActual,
+      manejarAccion: manejarAccion
+    });
+  }
+
   function obtenerPaginacionPropuestas() {
-    return window.EstudianteMVPPropuestasPaginacion || null;
+    if (window.EstudianteMVPPropuestasPaginacion) {
+      return window.EstudianteMVPPropuestasPaginacion;
+    }
+
+    window.EstudianteMVPPropuestasPaginacion =
+      crearPaginacionPropuestasFallback();
+
+    console.warn(
+      '[Estudiantes MVP] Se activó la paginación interna de respaldo.'
+    );
+
+    return window.EstudianteMVPPropuestasPaginacion;
   }
 
   function obtenerModales() {

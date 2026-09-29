@@ -8,7 +8,7 @@ const workSource = path.join(root, 'trabajo-titulacion-mvp');
 const output = path.join(root, '.pages-estudiantes');
 const publicStudent = path.join(output, 'estudiantes');
 const publicWork = path.join(output, 'trabajo-titulacion');
-const VERSION = '2.5.0';
+const VERSION = '2.5.1';
 const HISTORY_FILE = 'js/titulos.historial.publico.js';
 const WORK_ROUTE_FILE = 'js/estudiante.trabajo-titulacion.route.js';
 const WORK_PREFILL_FILE = 'js/trabajo-titulacion.prefill.js';
@@ -116,6 +116,8 @@ fs.writeFileSync(path.join(output, '_headers'), headers, 'utf8');
 
 const required = [
   path.join(publicStudent, 'estudiante.html'),
+  path.join(publicStudent, 'js', 'estudiante.propuestas.paginacion.js'),
+  path.join(publicStudent, 'js', 'estudiante.app.js'),
   path.join(publicStudent, HISTORY_FILE),
   path.join(publicStudent, WORK_ROUTE_FILE),
   path.join(publicWork, 'index.html'),
