@@ -1,6 +1,10 @@
 /* Configuración Estudiantes: Requisitos consulta, Títulos operación y Claves configuración. */
 (function(window,document){
 'use strict';
+var hostActual=String(window.location&&window.location.hostname||'').toLowerCase();
+if(!window.TITULOS_API_BASE&&(hostActual==='github.io'||/\\.github\\.io$/.test(hostActual))){
+  window.TITULOS_API_BASE='https://titulos.pages.dev';
+}
 var CONFIG=Object.freeze({
   app:Object.freeze({nombre:'Estudiantes MVP',version:'2.1.0',entorno:'produccion',origenCaptura:'estudiantes-mvp',modoDiagnostico:true}),
   fuentes:Object.freeze({requisitos:'REQUISITOS_BDLOCAL_SYNC',titulos:'RESPALDO TITULOS APP',claves:'Claves'}),
