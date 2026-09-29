@@ -5,7 +5,14 @@ var P={
   TITULOS:{id:'titulos-ec2fa',key:'AIzaSyDkSOhJ552LwxQtt8GhP5iDJk49y0t4mOg'},
   UTET:{id:'utet-4387a',key:'AIzaSyCaHf1C0BB0X_H3BDZ1o-UDAsPmLTjsZLA'}
 };
-var IA_OK={groq:true,gemini:true,openrouter:true};
+var IA_OK={groq:true,gemini:true,openrouter:true,mistral:true,cohere:true};
+var IA_CATALOGO={
+  groq:{id:'groq',nombre:'Groq',tipo:'openai-compatible',prioridad:1,endpoint:'https://api.groq.com/openai/v1/chat/completions',modelo:'openai/gpt-oss-20b'},
+  gemini:{id:'gemini',nombre:'Gemini',tipo:'gemini',prioridad:2,endpoint:'',modelo:'gemini-2.5-flash-lite'},
+  openrouter:{id:'openrouter',nombre:'OpenRouter Free',tipo:'openai-compatible',prioridad:3,endpoint:'https://openrouter.ai/api/v1/chat/completions',modelo:'openrouter/free'},
+  mistral:{id:'mistral',nombre:'Mistral AI',tipo:'openai-compatible',prioridad:4,endpoint:'https://api.mistral.ai/v1/chat/completions',modelo:'mistral-small-latest'},
+  cohere:{id:'cohere',nombre:'Cohere',tipo:'cohere',prioridad:5,endpoint:'https://api.cohere.com/v2/chat',modelo:'command-a-03-2025'}
+};
 
 function t(v){return String(v===null||v===undefined?'':v).trim();}
 function n(v){return t(v).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();}
@@ -137,11 +144,112 @@ function listarTitulos(f){
   });
 }
 function listarIA(){
-  return list('TITULOS','ia',['nombre','tipo','activo','estado','prioridad','modelo','model','timeoutMs','maxTokens','temperatura','descripcion','ultimaPruebaOk','ultimaPruebaEn','ultimaLatenciaMs','ultimoError'],100)
+  return list('TITULOS','ia',['nombre','tipo','activo','estado','prioridad','modelo','model','endpoint','timeoutMs','maxTokens','temperatura','descripcion','ultimaPruebaOk','ultimaPruebaEn','ultimaLatenciaMs','ultimoError'],100)
+    .catch(function(){return[];})
     .then(function(rows){
-      var proveedores=rows.filter(function(r){return IA_OK[t(r.id).toLowerCase()]===true;}).map(function(r){return Object.assign({},r,{proveedor:r.id,nombre:t(r.nombre||r.id),activo:active(r),apiKeyConfigurada:false});});
+      var byId={};
+      rows.forEach(function(r){
+        var id=t(r.id).toLowerCase();
+        if(IA_OK[id])byId[id]=r;
+      });
+      var proveedores=Object.keys(IA_CATALOGO).map(function(id){
+        var base=IA_CATALOGO[id],r=byId[id]||{};
+        return Object.assign({},base,r,{
+          id:id,
+          proveedor:id,
+          nombre:t(r.nombre||base.nombre),
+          tipo:t(r.tipo||base.tipo),
+          endpoint:t(r.endpoint||base.endpoint),
+          modelo:t(r.modelo||r.model||base.modelo),
+          prioridad:Number(r.prioridad||base.prioridad),
+          activo:byId[id]?active(r):false,
+          apiKeyConfigurada:false,
+          gratis:true
+        });
+      });
       return{ok:true,proveedores:proveedores};
     });
+}
+
+function leerRespuestaProveedor(resp,nombre){
+  return resp.text().then(function(raw){
+    var data={};
+    try{data=raw?JSON.parse(raw):{};}catch(_e){throw new Error(nombre+' respondió en un formato no válido.');}
+    if(!resp.ok){
+      var msg=data&&data.error&&(data.error.message||data.error.status)||data&&data.message||('HTTP '+resp.status);
+      throw new Error(nombre+': '+msg);
+    }
+    return data;
+  });
+}
+
+function probarIA(providerId,prompt,credencial){
+  var id=t(providerId).toLowerCase();
+  var base=IA_CATALOGO[id];
+  var key=t(credencial);
+  var inicio=Date.now();
+  if(!base||!IA_OK[id])return Promise.reject(new Error('Proveedor no permitido.'));
+  if(!key)return Promise.reject(new Error('Para probar '+base.nombre+' en GitHub Pages, ingresa una API key temporal. La clave se enviará solo al proveedor y no se guardará.'));
+
+  if(id==='gemini'){
+    var model=encodeURIComponent(base.modelo);
+    var url='https://generativelanguage.googleapis.com/v1beta/models/'+model+':generateContent?key='+encodeURIComponent(key);
+    return fetch(url,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({contents:[{role:'user',parts:[{text:t(prompt)||'Responde únicamente: conexión correcta.'}]}],generationConfig:{maxOutputTokens:64,temperature:0}})
+    }).then(function(resp){return leerRespuestaProveedor(resp,base.nombre);}).then(function(data){
+      var salida=t(data&&data.candidates&&data.candidates[0]&&data.candidates[0].content&&data.candidates[0].content.parts&&data.candidates[0].content.parts.map(function(p){return p.text||'';}).join('\n'));
+      if(!salida)throw new Error(base.nombre+' respondió sin texto.');
+      return{ok:true,provider:id,text:salida,latencyMs:Date.now()-inicio};
+    });
+  }
+
+  if(id==='cohere'){
+    return fetch(base.endpoint,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
+      body:JSON.stringify({model:base.modelo,messages:[{role:'user',content:t(prompt)||'Responde únicamente: conexión correcta.'}],max_tokens:64,temperature:0})
+    }).then(function(resp){return leerRespuestaProveedor(resp,base.nombre);}).then(function(data){
+      var salida=t(data&&data.message&&data.message.content&&data.message.content.map(function(p){return p.text||'';}).join('\n'));
+      if(!salida)throw new Error(base.nombre+' respondió sin texto.');
+      return{ok:true,provider:id,text:salida,latencyMs:Date.now()-inicio};
+    });
+  }
+
+  return fetch(base.endpoint,{
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      'Authorization':'Bearer '+key,
+      ...(id==='openrouter'?{'HTTP-Referer':window.location.origin,'X-Title':'Administrador Titulación'}:{})
+    },
+    body:JSON.stringify({
+      model:base.modelo,
+      messages:[{role:'user',content:t(prompt)||'Responde únicamente: conexión correcta.'}],
+      max_tokens:64,
+      temperature:0
+    })
+  }).then(function(resp){return leerRespuestaProveedor(resp,base.nombre);}).then(function(data){
+    var salida=t(data&&data.choices&&data.choices[0]&&data.choices[0].message&&data.choices[0].message.content);
+    if(!salida)throw new Error(base.nombre+' respondió sin texto.');
+    return{ok:true,provider:id,text:salida,latencyMs:Date.now()-inicio};
+  });
+}
+
+function listarTitulosGlobal(f){
+  return listarTitulos(f||{}).then(function(r){
+    var registros=(r.envios||[]).map(function(x){
+      return Object.assign({},x,{
+        envioId:t(x.id||x._docId||x._id),
+        cedula:t(x.cedula||x.numeroIdentificacion),
+        nombres:t(x.estudiante||x.nombres||x.Nombres),
+        carrera:t(x.carrera||x.carreraNombre||x.NombreCarrera||x.nombreCarrera),
+        estado:t(x.estadoProceso||x.estado||x.estadoFinal||'PENDIENTE_REVISION').toUpperCase()
+      });
+    });
+    return{ok:true,registros:registros,envios:registros,estudiantes:registros,total:registros.length,mensaje:'Lista cargada directamente desde Firebase Títulos.'};
+  });
 }
 function obtenerEstadisticas(f){
   return listarTitulos(f).then(function(r){
@@ -158,7 +266,7 @@ function consultarEstudiante(cedula){
 window.ADFirebaseDirect=Object.freeze({
   configTitulos:configTitulos,configRequisitos:configRequisitos,pingTitulos:pingTitulos,pingRequisitos:pingRequisitos,
   listarPeriodos:listarPeriodos,listarCarreras:listarCarreras,listarCoordinadores:listarCoordinadores,
-  listarInvestigadores:listarInvestigadores,resumenInvestigacion:resumenInvestigacion,listarTitulos:listarTitulos,
-  listarIA:listarIA,obtenerEstadisticas:obtenerEstadisticas,consultarEstudiante:consultarEstudiante
+  listarInvestigadores:listarInvestigadores,resumenInvestigacion:resumenInvestigacion,listarTitulos:listarTitulos,listarTitulosGlobal:listarTitulosGlobal,
+  listarIA:listarIA,probarIA:probarIA,obtenerEstadisticas:obtenerEstadisticas,consultarEstudiante:consultarEstudiante
 });
 })(window);
