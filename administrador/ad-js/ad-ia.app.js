@@ -110,6 +110,101 @@ Función:
     box.textContent = mensaje || "";
   }
 
+  function traducirDiagnostico(mensaje){
+    var original = texto(mensaje);
+    var bajo = original.toLowerCase();
+
+    if (!original) return "No se recibió información del proveedor.";
+    if (bajo.indexOf("payment required") >= 0 || bajo.indexOf("billing") >= 0) {
+      return "Este proveedor requiere saldo disponible o facturación activa. Revisa el plan o saldo de la cuenta antes de volver a probarlo.";
+    }
+    if (bajo.indexOf("failed to fetch") >= 0 || bajo.indexOf("networkerror") >= 0) {
+      return "No se pudo conectar con el servicio. Revisa la conexión, la URL del proveedor o el acceso al backend.";
+    }
+    if (bajo.indexOf("unauthorized") >= 0 || bajo.indexOf("invalid api key") >= 0 || bajo.indexOf("401") >= 0) {
+      return "La credencial del proveedor no es válida o no tiene autorización. Revisa la API key.";
+    }
+    if (bajo.indexOf("forbidden") >= 0 || bajo.indexOf("403") >= 0) {
+      return "El proveedor rechazó el acceso. Revisa los permisos de la credencial y el plan contratado.";
+    }
+    if (bajo.indexOf("rate limit") >= 0 || bajo.indexOf("too many requests") >= 0 || bajo.indexOf("429") >= 0) {
+      return "Se alcanzó el límite temporal de solicitudes del proveedor. Espera unos minutos y vuelve a probar.";
+    }
+    if (bajo.indexOf("timeout") >= 0 || bajo.indexOf("timed out") >= 0) {
+      return "El proveedor tardó demasiado en responder. Intenta nuevamente o aumenta el tiempo máximo de espera.";
+    }
+    if (bajo.indexOf("model") >= 0 && (bajo.indexOf("not found") >= 0 || bajo.indexOf("invalid") >= 0)) {
+      return "El modelo configurado no está disponible o no es válido para este proveedor. Revisa el nombre del modelo.";
+    }
+    return original;
+  }
+
+  function asegurarModalDiagnostico(){
+    var modal = $("ad-ia-modal-diagnostico");
+    var style;
+
+    if (modal) return modal;
+
+    style = document.createElement("style");
+    style.id = "ad-ia-modal-diagnostico-style";
+    style.textContent = [
+      ".ad-ia-diag-modal{position:fixed;inset:0;z-index:100000;display:grid;place-items:center;padding:20px;background:rgba(7,27,57,.62);backdrop-filter:blur(4px)}",
+      ".ad-ia-diag-modal[hidden]{display:none!important}",
+      ".ad-ia-diag-card{width:min(560px,100%);background:#fff;border-radius:22px;box-shadow:0 24px 70px rgba(0,0,0,.28);overflow:hidden}",
+      ".ad-ia-diag-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;padding:20px 22px 14px;border-bottom:1px solid #e4eaf2}",
+      ".ad-ia-diag-head h3{margin:4px 0 0;color:#071b39}",
+      ".ad-ia-diag-kicker{margin:0;color:#2468c9;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}",
+      ".ad-ia-diag-close{border:0;background:#eef3fa;border-radius:10px;width:36px;height:36px;font-size:24px;line-height:1;cursor:pointer;color:#123b70}",
+      ".ad-ia-diag-body{padding:20px 22px;color:#31445f;line-height:1.55}",
+      ".ad-ia-diag-status{display:inline-flex;margin-bottom:12px;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:800}",
+      ".ad-ia-diag-status.ok{background:#e8f7ee;color:#17823b}",
+      ".ad-ia-diag-status.error{background:#fff1f0;color:#b42318}",
+      ".ad-ia-diag-message{margin:0;white-space:pre-wrap}",
+      ".ad-ia-diag-actions{display:flex;justify-content:flex-end;padding:0 22px 20px}"
+    ].join("");
+    document.head.appendChild(style);
+
+    modal = document.createElement("section");
+    modal.id = "ad-ia-modal-diagnostico";
+    modal.className = "ad-ia-diag-modal";
+    modal.hidden = true;
+    modal.setAttribute("role","dialog");
+    modal.setAttribute("aria-modal","true");
+    modal.innerHTML =
+      '<div class="ad-ia-diag-card">' +
+        '<header class="ad-ia-diag-head">' +
+          '<div><p class="ad-ia-diag-kicker">Diagnóstico de IA</p><h3 id="ad-ia-diag-titulo">Resultado de la prueba</h3></div>' +
+          '<button class="ad-ia-diag-close" type="button" data-ia-diag-close aria-label="Cerrar">×</button>' +
+        '</header>' +
+        '<div class="ad-ia-diag-body">' +
+          '<span id="ad-ia-diag-status" class="ad-ia-diag-status">Resultado</span>' +
+          '<p id="ad-ia-diag-message" class="ad-ia-diag-message"></p>' +
+        '</div>' +
+        '<div class="ad-ia-diag-actions"><button class="ad-btn ad-btn-secondary" type="button" data-ia-diag-close>Cerrar</button></div>' +
+      '</div>';
+
+    modal.addEventListener("click",function(evento){
+      if (evento.target === modal || (evento.target.closest && evento.target.closest("[data-ia-diag-close]"))) {
+        modal.hidden = true;
+        document.documentElement.style.overflow = "";
+      }
+    });
+
+    document.body.appendChild(modal);
+    return modal;
+  }
+
+  function mostrarDiagnosticoPopup(titulo,mensaje,ok){
+    var modal = asegurarModalDiagnostico();
+    var status = $("ad-ia-diag-status");
+    $("ad-ia-diag-titulo").textContent = titulo || "Resultado de la prueba";
+    $("ad-ia-diag-message").textContent = mensaje || "Sin información.";
+    status.textContent = ok ? "Correcto" : "Requiere atención";
+    status.className = "ad-ia-diag-status " + (ok ? "ok" : "error");
+    modal.hidden = false;
+    document.documentElement.style.overflow = "hidden";
+  }
+
   function setCargando(valor,mensaje){
     estado.cargando = valor === true;
     document.querySelectorAll("#ad-seccion-ia button").forEach(function(boton){
@@ -467,13 +562,14 @@ Función:
     setCargando(true,"Probando " + id + "...");
 
     return servicio().probar(id).then(function(resultado){
-      setEstado(
-        resultado.nombre + " respondió correctamente en " + resultado.latenciaMs + " ms.",
-        "success"
-      );
+      var mensaje = resultado.nombre + " respondió correctamente en " + resultado.latenciaMs + " ms.";
+      setEstado("Último diagnóstico: " + resultado.nombre + " respondió correctamente.","success");
+      mostrarDiagnosticoPopup("Diagnóstico de " + resultado.nombre,mensaje,true);
       return cargar(true).then(function(){ return resultado; });
     }).catch(function(error){
-      setEstado("La prueba de " + id + " falló: " + (error.message || String(error)),"error");
+      var diagnostico = traducirDiagnostico(error.message || String(error));
+      setEstado("Último diagnóstico: " + id + " requiere atención.","error");
+      mostrarDiagnosticoPopup("Diagnóstico de " + id,diagnostico,false);
       return cargar(true).then(function(){ throw error; });
     }).then(function(resultado){
       setCargando(false);
@@ -483,7 +579,6 @@ Función:
       return Promise.reject(error);
     });
   }
-
   function probarTodas(){
     if (estado.cargando) return;
 
@@ -509,7 +604,7 @@ Función:
           actualizarResultadoPrueba(p.nombre,"Correcta · " + resultado.latenciaMs + " ms",true);
         }).catch(function(error){
           resultados.push({ id:p.id, ok:false, error:error.message || String(error) });
-          actualizarResultadoPrueba(p.nombre,"Error · " + (error.message || String(error)),false);
+          actualizarResultadoPrueba(p.nombre,"Error · " + traducirDiagnostico(error.message || String(error)),false);
         });
       });
     });
