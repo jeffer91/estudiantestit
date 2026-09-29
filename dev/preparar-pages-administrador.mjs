@@ -21,7 +21,7 @@ fs.cpSync(source, output, { recursive: true, force: true });
 
 function actualizarVersionHtml(file) {
   let html = fs.readFileSync(file, 'utf8');
-  html = html.replace(/\?v=\d+\.\d+\.\d+(?:&r=[^"'&\\s]+)?/g, `?v=${VERSION_ADMIN}&r=github-pages-sin-cloudflare-1`);
+  html = html.replace(/\?v=\d+\.\d+\.\d+(?:&r=[^"'&\\s]+)?/g, `?v=${VERSION_ADMIN}&r=github-firebase-direct-2`);
   html = html.replace(/>v\d+\.\d+\.\d+</g, `>v${VERSION_ADMIN}<`);
   html = html.replace(/Versión \d+\.\d+\.\d+/g, `Versión ${VERSION_ADMIN}`);
   fs.writeFileSync(file, html, 'utf8');
@@ -66,6 +66,7 @@ for (const required of [
   path.join(output, 'index.html'),
   path.join(output, 'ad-css', 'ad-admin.css'),
   path.join(output, 'ad-css', 'ad-titulos-estadisticas.css'),
+  path.join(output, 'ad-js', 'ad-firebase-direct.js'),
   path.join(output, 'ad-js', 'ad-api.service.js'),
   path.join(output, 'ad-js', 'ad-google-sheets.app.js'),
   path.join(output, 'ad-js', 'ad-servicios.app.js'),
@@ -98,5 +99,3 @@ console.log(`[Pages administrador] Versión ${VERSION_ADMIN}.`);
 console.log('[Pages administrador] Ruta pública principal: /.');
 console.log('[Pages administrador] Web y Electron cargan los mismos complementos desde ad-servicios.app.js.');
 console.log('[Pages administrador] Incluye estadísticas minimalistas con General, Coordinadores e Investigadores, reportes PDF por revisor, períodos, carreras, lista global, corrección administrativa de títulos, WhatsApp, Outlook y acciones administrativas para Trabajo de Titulación.');
-console.log('[Pages administrador] La carpeta functions permanece en la raíz para habilitar /api/*.');
-console.log('[Pages administrador] Protege este proyecto con Cloudflare Access antes de usarlo en producción.');
