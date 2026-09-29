@@ -401,18 +401,29 @@ export async function onRequest({ request, env }) {
         });
       }
       if (action === 'admin-test') {
-        const result = await generateAi(
-          env,
-          data.providerId,
-          text(data.prompt) || 'Responde con una prueba breve.',
-          data.options || {}
-        );
-        return jsonReply(request, {
-          ok: true,
-          provider: providerId(data.providerId),
-          text: result.text || result.respuesta || '',
-          latencyMs: Number(result.latencyMs || 0)
-        });
+        try {
+          const result = await generateAi(
+            env,
+            data.providerId,
+            text(data.prompt) || 'Responde con una prueba breve.',
+            data.options || {}
+          );
+          return jsonReply(request, {
+            ok: true,
+            provider: providerId(data.providerId),
+            text: result.text || result.respuesta || '',
+            latencyMs: Number(result.latencyMs || 0)
+          });
+        } catch (error) {
+          const message = text(error && error.message || error) || 'La prueba del proveedor no pudo completarse.';
+          return jsonReply(request, {
+            ok: false,
+            provider: providerId(data.providerId),
+            error: message,
+            mensaje: message,
+            diagnostico: true
+          }, 200);
+        }
       }
       return jsonReply(request, { ok: false, mensaje: 'Acción administrativa desconocida.' }, 400);
     }
