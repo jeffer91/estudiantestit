@@ -91,6 +91,245 @@
     return origen && origen !== 'null' ? origen.replace(/\/$/, '') : 'https://titulos.pages.dev';
   }
 
+  var FIREBASE_UTET_PUBLICO = Object.freeze({
+    projectId: 'utet-4387a',
+    apiKey: 'AIzaSyCaHf1C0BB0X_H3BDZ1o-UDAsPmLTjsZLA'
+  });
+
+  function decodificarValorFirestore(valor) {
+    var campos;
+    var valores;
+
+    if (!valor || typeof valor !== 'object') return null;
+    if (Object.prototype.hasOwnProperty.call(valor, 'stringValue')) return valor.stringValue;
+    if (Object.prototype.hasOwnProperty.call(valor, 'booleanValue')) return valor.booleanValue;
+    if (Object.prototype.hasOwnProperty.call(valor, 'integerValue')) return Number(valor.integerValue);
+    if (Object.prototype.hasOwnProperty.call(valor, 'doubleValue')) return Number(valor.doubleValue);
+    if (Object.prototype.hasOwnProperty.call(valor, 'timestampValue')) return valor.timestampValue;
+    if (Object.prototype.hasOwnProperty.call(valor, 'nullValue')) return null;
+
+    if (valor.mapValue) {
+      campos = valor.mapValue.fields || {};
+      return decodificarCamposFirestore(campos);
+    }
+
+    if (valor.arrayValue) {
+      valores = valor.arrayValue.values || [];
+      return valores.map(decodificarValorFirestore);
+    }
+
+    return null;
+  }
+
+  function decodificarCamposFirestore(campos) {
+    var salida = {};
+    Object.keys(campos || {}).forEach(function (nombre) {
+      salida[nombre] = decodificarValorFirestore(campos[nombre]);
+    });
+    return salida;
+  }
+
+  function firestoreDocumento(coleccion, id) {
+    var base = 'https://firestore.googleapis.com/v1/projects/' +
+      encodeURIComponent(FIREBASE_UTET_PUBLICO.projectId) +
+      '/databases/(default)/documents/';
+    var url = base +
+      encodeURIComponent(coleccion) + '/' +
+      encodeURIComponent(id) +
+      '?key=' + encodeURIComponent(FIREBASE_UTET_PUBLICO.apiKey);
+
+    return fetch(url, { method: 'GET', cache: 'no-store' })
+      .then(function (respuesta) {
+        if (respuesta.status === 404) return null;
+        return respuesta.text().then(function (cuerpo) {
+          var json;
+          try {
+            json = cuerpo ? JSON.parse(cuerpo) : {};
+          } catch (_error) {
+            throw new Error('Firebase UTET respondió en un formato no válido.');
+          }
+          if (!respuesta.ok) {
+            throw new Error(
+              texto(json && json.error && json.error.message) ||
+              'Firebase UTET no permitió consultar el registro.'
+            );
+          }
+          return Object.assign(
+            { _docId: id },
+            decodificarCamposFirestore(json.fields || {})
+          );
+        });
+      });
+  }
+
+  function consultarEstudianteFirebaseDirecto(identificacion) {
+    return firestoreDocumento('Estudiante', identificacion)
+      .then(function (registro) {
+        if (registro) return registro;
+        if (identificacion.charAt(0) !== '0') return null;
+        return firestoreDocumento('Estudiante', identificacion.slice(1));
+      });
+  }
+
+  function periodoFallbackCliente() {
+    var config = modulo('EstudianteMVPConfig');
+    if (config && typeof config.obtenerPeriodoFallback === 'function') {
+      return config.obtenerPeriodoFallback() || {};
+    }
+    return {};
+  }
+
+  function resolverPeriodoDirecto(configuracion) {
+    var data = configuracion || {};
+    var anidado = campo(data, ['periodoActivo', 'periodoPrincipal', 'periodoActual']);
+    var fallback = periodoFallbackCliente();
+    var id;
+    var label;
+
+    anidado = anidado && typeof anidado === 'object' ? anidado : {};
+    id = texto(
+      campo(data, [
+        'periodoActivoId', 'periodoPrincipalId', 'periodoActualId',
+        'periodoId', 'periodId'
+      ]) ||
+      campo(anidado, ['id', 'periodoId', 'periodId', 'codigo']) ||
+      fallback.periodoId ||
+      fallback.id
+    );
+    label = texto(
+      campo(data, [
+        'periodoActivoLabel', 'periodoPrincipalLabel', 'periodoActualLabel',
+        'periodoLabel', 'periodoNombre', 'periodo'
+      ]) ||
+      campo(anidado, ['label', 'nombre', 'periodoLabel', 'periodoNombre']) ||
+      fallback.periodoLabel ||
+      fallback.label ||
+      id
+    );
+
+    return { id: id, label: label || id };
+  }
+
+  function normalizarEstudianteDirecto(registro, identificacion, periodo) {
+    var nombres = texto(campo(registro, ['nombres', 'Nombres', 'nombreCompleto', 'nombre']));
+    var carrera = texto(campo(registro, [
+      'nombreCarreraActual', 'NombreCarreraActual',
+      'nombreCarrera', 'NombreCarrera', 'carrera', 'Carrera'
+    ]));
+    var codigo = texto(campo(registro, [
+      'codigoCarreraActual', 'CodigoCarreraActual',
+      'codigoCarrera', 'CodigoCarrera'
+    ]));
+
+    return {
+      id: identificacion,
+      cedula: identificacion,
+      numeroIdentificacion: identificacion,
+      nombres: nombres,
+      Nombres: nombres,
+      nombreCarrera: carrera,
+      NombreCarrera: carrera,
+      carrera: carrera,
+      codigoCarrera: codigo,
+      CodigoCarrera: codigo,
+      periodoId: texto(periodo && periodo.id),
+      periodId: texto(periodo && periodo.id),
+      periodoLabel: texto(periodo && periodo.label),
+      periodo: texto(periodo && periodo.label),
+      sede: texto(campo(registro, ['sede', 'Sede'])),
+      Sede: texto(campo(registro, ['sede', 'Sede'])),
+      correoInstitucional: texto(campo(registro, ['correoInstitucional', 'CorreoInstitucional'])),
+      correoPersonal: texto(campo(registro, ['correoPersonal', 'CorreoPersonal'])),
+      celular: texto(campo(registro, ['celular', 'Celular'])),
+      fuente: 'FIREBASE_UTET_DIRECTO'
+    };
+  }
+
+  function consultarTitulosDirecto(identificacion, periodo) {
+    var servicio = modulo('EstudianteMVPSheets');
+    var valorPeriodo = texto(periodo && (periodo.label || periodo.id));
+
+    if (!servicio || typeof servicio.consultarEnvioPorCedula !== 'function') {
+      return Promise.reject(new Error('El servicio de Títulos no está disponible.'));
+    }
+
+    return servicio.consultarEnvioPorCedula(identificacion, valorPeriodo)
+      .then(function (resultado) {
+        if (!resultado || resultado.ok === false) {
+          throw new Error(
+            resultado && resultado.mensaje ||
+            'No fue posible verificar los envíos anteriores.'
+          );
+        }
+        return resultado;
+      });
+  }
+
+  function consultarAccesoFirebaseDirecto(identificacion) {
+    return consultarEstudianteFirebaseDirecto(identificacion)
+      .then(function (registro) {
+        if (!registro || registro.eliminado === true) {
+          throw new Error('No encontramos un estudiante activo con esa cédula en Firebase UTET.');
+        }
+
+        return firestoreDocumento('titulos_config', 'app')
+          .catch(function () { return null; })
+          .then(function (configuracion) {
+            var periodo = resolverPeriodoDirecto(configuracion);
+            var estudiante = normalizarEstudianteDirecto(registro, identificacion, periodo);
+
+            if (!estudiante.nombres || !estudiante.nombreCarrera) {
+              throw new Error(
+                'El estudiante existe en Firebase UTET, pero faltan nombres o carrera.'
+              );
+            }
+
+            actualizarModal('Datos académicos encontrados. Verificando tus propuestas…', 2);
+
+            return consultarTitulosDirecto(identificacion, periodo)
+              .then(function (titulos) {
+                var envio = titulos.envio || null;
+                var estado = texto(
+                  titulos.estado ||
+                  titulos.estadoEnvio ||
+                  campo(envio || {}, ['estadoProceso', 'estadoFinal', 'estado'])
+                ).toUpperCase() || 'SIN_ENVIO';
+                var existeEnvio = Boolean(
+                  titulos.existe === true ||
+                  titulos.encontrado === true ||
+                  envio
+                );
+
+                return {
+                  ok: true,
+                  encontrado: true,
+                  existe: true,
+                  estudiante: estudiante,
+                  registro: estudiante,
+                  envio: envio,
+                  envioOriginal: envio,
+                  resolucion: null,
+                  tieneEnvio: existeEnvio && estado !== 'DEVUELTO',
+                  encontradoEnvio: existeEnvio,
+                  tieneResolucion: false,
+                  estadoEfectivo: estado,
+                  estadoEnvio: estado,
+                  permiteReenvio: titulos.permiteReenvio === true || estado === 'DEVUELTO',
+                  consultaCompleta: true,
+                  fuente: 'FIREBASE_UTET_DIRECTO',
+                  consultas: {
+                    requisitos: 'firebase_utet_directo_ok',
+                    titulos: 'ok'
+                  },
+                  mensaje: existeEnvio
+                    ? 'Estudiante y estado de propuestas verificados.'
+                    : 'Estudiante verificado. No registras envíos anteriores en este período.'
+                };
+              });
+          });
+      });
+  }
+
   function asegurarEstilosModal() {
     var style;
     if (document.getElementById(MODAL_STYLE_ID)) return;
@@ -222,10 +461,25 @@
         });
       })
       .catch(function (error) {
-        if (error && error.name === 'AbortError') {
-          throw new Error('La consulta tardó demasiado. Intenta nuevamente.');
+        var errorBackend = error;
+        if (timer) {
+          window.clearTimeout(timer);
+          timer = null;
         }
-        throw error;
+
+        actualizarModal('Reintentando la consulta directamente en Firebase UTET…', 1);
+
+        return consultarAccesoFirebaseDirecto(identificacion)
+          .catch(function (errorDirecto) {
+            if (errorBackend && errorBackend.name === 'AbortError' && !errorDirecto) {
+              throw new Error('La consulta tardó demasiado. Intenta nuevamente.');
+            }
+            throw new Error(
+              errorDirecto && errorDirecto.message ||
+              errorBackend && errorBackend.message ||
+              'No fue posible verificar tu registro.'
+            );
+          });
       })
       .then(function (resultado) {
         if (timer) window.clearTimeout(timer);
