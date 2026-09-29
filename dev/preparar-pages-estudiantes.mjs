@@ -59,7 +59,7 @@ if (!studentHtml.includes('estudiante.consulta.revision.js')) {
   throw new Error('El HTML de Estudiantes no carga la consulta unificada.');
 }
 
-studentHtml = studentHtml.replace(/\?v=\d+\.\d+\.\d+(?:&r=[^\"'&\\s]+)?/g, `?v=${VERSION}&r=6`);
+studentHtml = studentHtml.replace(/\?v=\d+\.\d+\.\d+(?:&r=[^\"'&\\s]+)?/g, `?v=${VERSION}&r=7`);
 studentHtml = injectScript(studentHtml, HISTORY_FILE);
 studentHtml = injectScript(studentHtml, WORK_ROUTE_FILE);
 fs.writeFileSync(copiedEntry, studentHtml, 'utf8');
