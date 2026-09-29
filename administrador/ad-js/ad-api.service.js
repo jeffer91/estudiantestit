@@ -1,7 +1,6 @@
 (function(window){
   'use strict';
   var API_LOCAL='http://127.0.0.1:8788';
-  var API_ADMIN='https://titulos-administrador.pages.dev';
   var CACHE_PREFIX='admin-api:v1:';
   var memoria=new Map();
   var enCurso=new Map();
@@ -27,7 +26,7 @@
 
   function texto(v){return String(v===null||v===undefined?'':v).trim();}
   function esLocal(){var h=texto(window.location&&window.location.hostname).toLowerCase();return['localhost','127.0.0.1','0.0.0.0','::1','[::1]'].indexOf(h)>=0;}
-  function base(){var f=texto(window.TITULOS_API_BASE||'');if(f)return f.replace(/\/$/,'');if(esLocal())return API_LOCAL;var o=texto(window.location&&window.location.origin);return/^https?:\/\//i.test(o)?o.replace(/\/$/,''):API_ADMIN;}
+  function base(){var f=texto(window.TITULOS_API_BASE||'');if(f)return f.replace(/\/$/,'');if(esLocal())return API_LOCAL;var o=texto(window.location&&window.location.origin);return/^https?:\/\//i.test(o)?o.replace(/\/$/,''):'';}
   function leerRespuesta(resp,nombre){return resp.text().then(function(body){var json={};try{json=body?JSON.parse(body):{};}catch(error){throw new Error((nombre||'El servicio')+' respondió en un formato no válido.');}if(!resp.ok||json.ok===false)throw new Error(json.mensaje||json.message||json.error||('Error HTTP '+resp.status));return json;});}
   function solicitar(ruta,accion,datos,metodo){return fetch(base()+ruta,{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json','X-Titulos-App':'administrador'},body:JSON.stringify({accion:accion,action:accion,metodo:metodo||'POST',datos:datos||{}})}).then(function(resp){return leerRespuesta(resp,'El servicio');});}
   function clavesGetRed(action){return fetch(base()+'/api/claves?action='+encodeURIComponent(action),{method:'GET',cache:'no-store',headers:{'X-Titulos-App':'administrador'}}).then(function(resp){return leerRespuesta(resp,'Configuración');});}
