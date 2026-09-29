@@ -78,30 +78,17 @@ let investigatorJs = read('investigadores/js/investigadores.app.js');
 investigatorJs = investigatorJs.replaceAll("'/api/investigadores'", "'https://titulos-investigadores.pages.dev/api/investigadores'");
 write('investigadores/js/investigadores.app.js', investigatorJs);
 
-// Administrador: mantener interfaz y API en el mismo origen.
-// El backend administrativo publicado actualmente no acepta CORS desde GitHub Pages,
-// por lo que /administrador/ actúa como acceso estable al sitio administrativo oficial.
-const adminTarget = 'https://titulos-administrador.pages.dev/';
-const adminRedirect = [
-  '<!doctype html>',
-  '<html lang="es"><head><meta charset="utf-8">',
-  '<meta name="viewport" content="width=device-width,initial-scale=1">',
-  '<meta http-equiv="refresh" content="0;url=' + adminTarget + '">',
-  '<title>Administrador de Titulación</title>',
-  '<script>',
-  '  (function(){',
-  '    var target=' + JSON.stringify(adminTarget) + ';',
-  '    var suffix=(window.location.search||"")+(window.location.hash||"");',
-  '    window.location.replace(target+suffix);',
-  '  })();',
-  '</script>',
-  '</head><body>',
-  '<p>Abriendo el Administrador de Titulación…</p>',
-  '<p><a href="' + adminTarget + '">Continuar</a></p>',
-  '</body></html>'
-].join('\n');
-write('administrador/index.html', adminRedirect);
-write('administrador/ad-index.html', adminRedirect);
+// Administrador: se publica y permanece en GitHub Pages.
+// No redirigir a Cloudflare ni inyectar dominios pages.dev.
+let adminHtml = read('administrador/ad-index.html');
+adminHtml = adminHtml
+  .replace(/<script>\s*window\.TITULOS_API_BASE=[\s\S]*?<\/script>\s*/gi, '')
+  .replace(/https:\/\/titulos-administrador\.pages\.dev\/?/g, '');
+write('administrador/ad-index.html', adminHtml);
+fs.copyFileSync(
+  path.join(output, 'administrador', 'ad-index.html'),
+  path.join(output, 'administrador', 'index.html')
+);
 
 // Metadatos exclusivos de Cloudflare no tienen efecto en GitHub Pages.
 [
@@ -113,12 +100,10 @@ write('administrador/ad-index.html', adminRedirect);
 ].forEach(removeIfExists);
 
 
-// GitHub Pages es ahora la interfaz pública principal.
+// GitHub Pages es la interfaz pública principal.
 // Las aplicaciones se sirven directamente desde /estudiantes/, /trabajo-titulacion/,
 // /coordinadores/, /investigadores/ y /administrador/ sin redirigir al usuario.
-//
-// Los API_BASE inyectados arriba apuntan al backend ya existente; este build no
-// publica ni modifica Cloudflare.
+// El Administrador no debe salir de GitHub Pages.
 
 const home = [
   '<!doctype html>',
