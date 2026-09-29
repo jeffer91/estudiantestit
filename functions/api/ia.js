@@ -33,6 +33,24 @@ const CATALOGO_IA_GRATUITA = [
     endpoint: 'https://openrouter.ai/api/v1/chat/completions',
     modelo: 'openrouter/free',
     descripcion: 'Router de modelos gratuitos.'
+  },
+  {
+    id: 'mistral',
+    nombre: 'Mistral AI',
+    tipo: 'openai-compatible',
+    prioridad: 4,
+    endpoint: 'https://api.mistral.ai/v1/chat/completions',
+    modelo: 'mistral-small-latest',
+    descripcion: 'Proveedor con modalidad gratuita limitada.'
+  },
+  {
+    id: 'cohere',
+    nombre: 'Cohere',
+    tipo: 'cohere',
+    prioridad: 5,
+    endpoint: 'https://api.cohere.com/v2/chat',
+    modelo: 'command-a-03-2025',
+    descripcion: 'Proveedor de evaluación gratuita limitada.'
   }
 ];
 
