@@ -246,6 +246,90 @@
   function cargarInvestigadores(){return api().listarInvestigadores().then(function(r){state.investigadores=Array.isArray(r.investigadores)?r.investigadores:[];renderInvestigadores();return state.investigadores;});}
   function cargarResumenInvestigacion(){return api().resumenInvestigacion().then(function(r){state.investigacionResumen=r||{ultimoPorEnvio:{},bloqueos:[],revisiones:[]};aplicarResumenInvestigacion();renderTitulos();return r;});}
   function cargarTitulos(periodoForzado){var periodo=periodoTitulosActual(periodoForzado);if(!periodo.id){state.titulos=[];renderTitulos();return Promise.resolve([]);}estadoBox('ad-estado-titulos','Cargando únicamente el período seleccionado...','info');return api().listarTitulos({carreras:'',carrera:'',estado:'',periodoId:periodo.id,periodo:periodo.label||periodo.id}).then(function(r){state.titulos=api().extraerTitulos(r).map(normalizarTitulo).filter(function(t){return t.cedula;});aplicarResumenInvestigacion();renderTitulos();estadoBox('ad-estado-titulos','Títulos cargados para '+(periodo.label||periodo.id)+'.','success');return state.titulos;});}
+  function traducirDiagnosticoIA(error){
+    var original=mensaje(error);
+    var bajo=texto(original).toLowerCase();
+
+    if(!original)return'No se recibió información del proveedor.';
+    if(bajo.indexOf('payment required')>=0||bajo.indexOf('billing')>=0||bajo.indexOf('insufficient balance')>=0){
+      return'El proveedor requiere saldo disponible o facturación activa. Revisa el plan o saldo de la cuenta antes de volver a probarlo.';
+    }
+    if(bajo.indexOf('failed to fetch')>=0||bajo.indexOf('networkerror')>=0||bajo.indexOf('network error')>=0){
+      return'No se pudo conectar con el proveedor. Revisa la conexión, el endpoint configurado o la disponibilidad del servicio.';
+    }
+    if(bajo.indexOf('unauthorized')>=0||bajo.indexOf('invalid api key')>=0||bajo.indexOf('invalid_api_key')>=0||bajo.indexOf('401')>=0){
+      return'La credencial del proveedor no es válida o no tiene autorización. Revisa la API key.';
+    }
+    if(bajo.indexOf('forbidden')>=0||bajo.indexOf('403')>=0){
+      return'El proveedor rechazó el acceso. Revisa los permisos de la credencial y el plan contratado.';
+    }
+    if(bajo.indexOf('rate limit')>=0||bajo.indexOf('too many requests')>=0||bajo.indexOf('429')>=0||bajo.indexOf('quota')>=0){
+      return'Se alcanzó el límite temporal de solicitudes del proveedor. Espera unos minutos y vuelve a probar.';
+    }
+    if(bajo.indexOf('timeout')>=0||bajo.indexOf('timed out')>=0){
+      return'El proveedor tardó demasiado en responder. Intenta nuevamente o aumenta el tiempo máximo de espera.';
+    }
+    if(bajo.indexOf('model')>=0&&(bajo.indexOf('not found')>=0||bajo.indexOf('invalid')>=0||bajo.indexOf('unsupported')>=0)){
+      return'El modelo configurado no está disponible o no es válido para este proveedor. Revisa el nombre del modelo.';
+    }
+    if(bajo.indexOf('502')>=0||bajo.indexOf('bad gateway')>=0){
+      return'El proveedor no pudo completar la prueba en este momento. Intenta nuevamente en unos minutos.';
+    }
+    return original;
+  }
+
+  function asegurarModalDiagnosticoIA(){
+    var modal=$('ad-modal-diagnostico-ia');
+    if(modal)return modal;
+
+    modal=document.createElement('section');
+    modal.id='ad-modal-diagnostico-ia';
+    modal.className='ad-modal';
+    modal.hidden=true;
+    modal.setAttribute('role','dialog');
+    modal.setAttribute('aria-modal','true');
+    modal.setAttribute('aria-labelledby','ad-modal-diagnostico-ia-titulo');
+    modal.innerHTML=
+      '<div class="ad-modal__backdrop" data-ia-modal-cerrar></div>'+
+      '<div class="ad-modal__card">'+
+        '<header class="ad-modal__header">'+
+          '<div><p class="ad-eyebrow">Diagnóstico de IA</p><h3 id="ad-modal-diagnostico-ia-titulo">Resultado de la prueba</h3></div>'+
+          '<button class="ad-modal__close" type="button" data-ia-modal-cerrar aria-label="Cerrar">×</button>'+
+        '</header>'+
+        '<div class="ad-modal__body">'+
+          '<div id="ad-modal-diagnostico-ia-estado" class="ad-result-box"></div>'+
+        '</div>'+
+        '<footer class="ad-modal__footer">'+
+          '<button class="ad-btn ad-btn-secondary" type="button" data-ia-modal-cerrar>Cerrar</button>'+
+        '</footer>'+
+      '</div>';
+
+    modal.addEventListener('click',function(event){
+      if(event.target===modal||event.target.closest('[data-ia-modal-cerrar]')){
+        modal.hidden=true;
+        document.documentElement.style.overflow='';
+      }
+    });
+
+    document.body.appendChild(modal);
+    return modal;
+  }
+
+  function mostrarDiagnosticoIA(nombre,textoResultado,ok){
+    var modal=asegurarModalDiagnosticoIA();
+    var titulo=$('ad-modal-diagnostico-ia-titulo');
+    var salida=$('ad-modal-diagnostico-ia-estado');
+
+    if(titulo)titulo.textContent='Diagnóstico de '+(nombre||'proveedor');
+    if(salida){
+      salida.textContent=textoResultado||'Sin información.';
+      salida.className='ad-result-box '+(ok?'ad-status-success':'ad-status-danger');
+    }
+
+    modal.hidden=false;
+    document.documentElement.style.overflow='hidden';
+  }
+
   function cargarIA(){return api().listarIA().then(function(r){state.proveedores=Array.isArray(r.proveedores)?r.proveedores:[];renderIA();});}
   function cargarEstadisticas(){var p=texto($('ad-estadisticas-periodo')&&$('ad-estadisticas-periodo').value)||state.periodoId;var c=texto($('ad-estadisticas-carrera')&&$('ad-estadisticas-carrera').value);if(!p){estadoBox('ad-estado-estadisticas','Selecciona un período.','warning');return Promise.resolve();}busy(true,'Calculando estadísticas...');return api().obtenerEstadisticas({periodo:p,periodoId:p,carrera:c}).then(function(r){state.estadisticas=r;renderEstadisticas();return r;}).catch(function(error){estadoBox('ad-estado-estadisticas',mensaje(error),'danger');throw error;}).finally(function(){busy(false);});}
 
@@ -265,7 +349,26 @@
   function editarIA(id){var p=state.proveedores.find(function(x){return x.id===id;});if(!p)return;state.proveedorEdicion=p;$('ad-ia-id').value=p.id;$('ad-ia-nombre').value=p.nombre||'';$('ad-ia-tipo').value=p.tipo||'openai-compatible';$('ad-ia-endpoint').value='';$('ad-ia-modelo').value=p.modelo||p.model||'';$('ad-ia-credencial').value='';$('ad-ia-prioridad').value=p.prioridad||999;$('ad-ia-activo').checked=p.activo===true;mostrarVista('ad-seccion-ia');}
   function guardarIA(event){event.preventDefault();var provider={id:texto($('ad-ia-id').value),nombre:texto($('ad-ia-nombre').value),tipo:texto($('ad-ia-tipo').value),endpoint:texto($('ad-ia-endpoint').value),modelo:texto($('ad-ia-modelo').value),credencial:texto($('ad-ia-credencial').value),prioridad:Number($('ad-ia-prioridad').value||999),activo:$('ad-ia-activo').checked,estado:$('ad-ia-activo').checked?'ACTIVO':'INACTIVO'};if(!provider.id){estadoBox('ad-estado-ia','Ingresa el ID del proveedor.','danger');return;}busy(true,'Guardando proveedor IA...');api().guardarIA(provider).then(function(){estadoBox('ad-estado-ia','Proveedor guardado en Firebase Títulos.','success');state.proveedorEdicion=null;$('ad-form-ia').reset();return cargarIA();}).catch(function(error){estadoBox('ad-estado-ia',mensaje(error),'danger');}).finally(function(){busy(false);});}
   function toggleIA(id,activo){busy(true,'Actualizando IA...');api().cambiarEstadoIA(id,activo).then(cargarIA).catch(function(error){estadoBox('ad-estado-ia',mensaje(error),'danger');}).finally(function(){busy(false);});}
-  function probarIA(id){busy(true,'Probando IA...');api().probarIA(id,'Responde únicamente: conexión correcta.').then(function(r){estadoBox('ad-estado-ia','Proveedor '+id+': '+texto(r.text||'conexión correcta')+' | '+Number(r.latencyMs||0)+' ms','success');return cargarIA();}).catch(function(error){estadoBox('ad-estado-ia',mensaje(error),'danger');}).finally(function(){busy(false);});}
+  function probarIA(id){
+    var proveedor=state.proveedores.find(function(item){return item.id===id;});
+    var nombre=texto(proveedor&&proveedor.nombre)||id;
+
+    busy(true,'Probando IA...');
+    api().probarIA(id,'Responde únicamente: conexión correcta.')
+      .then(function(r){
+        var latencia=Number(r.latencyMs||0);
+        mostrarDiagnosticoIA(
+          nombre,
+          'Conexión correcta.'+(latencia?' Tiempo de respuesta: '+latencia+' ms.':''),
+          true
+        );
+        return cargarIA();
+      })
+      .catch(function(error){
+        mostrarDiagnosticoIA(nombre,traducirDiagnosticoIA(error),false);
+      })
+      .finally(function(){busy(false);});
+  }
 
   function enlazar(){
     document.addEventListener('click',function(event){
