@@ -96,6 +96,11 @@
     apiKey: 'AIzaSyCaHf1C0BB0X_H3BDZ1o-UDAsPmLTjsZLA'
   });
 
+  var FIREBASE_TITULOS_PUBLICO = Object.freeze({
+    projectId: 'titulos-ec2fa',
+    apiKey: 'AIzaSyDkSOhJ552LwxQtt8GhP5iDJk49y0t4mOg'
+  });
+
   function decodificarValorFirestore(valor) {
     var campos;
     var valores;
@@ -129,14 +134,15 @@
     return salida;
   }
 
-  function firestoreDocumento(coleccion, id) {
+  function firestoreDocumentoProyecto(configuracion, coleccion, id, nombre) {
+    var config = configuracion || {};
     var base = 'https://firestore.googleapis.com/v1/projects/' +
-      encodeURIComponent(FIREBASE_UTET_PUBLICO.projectId) +
+      encodeURIComponent(config.projectId) +
       '/databases/(default)/documents/';
     var url = base +
       encodeURIComponent(coleccion) + '/' +
       encodeURIComponent(id) +
-      '?key=' + encodeURIComponent(FIREBASE_UTET_PUBLICO.apiKey);
+      '?key=' + encodeURIComponent(config.apiKey);
 
     return fetch(url, { method: 'GET', cache: 'no-store' })
       .then(function (respuesta) {
@@ -146,12 +152,12 @@
           try {
             json = cuerpo ? JSON.parse(cuerpo) : {};
           } catch (_error) {
-            throw new Error('Firebase UTET respondió en un formato no válido.');
+            throw new Error((nombre || 'Firebase') + ' respondió en un formato no válido.');
           }
           if (!respuesta.ok) {
             throw new Error(
               texto(json && json.error && json.error.message) ||
-              'Firebase UTET no permitió consultar el registro.'
+              (nombre || 'Firebase') + ' no permitió consultar el registro.'
             );
           }
           return Object.assign(
@@ -160,6 +166,15 @@
           );
         });
       });
+  }
+
+  function firestoreDocumento(coleccion, id) {
+    return firestoreDocumentoProyecto(
+      FIREBASE_UTET_PUBLICO,
+      coleccion,
+      id,
+      'Firebase UTET'
+    );
   }
 
   function consultarEstudianteFirebaseDirecto(identificacion) {
@@ -245,24 +260,92 @@
     };
   }
 
-  function consultarTitulosDirecto(identificacion, periodo) {
-    var servicio = modulo('EstudianteMVPSheets');
-    var valorPeriodo = texto(periodo && (periodo.label || periodo.id));
+  function periodoIdDirecto(periodo) {
+    return texto(periodo && (periodo.id || periodo.label))
+      .replace(/\//g, '-');
+  }
 
-    if (!servicio || typeof servicio.consultarEnvioPorCedula !== 'function') {
-      return Promise.reject(new Error('El servicio de Títulos no está disponible.'));
+  function consultarTitulosDirecto(identificacion, periodo) {
+    var periodoId = periodoIdDirecto(periodo);
+    var documentoId;
+
+    if (!periodoId) {
+      return Promise.resolve({
+        ok: true,
+        encontrado: false,
+        existe: false,
+        tieneEnvio: false,
+        verificacionDisponible: false,
+        mensaje: 'No se pudo determinar el período para comprobar envíos anteriores.'
+      });
     }
 
-    return servicio.consultarEnvioPorCedula(identificacion, valorPeriodo)
-      .then(function (resultado) {
-        if (!resultado || resultado.ok === false) {
-          throw new Error(
-            resultado && resultado.mensaje ||
-            'No fue posible verificar los envíos anteriores.'
-          );
-        }
-        return resultado;
-      });
+    documentoId = periodoId + '__' + identificacion;
+
+    return firestoreDocumentoProyecto(
+      FIREBASE_TITULOS_PUBLICO,
+      'envios',
+      documentoId,
+      'Firebase Títulos'
+    ).then(function (envio) {
+      var estado;
+      var permiteReenvio;
+
+      if (!envio) {
+        return {
+          ok: true,
+          encontrado: false,
+          existe: false,
+          tieneEnvio: false,
+          verificacionDisponible: true,
+          mensaje: 'No registras envíos anteriores en este período.'
+        };
+      }
+
+      estado = texto(
+        envio.estadoProceso ||
+        envio.estadoFinal ||
+        envio.estado
+      ).toUpperCase() || 'PENDIENTE_REVISION';
+
+      permiteReenvio = estado.indexOf('DEVUEL') >= 0;
+
+      return {
+        ok: true,
+        encontrado: !permiteReenvio,
+        existe: true,
+        tieneEnvio: !permiteReenvio,
+        encontradoEnvio: true,
+        permiteReenvio: permiteReenvio,
+        estado: permiteReenvio ? 'DEVUELTO' : estado,
+        estadoEnvio: permiteReenvio ? 'DEVUELTO' : estado,
+        envio: envio,
+        registro: envio,
+        verificacionDisponible: true,
+        mensaje: permiteReenvio
+          ? 'El registro fue devuelto y puede corregirse.'
+          : 'Envío anterior encontrado en Firebase Títulos.'
+      };
+    }).catch(function (error) {
+      console.warn(
+        '[Estudiantes MVP] No se pudo comprobar Firebase Títulos directamente:',
+        error
+      );
+
+      /*
+        La identidad académica no debe bloquearse porque la comprobación
+        secundaria de títulos no esté disponible. El envío final conserva
+        su propia validación de duplicados en el backend.
+      */
+      return {
+        ok: true,
+        encontrado: false,
+        existe: false,
+        tieneEnvio: false,
+        verificacionDisponible: false,
+        mensaje: 'Datos académicos verificados. La comprobación de envíos previos no estuvo disponible.'
+      };
+    });
   }
 
   function consultarAccesoFirebaseDirecto(identificacion) {
@@ -319,7 +402,9 @@
                   fuente: 'FIREBASE_UTET_DIRECTO',
                   consultas: {
                     requisitos: 'firebase_utet_directo_ok',
-                    titulos: 'ok'
+                    titulos: titulos.verificacionDisponible === false
+                      ? 'firebase_titulos_no_disponible'
+                      : 'firebase_titulos_directo_ok'
                   },
                   mensaje: existeEnvio
                     ? 'Estudiante y estado de propuestas verificados.'
@@ -421,6 +506,13 @@
   }
 
   function consultarAcceso(identificacion) {
+    var host = texto(window.location && window.location.hostname).toLowerCase();
+
+    if (/\.github\.io$/.test(host)) {
+      actualizarModal('Consultando directamente Firebase UTET…', 1);
+      return consultarAccesoFirebaseDirecto(identificacion);
+    }
+
     var controller = typeof AbortController === 'function' ? new AbortController() : null;
     var timer = controller ? window.setTimeout(function () { controller.abort(); }, 32000) : null;
     var opciones = {
