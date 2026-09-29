@@ -30,7 +30,6 @@ function cargarScript(src,alFinalizar){
   document.head.appendChild(script);
 }
 window.EstudianteMVPConfig=Object.freeze({data:CONFIG,obtener:obtener,obtenerColeccion:function(n){return obtener('collections.'+n,'');},obtenerDocumento:function(n){return obtener('documentos.'+n,'');},obtenerPeriodoFallback:function(){return{periodoId:CONFIG.proceso.periodoIdFallback,periodoLabel:CONFIG.proceso.periodoLabelFallback};}});
-cargarScript('js/estudiante.consulta.progreso.modal.js?v=2.1.0',function(){
-  cargarScript('js/estudiante.consulta.progreso.bridge.js?v=2.1.0');
-});
+/* La consulta del Paso 1 y su modal se gestionan únicamente
+   desde estudiante.consulta.revision.js para evitar listeners duplicados. */
 })(window,document);
