@@ -928,3 +928,153 @@ section[data-step-panel="propuestas"]:not([hidden]) .proposal-card:not([hidden])
     width: 100%;
   }
 }
+
+/* Compactación Estudiantes 2026-09-29 */
+@media (min-width: 721px) {
+  .app-header {
+    padding: 18px 20px 54px;
+  }
+
+  .app-header__content {
+    width: min(1200px, 100%);
+  }
+
+  .brand {
+    grid-template-columns: 270px minmax(0, 1fr);
+    gap: 24px;
+  }
+
+  .brand__logo-wrap {
+    min-height: 96px;
+    padding: 10px;
+    border-radius: 18px;
+  }
+
+  .brand__logo {
+    max-width: 245px;
+  }
+
+  .app-header h1 {
+    margin: 6px 0 6px;
+    font-size: clamp(1.8rem, 3.2vw, 2.3rem);
+  }
+
+  .app-header p {
+    font-size: 0.96rem;
+  }
+
+  .app-badge {
+    padding: 6px 12px;
+    font-size: 0.74rem;
+  }
+
+  .app-container {
+    margin: -38px auto 36px;
+  }
+
+  .stepper {
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .stepper__item {
+    padding: 10px 9px;
+    font-size: 0.8rem;
+  }
+
+  .status-message {
+    margin: 10px 0;
+  }
+
+  .status-message:not(:empty) {
+    padding: 10px 13px;
+  }
+
+  .card {
+    margin-bottom: 14px;
+    padding: 20px 22px;
+  }
+
+  .section-heading {
+    margin-bottom: 14px;
+  }
+
+  .section-heading h2 {
+    margin: 3px 0 6px;
+    font-size: clamp(1.3rem, 2.4vw, 1.75rem);
+  }
+
+  .section-kicker {
+    margin-bottom: 3px;
+    font-size: 0.74rem;
+  }
+
+  .form-grid {
+    gap: 12px;
+  }
+
+  .field {
+    gap: 5px;
+  }
+
+  .field input,
+  .field select {
+    min-height: 44px;
+    padding: 0 13px;
+  }
+
+  .field textarea {
+    min-height: 84px;
+    padding: 10px 13px;
+  }
+
+  .form-actions,
+  .step-actions,
+  .ai-actions,
+  .proposal-page-actions {
+    gap: 10px;
+    margin-top: 12px;
+  }
+
+  .btn {
+    min-height: 42px;
+    padding: 0 18px;
+  }
+}
+
+@media (max-width: 720px) {
+  .app-header {
+    padding-top: 18px;
+    padding-bottom: 58px;
+  }
+
+  .brand {
+    gap: 16px;
+  }
+
+  .brand__logo-wrap {
+    min-height: 94px;
+    padding: 10px;
+  }
+
+  .brand__logo {
+    max-width: 235px;
+  }
+
+  .app-container {
+    margin-top: -40px;
+  }
+
+  .card {
+    padding: 18px;
+  }
+
+  .section-heading {
+    margin-bottom: 16px;
+  }
+
+  .stepper__item {
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+}
