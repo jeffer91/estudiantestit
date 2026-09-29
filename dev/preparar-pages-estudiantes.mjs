@@ -8,7 +8,7 @@ const workSource = path.join(root, 'trabajo-titulacion-mvp');
 const output = path.join(root, '.pages-estudiantes');
 const publicStudent = path.join(output, 'estudiantes');
 const publicWork = path.join(output, 'trabajo-titulacion');
-const VERSION = '2.5.1';
+const VERSION = '2.5.0';
 const HISTORY_FILE = 'js/titulos.historial.publico.js';
 const WORK_ROUTE_FILE = 'js/estudiante.trabajo-titulacion.route.js';
 const WORK_PREFILL_FILE = 'js/trabajo-titulacion.prefill.js';
@@ -59,7 +59,7 @@ if (!studentHtml.includes('estudiante.consulta.revision.js')) {
   throw new Error('El HTML de Estudiantes no carga la consulta unificada.');
 }
 
-studentHtml = studentHtml.replace(/\?v=\d+\.\d+\.\d+/g, `?v=${VERSION}`);
+studentHtml = studentHtml.replace(/\?v=\d+\.\d+\.\d+(?:&r=[^\"'&\\s]+)?/g, `?v=${VERSION}&r=3`);
 studentHtml = injectScript(studentHtml, HISTORY_FILE);
 studentHtml = injectScript(studentHtml, WORK_ROUTE_FILE);
 fs.writeFileSync(copiedEntry, studentHtml, 'utf8');
