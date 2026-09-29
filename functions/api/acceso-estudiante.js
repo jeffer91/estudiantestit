@@ -205,35 +205,19 @@ async function lookupAcademic(env, cedula) {
 async function queryTitles(env, cedula, student) {
   const periodoId = text(flexible(student, ['periodoId', 'periodId']));
   const periodoLabel = text(flexible(student, ['periodoLabel', 'periodo'])) || periodoId;
-  const payload = {
+  const result = await runService(env, 'TITULOS', 'CONSULTAR_ENVIO_CEDULA', 'GET', {
     cedula,
-    numeroIdentificacion: cedula
-  };
-
-  if (periodoId || periodoLabel) {
-    payload.periodoId = periodoId;
-    payload.periodoLabel = periodoLabel;
-    payload.periodo = periodoLabel;
-    payload.scope = 'period';
-  } else {
-    payload.scope = 'latest';
-  }
-
-  const result = await runService(
-    env,
-    'TITULOS',
-    'CONSULTAR_ENVIO_CEDULA',
-    'GET',
-    payload,
-    'student',
-    TITLES_TIMEOUT_MS
-  );
+    numeroIdentificacion: cedula,
+    periodoId,
+    periodoLabel,
+    periodo: periodoLabel,
+    scope: 'period'
+  }, 'student', TITLES_TIMEOUT_MS);
   if (!result || result.ok === false) {
     throw new Error(text(result && (result.mensaje || result.error)) || 'Firebase Títulos no respondió correctamente.');
   }
   return result;
 }
-
 function normalizeTitles(result) {
   const envio = result && (result.envio || result.registro) || null;
   const found = Boolean(
