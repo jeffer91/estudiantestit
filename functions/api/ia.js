@@ -6,143 +6,48 @@ let providersCache = [];
 let providersCacheExpiresAt = 0;
 let providersPending = null;
 
-const CATALOGO_IA_15 = [
-  {
-    id: 'cerebras',
-    nombre: 'Cerebras',
-    tipo: 'openai-compatible',
-    prioridad: 1,
-    endpoint: 'https://api.cerebras.ai/v1/chat/completions',
-    modelo: 'gpt-oss-120b',
-    descripcion: 'Motor principal de alta capacidad.'
-  },
+const CATALOGO_IA_GRATUITA = [
   {
     id: 'groq',
     nombre: 'Groq',
     tipo: 'openai-compatible',
-    prioridad: 2,
+    prioridad: 1,
     endpoint: 'https://api.groq.com/openai/v1/chat/completions',
     modelo: 'openai/gpt-oss-20b',
-    descripcion: 'Motor rápido de respaldo prioritario.'
-  },
-  {
-    id: 'mistral',
-    nombre: 'Mistral AI',
-    tipo: 'openai-compatible',
-    prioridad: 3,
-    endpoint: 'https://api.mistral.ai/v1/chat/completions',
-    modelo: 'mistral-small-latest',
-    descripcion: 'Motor general de titulación.'
+    descripcion: 'Motor gratuito prioritario para Titulación.'
   },
   {
     id: 'gemini',
     nombre: 'Gemini',
     tipo: 'gemini',
-    prioridad: 4,
+    prioridad: 2,
     endpoint: '',
     modelo: 'gemini-3.5-flash',
-    descripcion: 'Motor Gemini para generación académica.'
+    descripcion: 'Motor gratuito de respaldo para Titulación.'
   },
   {
-    id: 'cohere',
-    nombre: 'Cohere',
+    id: 'openrouter',
+    nombre: 'OpenRouter Free',
     tipo: 'openai-compatible',
-    prioridad: 5,
-    endpoint: 'https://api.cohere.ai/compatibility/v1/chat/completions',
-    modelo: 'command-a-plus-05-2026',
-    descripcion: 'Motor Cohere mediante API compatible con OpenAI.'
+    prioridad: 3,
+    endpoint: 'https://openrouter.ai/api/v1/chat/completions',
+    modelo: 'openrouter/free',
+    descripcion: 'Router de modelos gratuitos.'
   },
   {
     id: 'cloudflare',
     nombre: 'Cloudflare Workers AI',
     tipo: 'openai-compatible',
-    prioridad: 6,
+    prioridad: 4,
     endpoint: '',
     modelo: '@cf/meta/llama-3.2-3b-instruct',
-    descripcion: 'Requiere endpoint con Account ID de Cloudflare Workers AI.'
-  },
-  {
-    id: 'scaleway',
-    nombre: 'Scaleway Generative APIs',
-    tipo: 'openai-compatible',
-    prioridad: 7,
-    endpoint: 'https://api.scaleway.ai/v1/chat/completions',
-    modelo: 'gpt-oss-120b',
-    descripcion: 'Motor europeo compatible con OpenAI.'
-  },
-  {
-    id: 'openrouter',
-    nombre: 'OpenRouter',
-    tipo: 'openai-compatible',
-    prioridad: 8,
-    endpoint: 'https://openrouter.ai/api/v1/chat/completions',
-    modelo: 'openrouter/free',
-    descripcion: 'Router gratuito de respaldo.'
-  },
-  {
-    id: 'nvidia',
-    nombre: 'NVIDIA NIM',
-    tipo: 'openai-compatible',
-    prioridad: 9,
-    endpoint: 'https://integrate.api.nvidia.com/v1/chat/completions',
-    modelo: 'meta/llama-3.3-70b-instruct',
-    descripcion: 'Motor NVIDIA NIM de respaldo.'
-  },
-  {
-    id: 'sambanova',
-    nombre: 'SambaNova Cloud',
-    tipo: 'openai-compatible',
-    prioridad: 10,
-    endpoint: 'https://api.sambanova.ai/v1/chat/completions',
-    modelo: 'Meta-Llama-3.3-70B-Instruct',
-    descripcion: 'Motor SambaNova de respaldo.'
-  },
-  {
-    id: 'ovhcloud',
-    nombre: 'OVHcloud AI Endpoints',
-    tipo: 'openai-compatible',
-    prioridad: 11,
-    endpoint: 'https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/chat/completions',
-    modelo: 'gpt-oss-20b',
-    descripcion: 'Motor OVHcloud compatible con OpenAI.'
-  },
-  {
-    id: 'fireworks',
-    nombre: 'Fireworks AI',
-    tipo: 'openai-compatible',
-    prioridad: 12,
-    endpoint: 'https://api.fireworks.ai/inference/v1/chat/completions',
-    modelo: 'accounts/fireworks/models/gpt-oss-120b',
-    descripcion: 'Motor Fireworks AI de respaldo.'
-  },
-  {
-    id: 'hyperbolic',
-    nombre: 'Hyperbolic',
-    tipo: 'openai-compatible',
-    prioridad: 13,
-    endpoint: 'https://api.hyperbolic.xyz/v1/chat/completions',
-    modelo: 'meta-llama/Meta-Llama-3.1-70B-Instruct',
-    descripcion: 'Motor Hyperbolic de respaldo.'
-  },
-  {
-    id: 'baseten',
-    nombre: 'Baseten',
-    tipo: 'openai-compatible',
-    prioridad: 14,
-    endpoint: 'https://inference.baseten.co/v1/chat/completions',
-    modelo: 'zai-org/GLM-5',
-    descripcion: 'Motor Baseten Model APIs de respaldo.'
-  },
-  {
-    id: 'huggingface',
-    nombre: 'Hugging Face',
-    tipo: 'openai-compatible',
-    prioridad: 15,
-    endpoint: 'https://router.huggingface.co/v1/chat/completions',
-    modelo: 'openai/gpt-oss-120b:cheapest',
-    descripcion: 'Último motor de respaldo mediante Inference Providers.'
+    descripcion: 'Motor con cuota gratuita; requiere configuración de Workers AI.'
   }
 ];
+
+const PROVEEDORES_IA_GRATUITOS = new Set(
+  CATALOGO_IA_GRATUITA.map((provider) => provider.id)
+);
 
 function providerId(value) {
   return text(value).toLowerCase().replace(/[^a-z0-9_-]/g, '');
@@ -179,7 +84,8 @@ function adminProvider(provider) {
     ultimaPruebaOk: provider.ultimaPruebaOk === true,
     ultimaPruebaEn: text(provider.ultimaPruebaEn),
     ultimaLatenciaMs: Number(provider.ultimaLatenciaMs || 0),
-    ultimoError: text(provider.ultimoError)
+    ultimoError: text(provider.ultimoError),
+    gratis: PROVEEDORES_IA_GRATUITOS.has(id)
   };
 }
 
@@ -217,8 +123,16 @@ async function ensureCatalog(env) {
   );
   let created = 0;
   let updated = 0;
+  let deactivated = 0;
 
-  for (const desired of CATALOGO_IA_15) {
+  for (const provider of current) {
+    const id = providerId(provider.id || provider.proveedor || provider.nombre);
+    if (!id || PROVEEDORES_IA_GRATUITOS.has(id) || provider.activo !== true) continue;
+    await toggleAiProvider(env, id, false);
+    deactivated += 1;
+  }
+
+  for (const desired of CATALOGO_IA_GRATUITA) {
     const existing = byId.get(desired.id);
     if (!catalogNeedsSync(existing, desired)) continue;
 
@@ -235,14 +149,20 @@ async function ensureCatalog(env) {
   }
 
   clearProvidersCache();
+
+  const providers = (await listAiProviders(env, true))
+    .filter((provider) => PROVEEDORES_IA_GRATUITOS.has(
+      providerId(provider.id || provider.proveedor || provider.nombre)
+    ));
+
   return {
-    proveedores: await listAiProviders(env, true),
+    proveedores: providers,
     created,
     updated,
-    totalCatalogo: CATALOGO_IA_15.length
+    deactivated,
+    totalCatalogo: CATALOGO_IA_GRATUITA.length
   };
 }
-
 async function activeProviders(env, force = false) {
   const now = Date.now();
 
@@ -256,7 +176,10 @@ async function activeProviders(env, force = false) {
   providersPending = listAiProviders(env, false)
     .then((list) => {
       const providers = (Array.isArray(list) ? list : [])
-        .filter((provider) => provider && provider.activo === true && providerId(provider.id || provider.proveedor));
+        .filter((provider) => {
+          const id = providerId(provider && (provider.id || provider.proveedor));
+          return provider && provider.activo === true && PROVEEDORES_IA_GRATUITOS.has(id);
+        });
       providers.sort((a, b) => Number(a.prioridad || 999) - Number(b.prioridad || 999));
       providersCache = providers;
       providersCacheExpiresAt = Date.now() + PROVIDERS_CACHE_MS;
@@ -280,6 +203,11 @@ function motorIndex(data, total) {
       : 0;
   if (!Number.isFinite(index) || index < 0) index = 0;
   return total > 0 ? index % total : 0;
+}
+
+function requierePago(error) {
+  const message = text(error && error.message || error).toLowerCase();
+  return /payment required|billing|insufficient balance|insufficient credit|add credits|purchase credits|upgrade.*plan/.test(message);
 }
 
 function publicError(error) {
@@ -388,16 +316,31 @@ export async function onRequest({ request, env }) {
         });
       }
       if (action === 'admin-toggle') {
-        await toggleAiProvider(env, data.providerId, data.activo === true);
+        const id = providerId(data.providerId);
+        if (!PROVEEDORES_IA_GRATUITOS.has(id)) {
+          return jsonReply(request, {
+            ok: false,
+            mensaje: 'Este proveedor no forma parte del catálogo gratuito permitido.'
+          }, 400);
+        }
+        await toggleAiProvider(env, id, data.activo === true);
         clearProvidersCache();
-        return jsonReply(request, { ok: true, providerId: providerId(data.providerId) });
+        return jsonReply(request, { ok: true, providerId: id });
       }
       if (action === 'admin-save') {
-        const result = await saveAiProvider(env, data.provider || {});
+        const provider = data.provider || {};
+        const id = providerId(provider.id || provider.proveedor || provider.nombre);
+        if (!PROVEEDORES_IA_GRATUITOS.has(id)) {
+          return jsonReply(request, {
+            ok: false,
+            mensaje: 'Solo se permiten proveedores con modalidad gratuita aprobada.'
+          }, 400);
+        }
+        const result = await saveAiProvider(env, provider);
         clearProvidersCache();
         return jsonReply(request, {
           ok: true,
-          proveedor: adminProvider(result.proveedor || result.data || data.provider || {})
+          proveedor: adminProvider(result.proveedor || result.data || provider)
         });
       }
       if (action === 'admin-test') {
@@ -415,13 +358,28 @@ export async function onRequest({ request, env }) {
             latencyMs: Number(result.latencyMs || 0)
           });
         } catch (error) {
+          const id = providerId(data.providerId);
           const message = text(error && error.message || error) || 'La prueba del proveedor no pudo completarse.';
+          let desactivado = false;
+
+          if (requierePago(error) && id) {
+            try {
+              await toggleAiProvider(env, id, false);
+              clearProvidersCache();
+              desactivado = true;
+            } catch (_toggleError) {
+              desactivado = false;
+            }
+          }
+
           return jsonReply(request, {
             ok: false,
-            provider: providerId(data.providerId),
+            provider: id,
             error: message,
             mensaje: message,
-            diagnostico: true
+            diagnostico: true,
+            requierePago: requierePago(error),
+            desactivado
           }, 200);
         }
       }

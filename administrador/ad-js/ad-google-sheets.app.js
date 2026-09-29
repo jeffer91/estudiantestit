@@ -234,8 +234,10 @@
   function liberarRevisionInvestigacion(){var t=state.tituloActual;if(!t||!t.id)return;busy(true,'Liberando revisión...');api().liberarRevisionInvestigacion(t.id).then(function(){estadoBox('ad-modal-estado-titulo','Revisión de Investigación liberada.','success');return cargarResumenInvestigacion();}).then(function(){if(state.tituloActual){state.tituloActual.bloqueoInvestigacion=false;pintarInvestigacionDetalle(state.tituloActual);}}).catch(function(error){estadoBox('ad-modal-estado-titulo',mensaje(error),'danger');}).finally(function(){busy(false);});}
 
   function renderIA(){
-    var filas=state.proveedores.map(function(p){return '<tr><td><strong>'+esc(p.nombre||p.id)+'</strong><br><small>'+esc(p.id)+'</small></td><td>'+esc(p.tipo)+'</td><td>'+esc(p.modelo||p.model)+'</td><td><span class="ad-badge '+(p.activo?'ad-badge-success':'ad-badge-warning')+'">'+(p.activo?'Activo':'Inactivo')+'</span></td><td>'+(p.apiKeyConfigurada?'Sí':'No')+'</td><td><button class="ad-btn ad-btn-secondary" type="button" data-action="editar-ia" data-id="'+esc(p.id)+'">Editar</button> <button class="ad-btn '+(p.activo?'ad-btn-danger':'ad-btn-primary')+'" type="button" data-action="toggle-ia" data-id="'+esc(p.id)+'" data-activo="'+(!p.activo)+'">'+(p.activo?'Desactivar':'Activar')+'</button> <button class="ad-btn ad-btn-secondary" type="button" data-action="probar-ia" data-id="'+esc(p.id)+'">Probar</button></td></tr>';});
-    setHtml('ad-tabla-ia',filas.length?filas.join(''):'<tr><td colspan="6" class="ad-empty">No hay proveedores IA configurados.</td></tr>');setTexto('ad-kpi-ia',String(state.proveedores.filter(function(p){return p.activo;}).length));
+    var permitidos={groq:true,gemini:true,openrouter:true,cloudflare:true};
+    state.proveedores=state.proveedores.filter(function(p){return permitidos[texto(p.id).toLowerCase()]===true;});
+    var filas=state.proveedores.map(function(p){return '<tr><td><strong>'+esc(p.nombre||p.id)+'</strong><br><small>'+esc(p.id)+' · Gratuito</small></td><td>'+esc(p.tipo)+'</td><td>'+esc(p.modelo||p.model)+'</td><td><span class="ad-badge '+(p.activo?'ad-badge-success':'ad-badge-warning')+'">'+(p.activo?'Activo':'Inactivo')+'</span></td><td>'+(p.apiKeyConfigurada?'Sí':'No')+'</td><td><button class="ad-btn ad-btn-secondary" type="button" data-action="editar-ia" data-id="'+esc(p.id)+'">Editar</button> <button class="ad-btn '+(p.activo?'ad-btn-danger':'ad-btn-primary')+'" type="button" data-action="toggle-ia" data-id="'+esc(p.id)+'" data-activo="'+(!p.activo)+'">'+(p.activo?'Desactivar':'Activar')+'</button> <button class="ad-btn ad-btn-secondary" type="button" data-action="probar-ia" data-id="'+esc(p.id)+'">Probar</button></td></tr>';});
+    setHtml('ad-tabla-ia',filas.length?filas.join(''):'<tr><td colspan="6" class="ad-empty">No hay proveedores gratuitos configurados.</td></tr>');setTexto('ad-kpi-ia',String(state.proveedores.filter(function(p){return p.activo;}).length));
   }
 
   function buscarPeriodo(id){return state.periodos.find(function(item){return texto(item.id||item.periodoId)===texto(id);})||null;}
@@ -365,7 +367,14 @@
         return cargarIA();
       })
       .catch(function(error){
-        mostrarDiagnosticoIA(nombre,traducirDiagnosticoIA(error),false);
+        var diagnostico=traducirDiagnosticoIA(error);
+        var bajo=texto(mensaje(error)).toLowerCase();
+        var pago=bajo.indexOf('payment required')>=0||bajo.indexOf('billing')>=0||bajo.indexOf('insufficient balance')>=0;
+        if(pago){
+          diagnostico+=' El proveedor se desactivará porque la aplicación solo utiliza IA con modalidad gratuita.';
+        }
+        mostrarDiagnosticoIA(nombre,diagnostico,false);
+        return cargarIA();
       })
       .finally(function(){busy(false);});
   }

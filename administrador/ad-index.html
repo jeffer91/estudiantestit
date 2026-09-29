@@ -187,10 +187,10 @@
       </section>
 
       <section id="ad-seccion-ia" class="ad-view" data-ad-view hidden>
-        <div class="ad-section-head"><div><p class="ad-eyebrow">Firebase Títulos</p><h3>Proveedores de IA</h3><p class="ad-muted">Credenciales, estado, modelo y prioridad se guardan en la colección ia.</p></div></div>
+        <div class="ad-section-head"><div><p class="ad-eyebrow">Firebase Títulos</p><h3>Proveedores de IA gratuitos</h3><p class="ad-muted">Solo se mantienen proveedores con modalidad gratuita aprobada. Si una prueba exige pago o facturación, el proveedor se desactiva.</p></div></div>
         <div class="ad-card">
           <form id="ad-form-ia" class="ad-form-grid ad-form-grid-4">
-            <label><span>ID</span><input id="ad-ia-id" placeholder="gemini" required /></label>
+            <label><span>Proveedor</span><select id="ad-ia-id" required><option value="groq">Groq</option><option value="gemini">Gemini</option><option value="openrouter">OpenRouter Free</option><option value="cloudflare">Cloudflare Workers AI</option></select></label>
             <label><span>Nombre</span><input id="ad-ia-nombre" /></label>
             <label><span>Tipo</span><select id="ad-ia-tipo"><option value="gemini">Gemini</option><option value="openai-compatible">OpenAI compatible</option></select></label>
             <label><span>Prioridad</span><input id="ad-ia-prioridad" type="number" min="1" value="999" /></label>
@@ -200,7 +200,7 @@
             <label class="ad-check"><input id="ad-ia-activo" type="checkbox" /><span>Proveedor activo</span></label>
             <button class="ad-btn ad-btn-primary" type="submit">Guardar proveedor</button>
           </form>
-          <pre id="ad-estado-ia" class="ad-result-box">Las credenciales nunca se muestran en el navegador.</pre>
+          <pre id="ad-estado-ia" class="ad-result-box">Solo se permiten proveedores gratuitos. Las credenciales nunca se muestran en el navegador.</pre>
           <div class="ad-table-wrap"><table class="ad-table"><thead><tr><th>Proveedor</th><th>Tipo</th><th>Modelo</th><th>Estado</th><th>Credencial</th><th>Acciones</th></tr></thead><tbody id="ad-tabla-ia"><tr><td colspan="6" class="ad-empty">Cargando...</td></tr></tbody></table></div>
         </div>
       </section>
