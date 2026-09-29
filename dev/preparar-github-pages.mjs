@@ -78,9 +78,30 @@ let investigatorJs = read('investigadores/js/investigadores.app.js');
 investigatorJs = investigatorJs.replaceAll("'/api/investigadores'", "'https://titulos-investigadores.pages.dev/api/investigadores'");
 write('investigadores/js/investigadores.app.js', investigatorJs);
 
-// Administrador: mantener la UI en GitHub Pages y la API administrativa en Cloudflare.
-injectApiBase('administrador/index.html', 'https://titulos-administrador.pages.dev');
-injectApiBase('administrador/ad-index.html', 'https://titulos-administrador.pages.dev');
+// Administrador: mantener interfaz y API en el mismo origen.
+// El backend administrativo publicado actualmente no acepta CORS desde GitHub Pages,
+// por lo que /administrador/ actúa como acceso estable al sitio administrativo oficial.
+const adminTarget = 'https://titulos-administrador.pages.dev/';
+const adminRedirect = [
+  '<!doctype html>',
+  '<html lang="es"><head><meta charset="utf-8">',
+  '<meta name="viewport" content="width=device-width,initial-scale=1">',
+  '<meta http-equiv="refresh" content="0;url=' + adminTarget + '">',
+  '<title>Administrador de Titulación</title>',
+  '<script>',
+  '  (function(){',
+  '    var target=' + JSON.stringify(adminTarget) + ';',
+  '    var suffix=(window.location.search||"")+(window.location.hash||"");',
+  '    window.location.replace(target+suffix);',
+  '  })();',
+  '</script>',
+  '</head><body>',
+  '<p>Abriendo el Administrador de Titulación…</p>',
+  '<p><a href="' + adminTarget + '">Continuar</a></p>',
+  '</body></html>'
+].join('\n');
+write('administrador/index.html', adminRedirect);
+write('administrador/ad-index.html', adminRedirect);
 
 // Metadatos exclusivos de Cloudflare no tienen efecto en GitHub Pages.
 [
