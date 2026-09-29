@@ -234,7 +234,7 @@
   function liberarRevisionInvestigacion(){var t=state.tituloActual;if(!t||!t.id)return;busy(true,'Liberando revisión...');api().liberarRevisionInvestigacion(t.id).then(function(){estadoBox('ad-modal-estado-titulo','Revisión de Investigación liberada.','success');return cargarResumenInvestigacion();}).then(function(){if(state.tituloActual){state.tituloActual.bloqueoInvestigacion=false;pintarInvestigacionDetalle(state.tituloActual);}}).catch(function(error){estadoBox('ad-modal-estado-titulo',mensaje(error),'danger');}).finally(function(){busy(false);});}
 
   function renderIA(){
-    var permitidos={groq:true,gemini:true,openrouter:true};
+    var permitidos={groq:true,gemini:true,openrouter:true,mistral:true,cohere:true};
     state.proveedores=state.proveedores.filter(function(p){return permitidos[texto(p.id).toLowerCase()]===true;});
     var filas=state.proveedores.map(function(p){return '<tr><td><strong>'+esc(p.nombre||p.id)+'</strong><br><small>'+esc(p.id)+' · Gratuito</small></td><td>'+esc(p.tipo)+'</td><td>'+esc(p.modelo||p.model)+'</td><td><span class="ad-badge '+(p.activo?'ad-badge-success':'ad-badge-warning')+'">'+(p.activo?'Activo':'Inactivo')+'</span></td><td>'+(p.apiKeyConfigurada?'Sí':'No')+'</td><td><button class="ad-btn ad-btn-secondary" type="button" data-action="editar-ia" data-id="'+esc(p.id)+'">Editar</button> <button class="ad-btn '+(p.activo?'ad-btn-danger':'ad-btn-primary')+'" type="button" data-action="toggle-ia" data-id="'+esc(p.id)+'" data-activo="'+(!p.activo)+'">'+(p.activo?'Desactivar':'Activar')+'</button> <button class="ad-btn ad-btn-secondary" type="button" data-action="probar-ia" data-id="'+esc(p.id)+'">Probar</button></td></tr>';});
     setHtml('ad-tabla-ia',filas.length?filas.join(''):'<tr><td colspan="6" class="ad-empty">No hay proveedores gratuitos configurados.</td></tr>');setTexto('ad-kpi-ia',String(state.proveedores.filter(function(p){return p.activo;}).length));
@@ -256,8 +256,11 @@
     if(bajo.indexOf('payment required')>=0||bajo.indexOf('billing')>=0||bajo.indexOf('insufficient balance')>=0){
       return'El proveedor requiere saldo disponible o facturación activa. Revisa el plan o saldo de la cuenta antes de volver a probarlo.';
     }
-    if(bajo.indexOf('failed to fetch')>=0||bajo.indexOf('networkerror')>=0||bajo.indexOf('network error')>=0){
-      return'No se pudo conectar con el proveedor. Revisa la conexión, el endpoint configurado o la disponibilidad del servicio.';
+    if(bajo.indexOf('api key temporal')>=0){
+      return'Para probar este proveedor desde GitHub Pages debes ingresar una API key temporal. La clave se usa solo en esta pestaña y no se guarda en Firebase.';
+    }
+    if(bajo.indexOf('failed to fetch')>=0||bajo.indexOf('networkerror')>=0||bajo.indexOf('network error')>=0||bajo.indexOf('cors')>=0){
+      return'El navegador no pudo completar la conexión directa con el proveedor. Puede deberse a CORS o a una restricción del servicio para llamadas desde navegador.';
     }
     if(bajo.indexOf('unauthorized')>=0||bajo.indexOf('invalid api key')>=0||bajo.indexOf('invalid_api_key')>=0||bajo.indexOf('401')>=0){
       return'La credencial del proveedor no es válida o no tiene autorización. Revisa la API key.';
@@ -354,9 +357,33 @@
   function probarIA(id){
     var proveedor=state.proveedores.find(function(item){return item.id===id;});
     var nombre=texto(proveedor&&proveedor.nombre)||id;
+    var key='';
+    var keyInput=$('ad-ia-credencial');
+    var editingId=texto($('ad-ia-id')&&$('ad-ia-id').value);
+    var storageKey='ad-ia-temporal:'+id;
+
+    if(editingId===id&&keyInput)key=texto(keyInput.value);
+    if(!key){
+      try{key=texto(sessionStorage.getItem(storageKey));}catch(_error){}
+    }
+    if(!key){
+      key=texto(window.prompt(
+        'Ingresa una API key temporal para probar '+nombre+'.\n\n'+
+        'La clave se usará solo para esta prueba y no se guardará en Firebase.'
+      ));
+    }
+    if(!key){
+      mostrarDiagnosticoIA(
+        nombre,
+        'Prueba cancelada. Para probar '+nombre+' desde GitHub Pages se necesita una API key temporal.',
+        false
+      );
+      return;
+    }
+    try{sessionStorage.setItem(storageKey,key);}catch(_error){}
 
     busy(true,'Probando IA...');
-    api().probarIA(id,'Responde únicamente: conexión correcta.')
+    api().probarIA(id,'Responde únicamente: conexión correcta.',key)
       .then(function(r){
         var latencia=Number(r.latencyMs||0);
         mostrarDiagnosticoIA(
@@ -371,7 +398,8 @@
         var bajo=texto(mensaje(error)).toLowerCase();
         var pago=bajo.indexOf('payment required')>=0||bajo.indexOf('billing')>=0||bajo.indexOf('insufficient balance')>=0;
         if(pago){
-          diagnostico+=' El proveedor se desactivará porque la aplicación solo utiliza IA con modalidad gratuita.';
+          diagnostico+=' Este proveedor no cumple la regla de uso gratuito para la aplicación.';
+          try{sessionStorage.removeItem(storageKey);}catch(_error){}
         }
         mostrarDiagnosticoIA(nombre,diagnostico,false);
         return cargarIA();
