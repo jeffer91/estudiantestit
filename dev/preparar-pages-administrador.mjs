@@ -21,7 +21,7 @@ fs.cpSync(source, output, { recursive: true, force: true });
 
 function actualizarVersionHtml(file) {
   let html = fs.readFileSync(file, 'utf8');
-  html = html.replace(/\?v=\d+\.\d+\.\d+(?:&r=[^"'&\\s]+)?/g, `?v=${VERSION_ADMIN}&r=diag-es-popup-1`);
+  html = html.replace(/\?v=\d+\.\d+\.\d+(?:&r=[^"'&\\s]+)?/g, `?v=${VERSION_ADMIN}&r=diag-es-popup-2`);
   html = html.replace(/>v\d+\.\d+\.\d+</g, `>v${VERSION_ADMIN}<`);
   html = html.replace(/Versión \d+\.\d+\.\d+/g, `Versión ${VERSION_ADMIN}`);
   fs.writeFileSync(file, html, 'utf8');
