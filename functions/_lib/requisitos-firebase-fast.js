@@ -253,32 +253,113 @@ async function periodDocumentById(id, env) {
   }) || null;
 }
 
+function configuredPeriodInfo(document) {
+  const row = mergedDocument(document);
+  const nested = flexible(row, [
+    'periodoActivo', 'periodoPrincipal', 'periodoActual'
+  ]);
+  const nestedObject = nested && typeof nested === 'object' ? nested : {};
+
+  const idRaw = scalar(
+    flexible(row, [
+      'periodoActivoId', 'periodoPrincipalId', 'periodoActualId',
+      'periodoId', 'periodId'
+    ]) ||
+    flexible(nestedObject, ['id', 'periodoId', 'periodId', 'codigo'])
+  );
+
+  const labelRaw = scalar(
+    flexible(row, [
+      'periodoActivoLabel', 'periodoPrincipalLabel', 'periodoActualLabel',
+      'periodoLabel', 'periodoNombre', 'periodo'
+    ]) ||
+    flexible(nestedObject, ['label', 'nombre', 'periodoLabel', 'periodoNombre'])
+  );
+
+  const source = idRaw || labelRaw;
+  const id = periodSignature(source) || idRaw || '';
+
+  return {
+    id,
+    label: labelRaw || idRaw || id,
+    rawId: idRaw || id
+  };
+}
+
+async function configuredTitulationPeriod(env) {
+  try {
+    const config = await getDocument('UTET', 'titulos_config', 'app', env);
+    if (!config) return null;
+    const info = configuredPeriodInfo(config);
+    return info.id ? { ...info, source: 'CONFIG_TITULACION_UTET' } : null;
+  } catch (_error) {
+    return null;
+  }
+}
+
 async function resolvePeriod(document, cedula, env, requestedPeriod = '') {
   const requested = text(requestedPeriod);
   const direct = periodInfo(mergedDocument(document));
+
+  /* Si el propio estudiante trae período, se respeta. */
   if (direct.id && (!requested || samePeriod(direct.id, requested))) {
     return { ...direct, source: 'ESTUDIANTE' };
   }
 
-  const enrollment = await enrollmentForStudent(cedula, env, requested);
-  if (!enrollment) return { id: '', label: '', rawId: '', source: '', requestedPeriod: requested };
+  /* Fuente autoritativa del proceso de Titulación: el período principal
+     configurado desde el Administrador en UTET/titulos_config/app. */
+  const configured = await configuredTitulationPeriod(env);
+  if (configured && configured.id) {
+    return {
+      ...configured,
+      requestedPeriod: requested,
+      requestedPeriodMismatch: Boolean(
+        requested && !samePeriod(configured.id, requested)
+      )
+    };
+  }
 
-  let info = periodInfo(enrollment);
-  if (info.rawId) {
-    const periodDocument = await periodDocumentById(info.rawId, env);
-    if (periodDocument) {
-      const detailed = periodInfo(periodDocument);
-      info = {
-        id: detailed.id || info.id,
-        label: detailed.label || info.label,
-        rawId: info.rawId
+  /* Compatibilidad con instalaciones que sí manejan matrículas/períodos. */
+  const enrollment = await enrollmentForStudent(cedula, env, requested);
+  if (enrollment) {
+    let info = periodInfo(enrollment);
+    if (info.rawId) {
+      const periodDocument = await periodDocumentById(info.rawId, env);
+      if (periodDocument) {
+        const detailed = periodInfo(periodDocument);
+        info = {
+          id: detailed.id || info.id,
+          label: detailed.label || info.label,
+          rawId: info.rawId
+        };
+      }
+    }
+
+    if (info.id) {
+      return {
+        ...info,
+        source: 'MATRICULAS_UTET'
       };
     }
   }
 
+  /* Último respaldo: si el cliente envió un período válido, usarlo.
+     Evita que una ausencia de catálogo bloquee la identificación del alumno. */
+  if (requested) {
+    return {
+      id: periodSignature(requested) || requested,
+      label: requested,
+      rawId: requested,
+      source: 'PERIODO_SOLICITADO'
+    };
+  }
+
   return {
-    ...info,
-    source: info.id ? 'MATRICULAS_UTET' : ''
+    id: '',
+    label: '',
+    rawId: '',
+    source: '',
+    requestedPeriod: requested
   };
 }
 
@@ -304,6 +385,12 @@ function minimumStudent(document, cedula, periodOrIncludePhone, includePhone) {
     'CodigoCarrera', 'codigoCarrera', 'carreraCodigo'
   ]));
   const phone = text(flexible(row, ['celular', 'Celular', 'telefono', 'Teléfono']));
+  const emailInstitutional = text(flexible(row, [
+    'correoInstitucional', 'CorreoInstitucional', 'emailInstitucional'
+  ]));
+  const emailPersonal = text(flexible(row, [
+    'correoPersonal', 'CorreoPersonal', 'emailPersonal'
+  ]));
   const sede = text(flexible(row, ['sede', 'Sede']));
   const periodId = text(period && period.id);
   const periodLabel = text(period && period.label) || periodId;
@@ -327,18 +414,23 @@ function minimumStudent(document, cedula, periodOrIncludePhone, includePhone) {
     periodo: periodLabel,
     sede,
     Sede: sede,
+    correoInstitucional: emailInstitutional,
+    CorreoInstitucional: emailInstitutional,
+    correoPersonal: emailPersonal,
+    CorreoPersonal: emailPersonal,
+    celular: phone,
+    Celular: phone,
     fuente: 'FIREBASE_UTET',
     fuentePeriodo: text(period && period.source)
   };
 
-  if (phoneRequested) {
-    student.celular = phone;
-    student.Celular = phone;
-  }
-
+  /* La identidad académica se valida con cédula, nombres y carrera.
+     El período se resuelve de forma separada para no rechazar estudiantes
+     cuyo documento Estudiante no almacena periodoId. */
   return {
     student,
-    complete: Boolean(names && career && periodId)
+    complete: Boolean(names && career),
+    periodResolved: Boolean(periodId)
   };
 }
 
@@ -408,8 +500,10 @@ export async function getStudentBasicFast(cedula, options = {}, env) {
     fuentePeriodo: normalized.student.fuentePeriodo,
     lecturaDirecta: true,
     mensaje: normalized.complete
-      ? 'Estudiante encontrado correctamente en Firebase UTET.'
-      : 'El estudiante existe en Firebase UTET, pero no se encontró una matrícula/período académico válido.'
+      ? normalized.periodResolved
+        ? 'Estudiante encontrado correctamente en Firebase UTET.'
+        : 'Estudiante encontrado correctamente. El período se resolverá desde la configuración activa de Titulación.'
+      : 'El estudiante existe en Firebase UTET, pero faltan nombres o carrera.'
   };
 }
 

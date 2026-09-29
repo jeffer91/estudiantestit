@@ -1,6 +1,16 @@
 name: Publicar en Cloudflare Pages
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'functions/**'
+      - '_worker.js'
+      - '.github/workflows/publicar-cloudflare.yml'
+      - 'dev/preparar-pages-estudiantes.mjs'
+      - 'package.json'
+      - 'package-lock.json'
   workflow_dispatch:
 
 permissions:

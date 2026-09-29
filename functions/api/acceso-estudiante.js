@@ -114,8 +114,7 @@ function completeAcademic(result) {
   if (!student || result.encontrado !== true) return false;
   return Boolean(
     text(flexible(student, ['Nombres', 'nombres', 'nombreCompleto'])) &&
-    text(flexible(student, ['NombreCarrera', 'nombreCarrera', 'carrera'])) &&
-    text(flexible(student, ['periodoId', 'periodId', 'periodoLabel', 'periodo']))
+    text(flexible(student, ['NombreCarrera', 'nombreCarrera', 'carrera']))
   );
 }
 
@@ -177,7 +176,7 @@ async function lookupAcademic(env, cedula) {
 
     if (firebaseResult && firebaseResult.encontrado === true) {
       const error = new Error(
-        'Encontramos al estudiante en Firebase UTET, pero faltan la carrera o el período académico.'
+        'Encontramos al estudiante en Firebase UTET, pero faltan nombres o carrera.'
       );
       error.sources = [{
         fuente: 'FIREBASE_UTET',
@@ -206,14 +205,29 @@ async function lookupAcademic(env, cedula) {
 async function queryTitles(env, cedula, student) {
   const periodoId = text(flexible(student, ['periodoId', 'periodId']));
   const periodoLabel = text(flexible(student, ['periodoLabel', 'periodo'])) || periodoId;
-  const result = await runService(env, 'TITULOS', 'CONSULTAR_ENVIO_CEDULA', 'GET', {
+  const payload = {
     cedula,
-    numeroIdentificacion: cedula,
-    periodoId,
-    periodoLabel,
-    periodo: periodoLabel,
-    scope: 'period'
-  }, 'student', TITLES_TIMEOUT_MS);
+    numeroIdentificacion: cedula
+  };
+
+  if (periodoId || periodoLabel) {
+    payload.periodoId = periodoId;
+    payload.periodoLabel = periodoLabel;
+    payload.periodo = periodoLabel;
+    payload.scope = 'period';
+  } else {
+    payload.scope = 'latest';
+  }
+
+  const result = await runService(
+    env,
+    'TITULOS',
+    'CONSULTAR_ENVIO_CEDULA',
+    'GET',
+    payload,
+    'student',
+    TITLES_TIMEOUT_MS
+  );
   if (!result || result.ok === false) {
     throw new Error(text(result && (result.mensaje || result.error)) || 'Firebase Títulos no respondió correctamente.');
   }
