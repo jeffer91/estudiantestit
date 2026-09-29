@@ -33,15 +33,6 @@ const CATALOGO_IA_GRATUITA = [
     endpoint: 'https://openrouter.ai/api/v1/chat/completions',
     modelo: 'openrouter/free',
     descripcion: 'Router de modelos gratuitos.'
-  },
-  {
-    id: 'cloudflare',
-    nombre: 'Cloudflare Workers AI',
-    tipo: 'openai-compatible',
-    prioridad: 4,
-    endpoint: '',
-    modelo: '@cf/meta/llama-3.2-3b-instruct',
-    descripcion: 'Motor con cuota gratuita; requiere configuración de Workers AI.'
   }
 ];
 
