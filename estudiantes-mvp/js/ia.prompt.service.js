@@ -553,8 +553,10 @@
     modo: '3x3'
   });
 
-  instalarFuentePrincipal();
-  instalarRespaldoSoloEscritura();
+  /*
+    Este módulo se limita a la IA y a la presentación de textos.
+    La consulta académica del Paso 1 pertenece exclusivamente a
+    estudiante.consulta.revision.js.
+  */
   instalarCorreccionVisual();
-  instalarConsultaSegura();
 })(window);
