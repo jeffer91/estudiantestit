@@ -5,7 +5,7 @@ import process from 'node:process';
 const root = process.cwd();
 const source = path.join(root, 'administrador');
 const output = path.join(root, '.pages-administrador');
-const VERSION_ADMIN = '3.6.4';
+const VERSION_ADMIN = '3.6.3';
 
 if (!fs.existsSync(source) || !fs.statSync(source).isDirectory()) {
   throw new Error('No se encontró la carpeta administrador.');
@@ -21,7 +21,7 @@ fs.cpSync(source, output, { recursive: true, force: true });
 
 function actualizarVersionHtml(file) {
   let html = fs.readFileSync(file, 'utf8');
-  html = html.replace(/\?v=\d+\.\d+\.\d+/g, `?v=${VERSION_ADMIN}`);
+  html = html.replace(/\?v=\d+\.\d+\.\d+(?:&r=[^"'&\\s]+)?/g, `?v=${VERSION_ADMIN}&r=diag-es-popup-1`);
   html = html.replace(/>v\d+\.\d+\.\d+</g, `>v${VERSION_ADMIN}<`);
   html = html.replace(/Versión \d+\.\d+\.\d+/g, `Versión ${VERSION_ADMIN}`);
   fs.writeFileSync(file, html, 'utf8');
