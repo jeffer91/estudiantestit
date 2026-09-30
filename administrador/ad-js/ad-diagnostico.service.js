@@ -26,34 +26,19 @@ Función:
     var label=texto(data.periodoActivoLabel||periodoActivo.label||data.periodoLabel||config().periodos.fallbackLabel);
     return {id:id,label:label,periodoActivo:periodoActivo,periodosActivos:Array.isArray(data.periodosActivos)?data.periodosActivos:[],periodosActivosLabels:Array.isArray(data.periodosActivosLabels)?data.periodosActivosLabels:[]};
   }
-  function extraerSheets(configApp){
-    var data=configApp||{};
+  function extraerSheets(){
+    var base=texto(window.TITULOS_API_BASE||'').replace(/\/$/,'');
     return {
-      activo:valorBooleano(data.sheetsActivo),
-      webAppUrl:texto(data.sheetsWebAppUrl||data.sheetsUrl||data.sheetsEndpoint||""),
-      token:texto(data.sheetsToken||""),
-      tokenOculto:ocultarToken(data.sheetsToken||""),
-      timeoutMs:Number(data.sheetsTimeoutMs||45000),
-      ultimaPrueba:texto(data.sheetsUltimaPrueba||""),
-      ultimoResultado:texto(data.sheetsUltimoResultado||"")
+      activo:Boolean(base),
+      webAppUrl:base?base+'/api/sheets':'',
+      token:'',
+      tokenOculto:'',
+      timeoutMs:45000,
+      ultimaPrueba:'',
+      ultimoResultado:''
     };
   }
-  function guardarSheetsRuntime(configApp){
-    var sheets=extraerSheets(configApp);
-    if(!sheets.webAppUrl)return false;
-    var runtime={
-      endpoint:sheets.webAppUrl,
-      url:sheets.webAppUrl,
-      token:sheets.token,
-      activo:sheets.activo!==false,
-      timeoutMs:Math.max(5000,Number(sheets.timeoutMs||45000)),
-      nombre:"Google Sheets Titulación",
-      actualizadoEn:new Date().toISOString(),
-      origen:"titulos_config/app"
-    };
-    try{window.localStorage.setItem(SHEETS_STORAGE_KEY,JSON.stringify(runtime));return true;}
-    catch(error){return false;}
-  }
+  function guardarSheetsRuntime(){return false;}
 
   function revisarColeccion(nombre,limite,opciones){
     var opts=opciones||{};var tareaMuestra;
@@ -90,32 +75,28 @@ Función:
       });
   }
   function probarSheets(){
-    var colecciones=config().colecciones||{};var documentoConfig=config().documentos&&config().documentos.appConfig;
-    return firebaseService().leerDocumento(colecciones.titulosConfig,documentoConfig).then(function(configResultado){
-      var configApp=configResultado.data||{};var sheets=extraerSheets(configApp);guardarSheetsRuntime(configApp);
-      var payload=Object.assign({},config().sheets.pingPayload||{},{fechaCliente:new Date().toISOString()});
-      if(!sheets.webAppUrl)return {ok:false,sheets:sheets,mensaje:"No existe sheetsWebAppUrl en titulos_config/app."};
-      if(!sheets.activo)return {ok:false,sheets:sheets,mensaje:"Google Sheets está configurado, pero sheetsActivo no está en true."};
-      if(sheets.token){payload.token=sheets.token;if(payload.datos&&typeof payload.datos==='object')payload.datos.token=sheets.token;}
-      return fetch(sheets.webAppUrl,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(payload)})
-        .then(function(respuesta){return respuesta.text().then(function(textoRespuesta){var json=null;try{json=JSON.parse(textoRespuesta);}catch(errorJson){json={raw:textoRespuesta};}return {ok:respuesta.ok&&json.ok!==false,status:respuesta.status,sheets:sheets,respuesta:json,sheetsCompartidoConCoordinadores:true,mensaje:respuesta.ok?"PING enviado a Google Sheets y configuración compartida con Coordinadores.":"Google Sheets respondió con error HTTP."};});})
-        .catch(function(error){return {ok:false,sheets:sheets,mensaje:error.message||String(error)};});
+    var servicio=window.ADSheetsService;
+    if(!servicio||typeof servicio.probarPing!=='function'){
+      return Promise.resolve({ok:false,mensaje:'El servicio Firebase de diagnóstico no está disponible.'});
+    }
+    return servicio.probarPing().then(function(respuesta){
+      return {ok:true,respuesta:respuesta,mensaje:'Backend Firebase respondió correctamente.'};
+    }).catch(function(error){
+      return {ok:false,mensaje:error&&error.message||String(error)};
     });
   }
   function resumenTextoFirebase(resultado){
-    var lineas=[];var colecciones=resultado.colecciones||[];
-    lineas.push("Firebase conectado correctamente.");
-    lineas.push("Proyecto: "+resultado.proyecto);
-    lineas.push("Config titulos_config/app: "+(resultado.configExiste?"encontrada":"no encontrada"));
-    lineas.push("Período principal: "+resultado.periodo.label+" ("+resultado.periodo.id+")");
-    lineas.push("Google Sheets: "+(resultado.sheets.activo?"activo":"inactivo"));
-    lineas.push("URL Sheets: "+(resultado.sheets.webAppUrl?"configurada":"no configurada"));
-    lineas.push("Configuración compartida con Coordinadores: "+(resultado.sheetsCompartidoConCoordinadores?"sí":"no"));
-    lineas.push("Última prueba Sheets: "+(resultado.sheets.ultimaPrueba||"sin dato"));
-    lineas.push("Último resultado Sheets: "+(resultado.sheets.ultimoResultado||"sin dato"));
-    lineas.push("");
-    for(var i=0;i<colecciones.length;i+=1){lineas.push("Colección "+colecciones[i].nombre+": "+(colecciones[i].ok?"ok | total "+colecciones[i].total+" | muestra "+colecciones[i].totalLeido:"error: "+colecciones[i].error));}
-    return lineas.join("\n");
+    var lineas=[],colecciones=resultado.colecciones||[];
+    lineas.push('Firebase conectado correctamente.');
+    lineas.push('Proyecto: '+resultado.proyecto);
+    lineas.push('Config titulos_config/app: '+(resultado.configExiste?'encontrada':'no encontrada'));
+    lineas.push('Período principal: '+resultado.periodo.label+' ('+resultado.periodo.id+')');
+    lineas.push('Backend API: '+(window.TITULOS_API_BASE||'no configurado'));
+    lineas.push('');
+    for(var i=0;i<colecciones.length;i+=1){
+      lineas.push('Colección '+colecciones[i].nombre+': '+(colecciones[i].ok?'ok | total '+colecciones[i].total+' | muestra '+colecciones[i].totalLeido:'error: '+colecciones[i].error));
+    }
+    return lineas.join('\n');
   }
 
   window.ADDiagnosticoService={probarFirebase:probarFirebase,probarSheets:probarSheets,extraerPeriodo:extraerPeriodo,extraerSheets:extraerSheets,guardarSheetsRuntime:guardarSheetsRuntime,resumenTextoFirebase:resumenTextoFirebase,obtenerLogsRecientes:obtenerLogsRecientes};
