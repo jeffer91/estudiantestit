@@ -3,9 +3,8 @@
   Ruta: coordinadores-mvp/js/coordinador.sheets.service.js
 
   Funciones principales:
-  - Comunicarse con Google Sheets mediante Apps Script.
-  - Listar coordinadores desde la hoja Coordinadores.
-  - Listar envíos desde la hoja Envios.
+  - Comunicarse con el backend Firebase central.
+  - Listar coordinadores y envíos desde Firebase.
   - Aprobar títulos y guardar resolución.
   - Devolver registros y respaldarlos en Devueltos.
   - Normalizar respuestas para que la UI no dependa de nombres exactos de columnas.
@@ -34,115 +33,46 @@
 
   function enviarAccion(accion, payload) {
     var config = obtenerConfig();
-    var utils = obtenerUtils();
     var endpoint;
     var controller;
     var timeoutId;
-    var body;
 
     if (!validarDependencias()) {
       return Promise.reject(new Error('Faltan módulos internos de configuración o utilidades.'));
     }
 
     endpoint = obtenerEndpoint();
-
     if (!endpoint) {
-      return Promise.reject(new Error('No hay endpoint de Google Sheets configurado en coordinador.config.js.'));
+      return Promise.reject(new Error('No está disponible el backend Firebase de Titulación.'));
     }
 
-    body = {
-      accion: accion,
-      origen: config.obtener('app.origen', 'coordinadores-mvp'),
-      version: config.obtener('app.version', '1.0.0'),
-      fechaCliente: utils.fechaIso(),
-      data: payload || {}
-    };
-
     controller = crearAbortController();
-
     if (controller) {
-      timeoutId = window.setTimeout(function () {
-        controller.abort();
-      }, config.obtener('sheets.timeoutMs', 45000));
+      timeoutId = window.setTimeout(function () { controller.abort(); }, config.obtener('sheets.timeoutMs', 45000));
     }
 
     return fetch(endpoint, {
       method: 'POST',
-      mode: 'cors',
       cache: 'no-store',
       headers: {
-        /*
-          text/plain evita preflight en muchos escenarios de Apps Script.
-          El Apps Script debe hacer JSON.parse(e.postData.contents).
-        */
-        'Content-Type': 'text/plain;charset=utf-8'
+        'Content-Type': 'application/json',
+        'X-Titulos-App': 'coordinadores'
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        accion: accion,
+        datos: payload || {}
+      }),
       signal: controller ? controller.signal : undefined
-    })
-      .then(function (respuesta) {
-        if (timeoutId) {
-          window.clearTimeout(timeoutId);
-        }
-
-        return leerRespuestaFetch(respuesta);
-      })
-      .catch(function (errorPost) {
-        if (timeoutId) {
-          window.clearTimeout(timeoutId);
-        }
-
-        /*
-          Fallback GET para pruebas simples.
-          Es útil cuando el Apps Script está preparado para recibir parámetros por URL.
-          Para acciones con datos largos puede no servir, pero ayuda en diagnóstico.
-        */
-        return enviarAccionGet(endpoint, body).catch(function () {
-          throw errorPost;
-        });
-      });
-  }
-
-  function enviarAccionGet(endpoint, body) {
-    var config = obtenerConfig();
-    var controller;
-    var timeoutId;
-    var url;
-
-    controller = crearAbortController();
-
-    if (controller) {
-      timeoutId = window.setTimeout(function () {
-        controller.abort();
-      }, config.obtener('sheets.timeoutMs', 45000));
-    }
-
-    url = endpoint +
-      '?accion=' + encodeURIComponent(body.accion) +
-      '&origen=' + encodeURIComponent(body.origen) +
-      '&payload=' + encodeURIComponent(JSON.stringify(body.data || {})) +
-      '&_t=' + encodeURIComponent(String(Date.now()));
-
-    return fetch(url, {
-      method: 'GET',
-      mode: 'cors',
-      cache: 'no-store',
-      signal: controller ? controller.signal : undefined
-    })
-      .then(function (respuesta) {
-        if (timeoutId) {
-          window.clearTimeout(timeoutId);
-        }
-
-        return leerRespuestaFetch(respuesta);
-      })
-      .catch(function (errorGet) {
-        if (timeoutId) {
-          window.clearTimeout(timeoutId);
-        }
-
-        throw errorGet;
-      });
+    }).then(function (respuesta) {
+      if (timeoutId) window.clearTimeout(timeoutId);
+      return leerRespuestaFetch(respuesta);
+    }).catch(function (error) {
+      if (timeoutId) window.clearTimeout(timeoutId);
+      if (error && error.name === 'AbortError') {
+        throw new Error('La consulta al backend Firebase superó el tiempo máximo.');
+      }
+      throw error;
+    });
   }
 
   function crearAbortController() {
@@ -158,7 +88,7 @@
       var data;
 
       if (!respuesta.ok) {
-        throw new Error('Google Sheets respondió con estado HTTP ' + respuesta.status + '.');
+        throw new Error('Firebase respondió con estado HTTP ' + respuesta.status + '.');
       }
 
       if (!texto) {
@@ -172,11 +102,11 @@
       try {
         data = JSON.parse(texto);
       } catch (errorJson) {
-        throw new Error('La respuesta de Google Sheets no es JSON válido: ' + texto.slice(0, 180));
+        throw new Error('La respuesta de Firebase no es JSON válido: ' + texto.slice(0, 180));
       }
 
       if (data && data.ok === false) {
-        throw new Error(data.mensaje || data.error || 'Apps Script devolvió error.');
+        throw new Error(data.mensaje || data.error || 'Firebase devolvió error.');
       }
 
       return data;
