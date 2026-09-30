@@ -1,0 +1,1236 @@
+import { getPublicStatus, requestClaves, runService } from '../_lib/claves.js';
+import { commitDocuments, getDocument, nowIso, queryEqual } from '../_lib/firestore-fixed.js';
+import { corsHeaders, jsonReply, normalizeAction, readJson, rejectUnknownOrigin, role, text } from '../_lib/http.js';
+
+const ACCESS_ACTION = 'CONSULTAR_ACCESO_ESTUDIANTE';
+const COORDINATOR_FINAL_ACTIONS = new Set(['APROBAR_ENVIO_COORDINADOR', 'GUARDAR_REVISION_COORDINADOR', 'GUARDAR_RESOLUCION']);
+const RETURN_ACTIONS = new Set(['DEVOLVER_ENVIO_COORDINADOR', 'GUARDAR_REVISION_COORDINADOR', 'GUARDAR_RESOLUCION']);
+const STUDENT = new Set([
+  'PING',
+  'CONFIGURACION_PUBLICA',
+  ACCESS_ACTION,
+  'CONSULTAR_ENVIO_BASE_CEDULA',
+  'CONSULTAR_RESOLUCION_CEDULA',
+  'CONSULTAR_ENVIO_CEDULA',
+  'VERIFICAR_ENVIO',
+  'ENVIO_ESTUDIANTE'
+]);
+const COORDINATOR = new Set([
+  ...STUDENT,
+  'LISTAR_COORDINADORES',
+  'LISTAR_ENVIOS_COORDINADOR',
+  'LISTAR_ENVIOS_POR_CARRERA',
+  'APROBAR_ENVIO_COORDINADOR',
+  'DEVOLVER_ENVIO_COORDINADOR',
+  'GUARDAR_REVISION_COORDINADOR',
+  'GUARDAR_RESOLUCION',
+  'MOVER_DEVUELTO_COORDINADOR',
+  'GUARDAR_LOG'
+]);
+const ADMIN = new Set([
+  ...COORDINATOR,
+  'RESUMEN_ADMINISTRADOR',
+  'LISTAR_BASE_ESTUDIANTES',
+  'GUARDAR_COORDINADOR',
+  'ACTUALIZAR_COORDINADOR',
+  'CAMBIAR_ESTADO_COORDINADOR',
+  'ASIGNAR_CARRERA',
+  'SINCRONIZAR_COORDINADORES',
+  'ADMIN_DEVOLVER_TITULOS',
+  'ADMIN_ELIMINAR_TITULOS',
+  'LISTAR_PENDIENTES_SYNC',
+  'LISTAR_HISTORIAL_REPARACIONES',
+  'LISTAR_LOGS',
+  'ANALIZAR_GOOGLE_SHEETS',
+  'CORREGIR_GOOGLE_SHEETS',
+  'CONSULTAR_ESTUDIANTE'
+]);
+const READ_BY_ID = new Set([
+  ACCESS_ACTION,
+  'CONSULTAR_ENVIO_BASE_CEDULA',
+  'CONSULTAR_RESOLUCION_CEDULA',
+  'VERIFICAR_ENVIO',
+  'CONSULTAR_ENVIO_CEDULA'
+]);
+const WRITE_ACTIONS = new Set([
+  'ENVIO_ESTUDIANTE',
+  'APROBAR_ENVIO_COORDINADOR',
+  'DEVOLVER_ENVIO_COORDINADOR',
+  'GUARDAR_REVISION_COORDINADOR',
+  'GUARDAR_RESOLUCION',
+  'MOVER_DEVUELTO_COORDINADOR',
+  'ADMIN_DEVOLVER_TITULOS',
+  'ADMIN_ELIMINAR_TITULOS'
+]);
+const LIST_TTL = new Map([
+  ['LISTAR_COORDINADORES', 5 * 60 * 1000],
+  ['LISTAR_ENVIOS_COORDINADOR', 60 * 1000],
+  ['LISTAR_ENVIOS_POR_CARRERA', 60 * 1000]
+]);
+
+const COORDINATOR_RESTRICTED = new Set([
+  'LISTAR_ENVIOS_COORDINADOR',
+  'LISTAR_ENVIOS_POR_CARRERA',
+  'APROBAR_ENVIO_COORDINADOR',
+  'DEVOLVER_ENVIO_COORDINADOR',
+  'GUARDAR_REVISION_COORDINADOR',
+  'GUARDAR_RESOLUCION',
+  'MOVER_DEVUELTO_COORDINADOR',
+  'GUARDAR_LOG'
+]);
+const COORDINATOR_WRITE = new Set([
+  'APROBAR_ENVIO_COORDINADOR',
+  'DEVOLVER_ENVIO_COORDINADOR',
+  'GUARDAR_REVISION_COORDINADOR',
+  'GUARDAR_RESOLUCION',
+  'MOVER_DEVUELTO_COORDINADOR'
+]);
+
+function normalCareer(value) {
+  return text(value).toLowerCase().normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function trustedCoordinatorCareers(user) {
+  return new Set(
+    (user && Array.isArray(user.carreras) ? user.carreras : [])
+      .map(normalCareer)
+      .filter(Boolean)
+  );
+}
+
+function submissionCareer(row) {
+  return normalCareer(row && (
+    row.carrera || row.carreraNombre || row.nombreCarrera || row.NombreCarrera
+  ));
+}
+
+function looksLikeSubmission(row) {
+  return Boolean(
+    row && typeof row === 'object' &&
+    (
+      row.envioId || row.idRegistro || row.cedula || row.numeroIdentificacion ||
+      row.titulo1 || row.titulo2 || row.titulo3
+    )
+  );
+}
+
+function filterCoordinatorResult(value, allowedCareers) {
+  if (Array.isArray(value)) {
+    const containsSubmissions = value.some(looksLikeSubmission);
+    if (containsSubmissions) {
+      return value
+        .filter((row) => allowedCareers.has(submissionCareer(row)))
+        .map((row) => filterCoordinatorResult(row, allowedCareers));
+    }
+    return value.map((item) => filterCoordinatorResult(item, allowedCareers));
+  }
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, child]) => [key, filterCoordinatorResult(child, allowedCareers)])
+  );
+}
+
+function sameRequestedPeriod(row, payload) {
+  const requested = text(payload.periodoId || payload.periodoLabel || payload.periodo).toLowerCase();
+  if (!requested) return true;
+  const values = [
+    row && row.periodoId,
+    row && row.periodoLabel,
+    row && row.periodoNombre,
+    row && row.periodo
+  ].map((value) => text(value).toLowerCase()).filter(Boolean);
+  return values.includes(requested);
+}
+
+async function assertCoordinatorWriteAccess(payload, user, env) {
+  if (!user) return;
+  const allowedCareers = trustedCoordinatorCareers(user);
+  if (!allowedCareers.size) {
+    const error = new Error('Tu usuario no tiene carreras asignadas para revisión.');
+    error.status = 403;
+    throw error;
+  }
+
+  const envioId = text(payload.envioId || payload.idRegistro || payload.id || payload._id);
+  let candidates = [];
+  if (envioId) {
+    const row = await getDocument('TITULOS', 'envios', envioId, env);
+    if (row) candidates = [row];
+  } else {
+    const cedula = normalizeCedula(payload.cedula || payload.numeroIdentificacion || payload.identificacion);
+    if (cedula) {
+      candidates = await queryEqual('TITULOS', 'envios', 'cedula', cedula, 100, env);
+      candidates = candidates.filter((row) => sameRequestedPeriod(row, payload));
+    }
+  }
+
+  if (!candidates.length) {
+    const error = new Error('No se pudo verificar el expediente que intentas modificar.');
+    error.status = 403;
+    throw error;
+  }
+
+  const accessible = candidates.filter((row) => allowedCareers.has(submissionCareer(row)));
+  if (accessible.length !== candidates.length) {
+    const error = new Error('Este expediente no pertenece a una carrera asignada a tu usuario.');
+    error.status = 403;
+    throw error;
+  }
+}
+
+const CACHE_LIMIT = 400;
+const verificationCache = new Map();
+const verificationInflight = new Map();
+const queryCache = new Map();
+const queryInflight = new Map();
+let publicStatusCache = null;
+let publicStatusInflight = null;
+
+function allowed(userRole, action) {
+  return userRole === 'admin'
+    ? ADMIN.has(action)
+    : userRole === 'coordinator'
+      ? COORDINATOR.has(action)
+      : STUDENT.has(action);
+}
+
+function publicService(status, key) {
+  const list = Array.isArray(status.servicios) ? status.servicios : [];
+  return list.find((item) => String(item.clave || item.key || '').toUpperCase() === key) || null;
+}
+
+function normalizeCedula(value) {
+  const digits = text(value).replace(/\D/g, '');
+  if (digits.length === 9) return '0' + digits;
+  return digits.length === 10 ? digits : '';
+}
+
+function cedulaVariants(value) {
+  const canonical = normalizeCedula(value);
+  if (!canonical) return [];
+  return canonical.startsWith('0') ? [canonical, canonical.slice(1)] : [canonical];
+}
+
+function rawCedula(value) {
+  return text(value).replace(/\D/g, '');
+}
+
+function verificationKey(payload) {
+  const cedula = normalizeCedula(
+    payload.cedula || payload.numeroIdentificacion || payload.identificacion
+  );
+  const period = text(payload.periodoId || payload.periodo || payload.periodoLabel);
+  return cedula ? cedula + '|' + period : '';
+}
+
+function stable(value) {
+  if (Array.isArray(value)) return value.map(stable);
+  if (value && typeof value === 'object') {
+    return Object.keys(value).sort().reduce((out, key) => {
+      if (key !== 'token' && key !== 'acceso') out[key] = stable(value[key]);
+      return out;
+    }, {});
+  }
+  return value;
+}
+
+function trimCache(map) {
+  while (map.size >= CACHE_LIMIT) {
+    const first = map.keys().next().value;
+    if (first === undefined) break;
+    map.delete(first);
+  }
+}
+
+function cacheGet(map, key) {
+  const item = map.get(key);
+  if (!item) return null;
+  if (item.expiresAt <= Date.now()) {
+    map.delete(key);
+    return null;
+  }
+  return item.value;
+}
+
+function cacheSet(map, key, value, ttl) {
+  trimCache(map);
+  map.set(key, { value, expiresAt: Date.now() + ttl });
+  return value;
+}
+
+function clearCaches() {
+  verificationCache.clear();
+  verificationInflight.clear();
+  queryCache.clear();
+  queryInflight.clear();
+  publicStatusCache = null;
+  publicStatusInflight = null;
+}
+
+function workflowEventId(envioId) {
+  const random = typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID().replace(/-/g, '').slice(0, 12)
+    : Math.random().toString(36).slice(2, 14);
+  return (text(envioId) + '__coord__' + Date.now() + '__' + random).replace(/\//g, '__');
+}
+
+function normalizeTitle(value) {
+  return text(value).replace(/\s+/g, ' ').trim();
+}
+
+async function registerCoordinatorValidation(payload, result, env) {
+  const estadoCoordinacion = text(payload.estadoFinal || payload.estado || result && result.estado).toUpperCase();
+  if (!['APROBADO', 'REEMPLAZADO'].includes(estadoCoordinacion)) return result;
+
+  const envioId = text(payload.envioId || payload.idRegistro || result && (result.envioId || result.idRegistro));
+  if (!envioId) return result;
+
+  const envio = await getDocument('TITULOS', 'envios', envioId, env);
+  if (!envio) return result;
+
+  const antes = normalizeTitle(
+    payload.tituloElegido ||
+    payload.preferido ||
+    envio.tituloPreferidoTexto ||
+    envio.tituloElegido ||
+    envio.titulo1
+  );
+  const despues = normalizeTitle(
+    payload.tituloFinal ||
+    payload.tituloCorregido ||
+    antes
+  );
+  if (!despues) return result;
+
+  const fecha = text(payload.fechaResolucion) || nowIso();
+  const observacion = text(payload.observacion || payload.comentario || payload.comentarioCoordinador);
+  const cambio = normalizeTitle(antes).toLowerCase() !== normalizeTitle(despues).toLowerCase();
+  const resultadoCoordinador = cambio || estadoCoordinacion === 'REEMPLAZADO'
+    ? 'APROBADO_CON_CORRECCION'
+    : 'APROBADO_SIN_CAMBIOS';
+  const eventoId = workflowEventId(envioId);
+
+  await commitDocuments('TITULOS', [
+    {
+      collection: 'envios',
+      id: envioId,
+      data: {
+        estado: 'PENDIENTE_INVESTIGADOR',
+        estadoProceso: 'PENDIENTE_INVESTIGADOR',
+        tituloFinal: null,
+        tituloCoordinador: despues,
+        tituloCoordinadorAntes: antes,
+        resultadoCoordinador,
+        comentarioCoordinador: observacion,
+        fechaValidacionCoordinador: fecha,
+        validadoCoordinador: true,
+        requiereAccionDe: 'INVESTIGACION',
+        permitirReenvio: false,
+        actualizadoEn: fecha
+      },
+      merge: true,
+      ...(envio._updateTime ? { updateTime: envio._updateTime } : {})
+    },
+    {
+      collection: 'workflow_eventos',
+      id: eventoId,
+      data: {
+        envioId,
+        rol: 'COORDINADOR',
+        revisorId: text(payload.coordinadorId || payload.idCoordinador),
+        revisorNombre: text(payload.coordinador || payload.nombreCoordinador),
+        cedula: normalizeCedula(envio.cedula || envio.numeroIdentificacion),
+        estudiante: text(envio.nombres || envio.estudiante || envio.nombreCompleto),
+        carrera: text(envio.carreraNombre || envio.carrera),
+        periodoId: text(envio.periodoId),
+        periodo: text(envio.periodoLabel || envio.periodoNombre || envio.periodo || envio.periodoId),
+        tipoTrabajo: text(envio.tipoTrabajo),
+        accion: cambio ? 'CORREGIR_VALIDAR' : 'VALIDAR',
+        resultado: resultadoCoordinador,
+        estadoAnterior: text(envio.estadoProceso || envio.estado),
+        estadoNuevo: 'PENDIENTE_INVESTIGADOR',
+        tituloAntes: antes,
+        tituloDespues: despues,
+        observacion,
+        fecha
+      },
+      merge: false,
+      exists: false
+    }
+  ], env);
+
+  return {
+    ...(result || {}),
+    estado: 'PENDIENTE_INVESTIGADOR',
+    estadoProceso: 'PENDIENTE_INVESTIGADOR',
+    estadoCoordinacion,
+    tituloCoordinador: despues,
+    mensaje: 'Título validado por Coordinación y enviado a Investigación.'
+  };
+}
+
+async function registerStudentSubmission(payload, result, env) {
+  const envioId = text(payload.envioId || payload.idRegistro || result && (result.envioId || result.idRegistro));
+  if (!envioId) return result;
+  const envio = await getDocument('TITULOS', 'envios', envioId, env);
+  if (!envio) return result;
+
+  const fecha = nowIso();
+  const eventoId = workflowEventId(envioId + '__student');
+  const esReenvio = Number(result && result.numeroReenvios || envio.numeroReenvios || 0) > 0;
+
+  await commitDocuments('TITULOS', [
+    {
+      collection: 'envios',
+      id: envioId,
+      data: {
+        estado: 'PENDIENTE_REVISION',
+        estadoProceso: 'PENDIENTE_COORDINADOR',
+        requiereAccionDe: 'COORDINACION',
+        permitirReenvio: false,
+        devueltoPor: '',
+        tituloFinal: null,
+        tituloFinalInvestigacion: null,
+        tituloCoordinador: null,
+        tituloCoordinadorAntes: null,
+        resultadoCoordinador: null,
+        resultadoInvestigacion: null,
+        comentarioCoordinador: null,
+        observacionInvestigacion: null,
+        fechaValidacionCoordinador: null,
+        fechaResolucionInvestigacion: null,
+        investigacionRevisionId: null,
+        validadoCoordinador: false,
+        actualizadoEn: fecha
+      },
+      merge: true,
+      ...(envio._updateTime ? { updateTime: envio._updateTime } : {})
+    },
+    {
+      collection: 'workflow_eventos',
+      id: eventoId,
+      data: {
+        envioId,
+        rol: 'ESTUDIANTE',
+        revisorId: normalizeCedula(payload.cedula || payload.numeroIdentificacion),
+        revisorNombre: text(payload.nombres || payload.estudiante),
+        accion: esReenvio ? 'REENVIO' : 'ENVIO',
+        resultado: 'PENDIENTE_COORDINADOR',
+        estadoAnterior: text(envio.estadoProceso || envio.estado),
+        estadoNuevo: 'PENDIENTE_COORDINADOR',
+        tituloAntes: '',
+        tituloDespues: '',
+        observacion: '',
+        fecha
+      },
+      merge: false,
+      exists: false
+    }
+  ], env);
+
+  return {
+    ...(result || {}),
+    estadoProceso: 'PENDIENTE_COORDINADOR',
+    requiereAccionDe: 'COORDINACION'
+  };
+}
+
+async function registerReturnToStudent(payload, result, env, actorRole) {
+  const estado = text(payload.estadoFinal || payload.estado || result && result.estado).toUpperCase();
+  if (estado !== 'DEVUELTO') return result;
+
+  const envioId = text(payload.envioId || payload.idRegistro || result && (result.envioId || result.idRegistro));
+  if (!envioId) return result;
+  const envio = await getDocument('TITULOS', 'envios', envioId, env);
+  if (!envio) return result;
+
+  const fecha = text(payload.fechaResolucion) || nowIso();
+  const observacion = text(payload.observacion || payload.comentario || payload.comentarioCoordinador);
+  const rol = actorRole === 'admin' ? 'ADMINISTRADOR' : 'COORDINADOR';
+  const eventoId = workflowEventId(envioId + '__return');
+
+  await commitDocuments('TITULOS', [
+    {
+      collection: 'envios',
+      id: envioId,
+      data: {
+        estado: 'DEVUELTO',
+        estadoProceso: 'DEVUELTO',
+        tituloFinal: null,
+        tituloFinalInvestigacion: null,
+        permitirReenvio: true,
+        requiereAccionDe: 'ESTUDIANTE',
+        devueltoPor: rol,
+        observacionDevolucion: observacion,
+        actualizadoEn: fecha
+      },
+      merge: true,
+      ...(envio._updateTime ? { updateTime: envio._updateTime } : {})
+    },
+    {
+      collection: 'workflow_eventos',
+      id: eventoId,
+      data: {
+        envioId,
+        rol,
+        revisorId: actorRole === 'admin'
+          ? 'ADMIN'
+          : text(payload.coordinadorId || payload.idCoordinador),
+        revisorNombre: actorRole === 'admin'
+          ? 'Administrador de Titulación'
+          : text(payload.coordinador || payload.nombreCoordinador),
+        accion: 'DEVOLVER_ESTUDIANTE',
+        resultado: 'DEVUELTO',
+        estadoAnterior: text(envio.estadoProceso || envio.estado),
+        estadoNuevo: 'DEVUELTO',
+        tituloAntes: normalizeTitle(payload.tituloElegido || envio.tituloCoordinador || envio.tituloPreferidoTexto || envio.titulo1),
+        tituloDespues: '',
+        observacion,
+        fecha
+      },
+      merge: false,
+      exists: false
+    }
+  ], env);
+
+  return {
+    ...(result || {}),
+    estado: 'DEVUELTO',
+    estadoProceso: 'DEVUELTO',
+    permitirReenvio: true,
+    requiereAccionDe: 'ESTUDIANTE',
+    mensaje: 'Propuestas devueltas para corrección.'
+  };
+}
+
+async function registerAdminFinalCorrection(payload, result, env) {
+  const original = text(payload.estadoOriginal).toUpperCase();
+  if (payload.mantenerAprobacionFinal !== true && original !== 'APROBADO_FINAL') return result;
+
+  const envioId = text(payload.envioId || payload.idRegistro || result && (result.envioId || result.idRegistro));
+  if (!envioId) return result;
+  const envio = await getDocument('TITULOS', 'envios', envioId, env);
+  if (!envio) return result;
+
+  const antes = normalizeTitle(
+    payload.tituloElegido || payload.tituloAnterior || envio.tituloFinal || envio.tituloFinalInvestigacion || envio.tituloCoordinador
+  );
+  const despues = normalizeTitle(payload.tituloCorregido || payload.tituloFinal);
+  if (!despues) return result;
+
+  const fecha = text(payload.fechaResolucion) || nowIso();
+  const observacion = text(payload.observacion || payload.comentario || payload.comentarioCoordinador);
+  const eventoId = workflowEventId(envioId + '__admin_final');
+
+  await commitDocuments('TITULOS', [
+    {
+      collection: 'envios',
+      id: envioId,
+      data: {
+        estado: 'APROBADO_FINAL',
+        estadoProceso: 'APROBADO_FINAL',
+        tituloFinal: despues,
+        tituloFinalInvestigacion: despues,
+        resultadoAdministrativo: 'CORRECCION_FINAL',
+        fechaCorreccionAdministrativa: fecha,
+        requiereAccionDe: '',
+        permitirReenvio: false,
+        actualizadoEn: fecha
+      },
+      merge: true,
+      ...(envio._updateTime ? { updateTime: envio._updateTime } : {})
+    },
+    {
+      collection: 'workflow_eventos',
+      id: eventoId,
+      data: {
+        envioId,
+        rol: 'ADMINISTRADOR',
+        revisorId: 'ADMIN',
+        revisorNombre: 'Administrador de Titulación',
+        accion: 'CORREGIR_APROBACION_FINAL',
+        resultado: 'APROBADO_FINAL',
+        estadoAnterior: original || text(envio.estadoProceso || envio.estado),
+        estadoNuevo: 'APROBADO_FINAL',
+        tituloAntes: antes,
+        tituloDespues: despues,
+        observacion,
+        fecha
+      },
+      merge: false,
+      exists: false
+    }
+  ], env);
+
+  return {
+    ...(result || {}),
+    estado: 'APROBADO_FINAL',
+    estadoProceso: 'APROBADO_FINAL',
+    tituloFinal: despues,
+    mensaje: 'Título final corregido por el administrador conservando la aprobación definitiva.'
+  };
+}
+
+function yes(value) {
+  return value === true || ['SI', 'SÍ', 'TRUE', '1', 'YES'].includes(text(value).toUpperCase());
+}
+
+function normalizedKey(value) {
+  return text(value)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, '');
+}
+
+function flexible(object, names) {
+  if (!object || typeof object !== 'object') return undefined;
+  const map = Object.keys(object).reduce((out, key) => {
+    out[normalizedKey(key)] = key;
+    return out;
+  }, {});
+  for (const name of names) {
+    const key = map[normalizedKey(name)];
+    if (key !== undefined && object[key] !== undefined && object[key] !== null) {
+      return object[key];
+    }
+  }
+  return undefined;
+}
+
+function unwrap(result) {
+  return result && (result.respuesta || result.data) || result || {};
+}
+
+function table(result, names) {
+  const root = unwrap(result);
+  const nested = root.result && typeof root.result === 'object' ? root.result : {};
+  const nestedData = root.data && typeof root.data === 'object' ? root.data : {};
+  const tables = root.tables || nested.tables || nestedData.tables || {};
+
+  for (const name of names) {
+    const variants = [
+      tables[name],
+      tables[name.toLowerCase()],
+      root[name],
+      root[name.toLowerCase()],
+      nested[name],
+      nested[name.toLowerCase()],
+      nestedData[name],
+      nestedData[name.toLowerCase()]
+    ];
+    const found = variants.find(Array.isArray);
+    if (found) return found;
+  }
+  return [];
+}
+
+function mergeNonEmpty(...sources) {
+  const output = {};
+  for (const source of sources) {
+    if (!source || typeof source !== 'object') continue;
+    for (const [key, value] of Object.entries(source)) {
+      if (value !== undefined && value !== null && text(value) !== '') output[key] = value;
+    }
+  }
+  return output;
+}
+
+function sameCedula(item, cedula) {
+  const variants = new Set(cedulaVariants(cedula));
+  const found = rawCedula(flexible(item || {}, [
+    'cedula',
+    'numeroIdentificacion',
+    'NumeroIdentificacion',
+    'identificacion',
+    'Cédula'
+  ]));
+  return Boolean(found && variants.has(found));
+}
+
+function chooseEnrollment(items) {
+  const list = (Array.isArray(items) ? items : []).slice();
+  list.sort((a, b) => {
+    const activeA = text(flexible(a, ['estadoMatricula', 'EstadoMatricula']) || 'ACTIVO').toUpperCase() === 'ACTIVO' ? 1 : 0;
+    const activeB = text(flexible(b, ['estadoMatricula', 'EstadoMatricula']) || 'ACTIVO').toUpperCase() === 'ACTIVO' ? 1 : 0;
+    if (activeA !== activeB) return activeB - activeA;
+
+    const periodA = text(flexible(a, ['periodoId', 'periodId', 'ultimoPeriodoId', 'periodoLabel']));
+    const periodB = text(flexible(b, ['periodoId', 'periodId', 'ultimoPeriodoId', 'periodoLabel']));
+    return periodB.localeCompare(periodA, 'es', { sensitivity: 'base' });
+  });
+  return list[0] || null;
+}
+
+function normalizeFallbackStudent(base, enrollment, cedula, requestedPeriod) {
+  const merged = mergeNonEmpty(base, enrollment);
+  const periodId = text(flexible(merged, [
+    'periodoId',
+    'periodId',
+    'periodoCanonicoId',
+    'ultimoPeriodoId'
+  ]) || requestedPeriod);
+  const periodLabel = text(flexible(merged, [
+    'periodoLabel',
+    'periodoCanonicoLabel',
+    'PeriodoLabel',
+    'periodo'
+  ]) || periodId);
+  const names = text(flexible(merged, [
+    'Nombres',
+    'nombres',
+    'nombreCompleto',
+    'NombreCompleto',
+    'nombre',
+    'Nombre'
+  ]));
+  const career = text(flexible(merged, [
+    'NombreCarrera',
+    'nombreCarrera',
+    'carrera',
+    'Carrera'
+  ]));
+  const canonical = normalizeCedula(cedula);
+
+  return {
+    ...merged,
+    id: text(flexible(merged, ['id', '_id', 'studentId']) || (periodId ? periodId + '__' + canonical : canonical)),
+    _id: text(flexible(merged, ['_id', 'id', 'studentId']) || (periodId ? periodId + '__' + canonical : canonical)),
+    studentId: text(flexible(merged, ['studentId', 'id', '_id']) || (periodId ? periodId + '__' + canonical : canonical)),
+    cedula: canonical,
+    numeroIdentificacion: canonical,
+    NumeroIdentificacion: canonical,
+    Nombres: names,
+    nombres: names,
+    NombreCarrera: career,
+    nombreCarrera: career,
+    carrera: career,
+    CodigoCarrera: text(flexible(merged, ['CodigoCarrera', 'codigoCarrera'])),
+    codigoCarrera: text(flexible(merged, ['codigoCarrera', 'CodigoCarrera'])),
+    periodoId: periodId,
+    periodId,
+    periodoCanonicoId: periodId,
+    periodoLabel: periodLabel,
+    periodoCanonicoLabel: periodLabel,
+    Sede: text(flexible(merged, ['Sede', 'sede'])),
+    sede: text(flexible(merged, ['sede', 'Sede'])),
+    estadoMatricula: text(flexible(merged, ['estadoMatricula', 'EstadoMatricula']) || 'ACTIVO'),
+    source: 'requisitos_pull_bl2_fallback'
+  };
+}
+
+async function lookupStudentFallback(env, cedula, requestedPeriod) {
+  const pulled = await runService(
+    env,
+    'REQUISITOS',
+    'pull_bl2',
+    'POST',
+    { scope: 'all', includeData: true },
+    'consulta',
+    60000
+  );
+
+  const students = table(pulled, ['Estudiantes', 'BaseEstudiantes']);
+  const enrollments = table(pulled, [
+    'MatriculasPeriodo',
+    'Matriculas',
+    'EstudiantesPeriodo'
+  ]);
+
+  const baseRows = students.filter((item) => sameCedula(item, cedula));
+  let enrollmentRows = enrollments.filter((item) => sameCedula(item, cedula));
+
+  if (requestedPeriod) {
+    const exact = enrollmentRows.filter((item) => {
+      const periodId = text(flexible(item, [
+        'periodoId',
+        'periodId',
+        'periodoCanonicoId',
+        'periodoLabel',
+        'periodo'
+      ]));
+      return periodId === requestedPeriod;
+    });
+    if (exact.length) enrollmentRows = exact;
+  }
+
+  const base = baseRows[baseRows.length - 1] || null;
+  const enrollment = chooseEnrollment(enrollmentRows);
+  if (!base && !enrollment) {
+    return {
+      ok: true,
+      encontrado: false,
+      existe: false,
+      cedula: normalizeCedula(cedula),
+      periodoId: requestedPeriod,
+      fuente: 'REQUISITOS_BDLOCAL_SYNC',
+      fallback: true,
+      mensaje: 'No encontramos un estudiante con esa cédula en REQUISITOS_BDLOCAL_SYNC.'
+    };
+  }
+
+  const student = normalizeFallbackStudent(base, enrollment, cedula, requestedPeriod);
+  return {
+    ok: true,
+    encontrado: true,
+    existe: true,
+    estudiante: student,
+    registro: student,
+    cedula: student.cedula,
+    periodoId: student.periodoId,
+    periodoLabel: student.periodoLabel,
+    coincidencias: Math.max(baseRows.length, enrollmentRows.length, 1),
+    fuente: 'REQUISITOS_BDLOCAL_SYNC',
+    fallback: true,
+    mensaje: 'Estudiante encontrado correctamente.'
+  };
+}
+
+function sanitizeStudentRecord(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  const clean = { ...value };
+  [
+    'coordinador', 'nombreCoordinador', 'coordinadorId', 'ultimoCoordinador',
+    'investigador', 'nombreInvestigador', 'investigadorId',
+    'revisorId', 'revisorNombre', 'devueltoPor'
+  ].forEach((key) => { delete clean[key]; });
+  return clean;
+}
+
+function sanitizeStudentResult(result) {
+  if (!result || typeof result !== 'object') return result;
+  const clean = sanitizeStudentRecord(result);
+  ['envio', 'registro', 'registroEnvio', 'envioActual', 'resolucion'].forEach((key) => {
+    if (clean[key] && typeof clean[key] === 'object') clean[key] = sanitizeStudentRecord(clean[key]);
+  });
+  if (clean.data && typeof clean.data === 'object') {
+    clean.data = sanitizeStudentResult(clean.data);
+  }
+  if (clean.resultado && typeof clean.resultado === 'object') {
+    clean.resultado = sanitizeStudentResult(clean.resultado);
+  }
+  if (clean.respuesta && typeof clean.respuesta === 'object') {
+    clean.respuesta = sanitizeStudentResult(clean.respuesta);
+  }
+  return clean;
+}
+
+function studentFound(result) {
+  return Boolean(
+    result &&
+    (
+      result.encontrado === true ||
+      result.existe === true ||
+      yes(result.encontrado) ||
+      yes(result.existe) ||
+      result.estudiante ||
+      result.registro
+    )
+  );
+}
+
+function looksLikeEnvio(value) {
+  return Boolean(value && typeof value === 'object' && flexible(value, [
+    'titulo1',
+    'titulo2',
+    'titulo3',
+    'tituloAprobado',
+    'tituloCorregido',
+    'tituloElegido',
+    'tituloFinalAprobado'
+  ]) !== undefined);
+}
+
+function extractEnvio(result) {
+  if (!result || typeof result !== 'object') return null;
+  const candidates = [
+    result.envio,
+    result.registroEnvio,
+    result.envioActual,
+    result.data && result.data.envio,
+    result.data && result.data.registroEnvio,
+    result.resultado && result.resultado.envio,
+    result.respuesta && result.respuesta.envio,
+    result.registro
+  ];
+  for (const candidate of candidates) {
+    if (looksLikeEnvio(candidate)) return candidate;
+  }
+  return looksLikeEnvio(result) ? result : null;
+}
+
+function envioEstado(result) {
+  const envio = extractEnvio(result) || {};
+  return text(
+    flexible(envio, ['estadoProceso', 'estado', 'estadoFinal', 'estadoGoogleSheets']) ||
+    flexible(result, ['estado', 'estadoFinal'])
+  ).toUpperCase();
+}
+
+function permiteReenvio(result) {
+  const envio = extractEnvio(result) || {};
+  const estado = envioEstado(result);
+  const own = flexible(envio, ['permitirReenvio', 'permiteReenvio']);
+  const valor = own !== undefined
+    ? own
+    : flexible(result, ['permitirReenvio', 'permiteReenvio']);
+  return estado === 'DEVUELTO' && (
+    valor === undefined ||
+    valor === null ||
+    valor === '' ||
+    yes(valor)
+  );
+}
+
+function directHasEnvio(result) {
+  return Boolean(
+    result &&
+    (
+      yes(flexible(result, ['existe', 'encontrado', 'tieneEnvio', 'encontradoEnvio'])) ||
+      extractEnvio(result)
+    )
+  );
+}
+
+function accessHasEnvio(result) {
+  const student = result && (result.estudiante || result.registro) || {};
+  const evidence = Boolean(
+    result &&
+    (
+      yes(flexible(result, ['tieneEnvio', 'encontradoEnvio', 'existeEnvio'])) ||
+      extractEnvio(result) ||
+      yes(flexible(student, ['tieneEnvio', 'tiene envío', 'envioRegistrado'])) ||
+      text(flexible(student, ['idRegistro', 'envioId', 'tituloId']))
+    )
+  );
+  return evidence && !permiteReenvio(result);
+}
+
+async function executeService(env, action, method, payload, userRole) {
+  const result = await runService(env, 'TITULOS', action, method, payload, userRole);
+  return result.respuesta || result.data || result;
+}
+
+async function lookupEnvio(env, payload, userRole) {
+  const cedula = normalizeCedula(
+    payload.cedula || payload.numeroIdentificacion || payload.identificacion
+  );
+  if (!cedula) return { ok: true, existe: false, encontrado: false };
+
+  const periodo = text(payload.periodo || payload.periodoLabel || payload.periodoId);
+  return executeService(
+    env,
+    'CONSULTAR_ENVIO_CEDULA',
+    'GET',
+    {
+      cedula,
+      numeroIdentificacion: cedula,
+      periodo,
+      periodoLabel: text(payload.periodoLabel),
+      periodoId: text(payload.periodoId)
+    },
+    userRole
+  );
+}
+
+async function executeAccess(env, payload, userRole) {
+  const cedula = normalizeCedula(
+    payload.cedula || payload.numeroIdentificacion || payload.identificacion
+  );
+  const requestedPeriod = text(
+    payload.periodoId || payload.periodo || payload.periodoLabel
+  );
+
+  let base = await requestClaves(
+    env,
+    ACCESS_ACTION,
+    { cedula, periodoId: requestedPeriod },
+    12000
+  );
+
+  if (!studentFound(base)) {
+    try {
+      const fallback = await lookupStudentFallback(env, cedula, requestedPeriod);
+      if (studentFound(fallback)) base = fallback;
+    } catch (error) {
+      base = {
+        ...base,
+        fallbackError: text(error && error.message)
+      };
+    }
+  }
+
+  const student = base.estudiante || base.registro || {};
+
+  let direct = await lookupEnvio(
+    env,
+    {
+      cedula,
+      periodo:
+        base.periodoLabel ||
+        flexible(student, ['periodoLabel', 'periodo']) ||
+        payload.periodo ||
+        payload.periodoLabel,
+      periodoLabel:
+        base.periodoLabel ||
+        flexible(student, ['periodoLabel', 'periodo']) ||
+        payload.periodoLabel,
+      periodoId:
+        base.periodoId ||
+        flexible(student, ['periodoId']) ||
+        payload.periodoId
+    },
+    userRole
+  );
+
+  if (!directHasEnvio(direct)) {
+    direct = await lookupEnvio(env, { cedula }, userRole);
+  }
+  if (!directHasEnvio(direct)) return sanitizeStudentResult(base);
+
+  const envio = extractEnvio(direct);
+  const permitir = permiteReenvio(direct);
+  const estado = envioEstado(direct);
+  const aprobado = estado === 'APROBADO_FINAL' || estado === 'APROBADO' || estado === 'REEMPLAZADO';
+  const pendienteInvestigacion = estado === 'PENDIENTE_INVESTIGADOR';
+
+  return sanitizeStudentResult({
+    ...base,
+    tieneEnvio: !permitir,
+    encontradoEnvio: true,
+    permiteReenvio: permitir,
+    envio,
+    estadoEnvio: estado,
+    fuenteEnvio: 'ENVÍOS_Y_RESOLUCIONES_RESPALDO_TITULOS_APP',
+    mensaje: permitir
+      ? 'El registro fue devuelto y puede corregirse.'
+      : pendienteInvestigacion
+        ? 'Validado por Coordinación. Pendiente de Investigación.'
+        : aprobado
+          ? 'Tu título de titulación está aprobado.'
+          : 'Tus propuestas ya fueron enviadas y están siendo revisadas por Coordinación.'
+  });
+}
+
+async function executeRead(env, action, method, payload, userRole) {
+  if (action === ACCESS_ACTION) return executeAccess(env, payload, userRole);
+  const result = await executeService(env, action, method, payload, userRole);
+  return userRole === 'student' ? sanitizeStudentResult(result) : result;
+}
+
+async function verifyWithCache(env, action, method, payload, userRole) {
+  const rawKey = verificationKey(payload);
+  if (!rawKey) return executeRead(env, action, method, payload, userRole);
+
+  const key = action + '|' + rawKey;
+  const cached = cacheGet(verificationCache, key);
+  if (cached) return { ...cached, cache: 'worker' };
+  if (verificationInflight.has(key)) return verificationInflight.get(key);
+
+  const task = executeRead(env, action, method, payload, userRole)
+    .then((result) => {
+      const positive = action === ACCESS_ACTION
+        ? studentFound(result) || accessHasEnvio(result)
+        : directHasEnvio(result);
+      return cacheSet(verificationCache, key, result, positive ? 30 * 1000 : 5 * 1000);
+    })
+    .finally(() => verificationInflight.delete(key));
+
+  verificationInflight.set(key, task);
+  return task;
+}
+
+async function queryWithCache(env, action, method, payload, userRole) {
+  const ttl = LIST_TTL.get(action);
+  if (!ttl) return executeService(env, action, method, payload, userRole);
+
+  const key = userRole + '|' + action + '|' + JSON.stringify(stable(payload));
+  const cached = cacheGet(queryCache, key);
+  if (cached) return cached;
+  if (queryInflight.has(key)) return queryInflight.get(key);
+
+  const task = executeService(env, action, method, payload, userRole)
+    .then((result) => cacheSet(queryCache, key, result, ttl))
+    .finally(() => queryInflight.delete(key));
+
+  queryInflight.set(key, task);
+  return task;
+}
+
+async function getCachedPublicStatus(env) {
+  if (publicStatusCache && publicStatusCache.expiresAt > Date.now()) {
+    return publicStatusCache.value;
+  }
+  if (publicStatusInflight) return publicStatusInflight;
+
+  publicStatusInflight = getPublicStatus(env)
+    .then((value) => {
+      publicStatusCache = {
+        value,
+        expiresAt: Date.now() + 5 * 60 * 1000
+      };
+      return value;
+    })
+    .finally(() => {
+      publicStatusInflight = null;
+    });
+
+  return publicStatusInflight;
+}
+
+export async function onRequest({ request, env }) {
+  const bad = rejectUnknownOrigin(request);
+  if (bad) return bad;
+
+  if (request.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: corsHeaders(request)
+    });
+  }
+
+  if (request.method !== 'POST') {
+    return jsonReply(request, {
+      ok: false,
+      mensaje: 'Método no permitido.'
+    }, 405);
+  }
+
+  try {
+    const input = await readJson(request);
+    const action = normalizeAction(input.accion || input.action || input.tipo);
+    const userRole = role(request);
+    const verifiedUser = request && request.__verifiedUser ? request.__verifiedUser : null;
+
+    if (!action) throw new Error('No se indicó una acción.');
+    if (!allowed(userRole, action)) {
+      return jsonReply(request, {
+        ok: false,
+        mensaje: 'Acción no permitida para esta pantalla.'
+      }, 403);
+    }
+
+    if (action === 'CONFIGURACION_PUBLICA') {
+      const item = publicService(await getCachedPublicStatus(env), 'TITULOS');
+      if (!item) throw new Error('TITULOS no está configurado en Claves.');
+      return jsonReply(request, {
+        ok: true,
+        activo: item.activo === true,
+        nombre: item.nombre || 'RESPALDO TITULOS APP',
+        version: item.version || '',
+        estado: item.estado || '',
+        mensaje: item.mensaje || '',
+        origenConfig: 'claves'
+      });
+    }
+
+    const nested = input.datos && typeof input.datos === 'object'
+      ? input.datos
+      : {};
+    const payload = { ...input, ...nested };
+    delete payload.token;
+    delete payload.acceso;
+
+    /* En Firebase Functions la identidad del coordinador viene de Firebase Auth.
+       No confiamos en un nombre/carrera enviado por el navegador cuando existe
+       una sesión verificada. La ruta Cloudflare heredada sigue funcionando sin
+       este bloque durante la transición. */
+    if (userRole === 'coordinator' && verifiedUser) {
+      const trustedCareers = Array.isArray(verifiedUser.carreras)
+        ? verifiedUser.carreras.map(text).filter(Boolean)
+        : [];
+      const allowedCareers = trustedCoordinatorCareers(verifiedUser);
+
+      payload.coordinadorId = text(verifiedUser.coordinadorId || verifiedUser.uid);
+      payload.idCoordinador = payload.coordinadorId;
+      payload.coordinador = text(verifiedUser.nombre || verifiedUser.email);
+      payload.nombreCoordinador = payload.coordinador;
+
+      if (COORDINATOR_RESTRICTED.has(action)) {
+        if (!allowedCareers.size) {
+          return jsonReply(request, {
+            ok: false,
+            mensaje: 'Tu usuario no tiene carreras asignadas para revisión.'
+          }, 403);
+        }
+        payload.carreras = trustedCareers;
+        if (payload.carrera && !allowedCareers.has(normalCareer(payload.carrera))) {
+          return jsonReply(request, {
+            ok: false,
+            mensaje: 'La carrera solicitada no está asignada a tu usuario.'
+          }, 403);
+        }
+      }
+
+      if (COORDINATOR_WRITE.has(action)) {
+        await assertCoordinatorWriteAccess(payload, verifiedUser, env);
+      }
+    }
+
+    /* La escritura es la autoridad final. No hacemos una segunda consulta
+       obligatoria aquí antes de ENVIO_ESTUDIANTE: el servicio de Firebase
+       valida duplicados/reenvíos dentro de la misma ruta que va a guardar.
+       Esto evita que una falla temporal de lectura bloquee un envío válido. */
+    let result;
+    if (READ_BY_ID.has(action)) {
+      result = await verifyWithCache(
+        env,
+        action,
+        input.metodo || 'POST',
+        payload,
+        userRole
+      );
+    } else {
+      result = await queryWithCache(
+        env,
+        action,
+        input.metodo || 'POST',
+        payload,
+        userRole
+      );
+    }
+
+    if (userRole === 'coordinator' && verifiedUser && ['LISTAR_ENVIOS_COORDINADOR','LISTAR_ENVIOS_POR_CARRERA'].includes(action)) {
+      result = filterCoordinatorResult(result, trustedCoordinatorCareers(verifiedUser));
+    }
+
+    if (userRole === 'student' && action === 'ENVIO_ESTUDIANTE') {
+      result = await registerStudentSubmission(payload, result, env);
+    }
+    if (userRole === 'coordinator' && RETURN_ACTIONS.has(action)) {
+      result = await registerReturnToStudent(payload, result, env, userRole);
+    }
+    if (userRole === 'coordinator' && COORDINATOR_FINAL_ACTIONS.has(action)) {
+      result = await registerCoordinatorValidation(payload, result, env);
+    }
+    if (userRole === 'admin' && action === 'GUARDAR_RESOLUCION') {
+      result = await registerReturnToStudent(payload, result, env, userRole);
+      result = await registerAdminFinalCorrection(payload, result, env);
+    }
+    if (userRole === 'coordinator' && verifiedUser && action === 'LISTAR_COORDINADORES') {
+      const id = text(verifiedUser.coordinadorId || verifiedUser.uid);
+      const nombre = text(verifiedUser.nombre || verifiedUser.email).toLowerCase();
+      const filterOwn = (items) => (Array.isArray(items) ? items : []).filter((item) => {
+        const itemId = text(item && (item.id || item.idRegistro || item.coordinadorId));
+        const itemName = text(item && (item.nombre || item.coordinador)).toLowerCase();
+        return (id && itemId === id) || (nombre && itemName === nombre);
+      });
+      if (result && typeof result === 'object') {
+        if (Array.isArray(result.coordinadores)) result.coordinadores = filterOwn(result.coordinadores);
+        if (Array.isArray(result.registros)) result.registros = filterOwn(result.registros);
+      }
+    }
+    if (WRITE_ACTIONS.has(action)) clearCaches();
+    return jsonReply(request, result);
+  } catch (error) {
+    return jsonReply(request, {
+      ok: false,
+      servicio: 'TITULOS',
+      mensaje: error.message || String(error)
+    }, Number(error && error.status) || (error && error.duplicado ? 409 : 502));
+  }
+}
