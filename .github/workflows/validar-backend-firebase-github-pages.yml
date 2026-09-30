@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - github-pages-backend-firebase
+      - github-pages-usar-firebase-backend
   pull_request:
     branches:
       - main
@@ -28,30 +29,50 @@ jobs:
       - name: Instalar backend
         run: npm --prefix firebase-backend/functions install --no-audit --no-fund
 
-      - name: Validar sintaxis
+      - name: Validar sintaxis de todo el backend propio
         shell: bash
         run: |
-          node --check firebase-backend/functions/index.js
-          node --check firebase-backend/functions/_lib/http.js
-          node --check firebase-backend/functions/_lib/firestore.js
-          node --check firebase-backend/functions/_lib/ia-firebase.js
-          node --check firebase-backend/functions/api/titulos.js
-          node --check firebase-backend/functions/api/trabajo-titulacion.js
-          node --check firebase-backend/functions/api/investigadores.js
-          node --check firebase-backend/functions/api/estadisticas.js
-          node --check firebase-backend/functions/api/ia.js
+          set -euo pipefail
+          while IFS= read -r -d '' file; do
+            node --check "$file"
+          done < <(find firebase-backend/functions -type f -name '*.js' -not -path '*/node_modules/*' -print0)
           node --check github-pages/firebase-auth-client.js
           node --check github-pages/runtime-config.js
 
-      - name: Verificar independencia de Cloudflare
+      - name: Verificar independencia y seguridad
         shell: bash
         run: |
-          ! grep -R "pages.dev\|workers.dev\|Cloudflare" firebase-backend/functions --include='*.js'
+          set -euo pipefail
+
+          if grep -R -n -E "pages\\.dev|workers\\.dev|Cloudflare|script\\.google\\.com|127\\.0\\.0\\.1:8787|127\\.0\\.0\\.1:8788"             firebase-backend/functions             --include='*.js'             --exclude-dir=node_modules; then
+            echo "El backend Firebase conserva una dependencia heredada no permitida." >&2
+            exit 1
+          fi
+
+          if grep -R -n -E "GOOGLE_SHEETS_REQUISITOS|APPS_SCRIPT_REQUISITOS|REQUISITOS_APPS_SCRIPT|requisitos-sheets-fallback"             firebase-backend/functions             --include='*.js'             --exclude-dir=node_modules; then
+            echo "El backend conserva el fallback antiguo de Requisitos por Google Sheets." >&2
+            exit 1
+          fi
+
           grep -q "https://jeffer91.github.io" firebase-backend/functions/index.js
           grep -q "cloudfunctions.net" github-pages/runtime-config.js
           grep -q "Auth.Persistence.NONE" github-pages/firebase-auth-client.js
           grep -q "trustedCoordinatorCareers" firebase-backend/functions/api/titulos.js
           grep -q "trustedCoordinatorCareers" firebase-backend/functions/api/trabajo-titulacion.js
+
+          # Los contactos del estudiante solo se incluyen cuando una operación interna lo solicita explícitamente.
+          grep -Fq "...(phoneRequested ? {" firebase-backend/functions/_lib/requisitos-firebase-fast.js
+          grep -q "getStudentBasicFast(cedula, {}, env)" firebase-backend/functions/api/acceso-estudiante.js
+
+          # El primer acceso de Investigación exige un código temporal; el código en claro nunca se persiste.
+          grep -q "activacionHash" firebase-backend/functions/api/investigadores.js
+          grep -q "codigoActivacion" firebase-backend/functions/api/investigadores.js
+          grep -q "ACTIVATION_CODE_TTL_MS" firebase-backend/functions/api/investigadores.js
+          grep -q "ADMIN_RESETEAR_PIN_INVESTIGADOR" firebase-backend/functions/api/investigadores.js
+          if grep -n -E "setDocument\\([^)]*codigoActivacion|codigoActivacion:[[:space:]]*payload" firebase-backend/functions/api/investigadores.js; then
+            echo "El código de activación no debe guardarse en claro." >&2
+            exit 1
+          fi
 
       - name: Importar Functions
         run: node -e "import('./firebase-backend/functions/index.js').then(() => console.log('Firebase Functions OK'))"
