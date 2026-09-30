@@ -46,12 +46,27 @@ jobs:
           grep -q "cloudfunctions.net" .pages-github/trabajo-titulacion/index.html
           grep -q "firebase-auth-client.js" .pages-github/coordinadores/index.html
           grep -q "firebase-auth-client.js" .pages-github/administrador/index.html
-          ! grep -R "pages.dev\|workers.dev" .pages-github --include='*.html' --include='*.js' --include='*.css' --include='*.json'
-          ! grep -R "firestore.googleapis.com" .pages-github --include='*.html' --include='*.js' --include='*.json'
-          ! grep -R "cloudfunctions.nethttps://" .pages-github --include='*.html' --include='*.js' --include='*.json'
-          ! grep -R "apiBase().*cloudfunctions.net\|base().*cloudfunctions.net" .pages-github --include='*.js'
+          if grep -R -E "pages\\.dev|workers\\.dev" .pages-github --include='*.html' --include='*.js' --include='*.css' --include='*.json'; then
+            echo "Se encontraron dependencias de Cloudflare en el artefacto." >&2
+            exit 1
+          fi
+          if grep -R "firestore.googleapis.com" .pages-github --include='*.html' --include='*.js' --include='*.json'; then
+            echo "Se encontró acceso directo a Firestore en el frontend." >&2
+            exit 1
+          fi
+          if grep -R "cloudfunctions.nethttps://" .pages-github --include='*.html' --include='*.js' --include='*.json'; then
+            echo "Se encontró una URL doble del backend Firebase." >&2
+            exit 1
+          fi
+          if grep -R -E "(apiBase|base)\\(\\)[[:space:]]*\\+[[:space:]]*['\\\"]https://" .pages-github --include='*.js'; then
+            echo "Se encontró una concatenación incorrecta base()+URL absoluta." >&2
+            exit 1
+          fi
           grep -q "investigacionEndpoint()" .pages-github/investigadores/js/investigadores.app.js
-          ! grep -q "fetch('/api/investigadores'\|sendBeacon('/api/investigadores'" .pages-github/investigadores/js/investigadores.app.js
+          if grep -q -E "fetch\\(['\\\"]/api/investigadores|sendBeacon\\(['\\\"]/api/investigadores" .pages-github/investigadores/js/investigadores.app.js; then
+            echo "Investigación todavía usa una ruta same-origin." >&2
+            exit 1
+          fi
 
       - name: Validar sintaxis de todo el JavaScript publicado
         shell: bash
@@ -67,3 +82,4 @@ jobs:
           name: github-pages-firebase-audit
           path: .pages-github
           if-no-files-found: error
+          include-hidden-files: true
