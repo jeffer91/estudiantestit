@@ -62,7 +62,7 @@ export async function onRequest({ request, env }) {
       return jsonReply(request, {
         ok: false,
         soloLectura: true,
-        mensaje: 'Las cuentas de servicio se configuran únicamente como secretos cifrados de Cloudflare Pages.'
+        mensaje: 'Las credenciales del backend se administran mediante IAM y Google Secret Manager; no se guardan desde el navegador.'
       }, 403);
     }
 
