@@ -5,15 +5,16 @@
   function texto(v){return String(v===null||v===undefined?'':v).trim();}
   function numero(v,f){var n=Number(typeof v==='string'?v.replace(',','.'):v);return Number.isFinite(n)?n:Number(f||0);}
   function esLocal(){var h=texto(window.location&&window.location.hostname).toLowerCase();return ['localhost','127.0.0.1','0.0.0.0','::1','[::1]'].indexOf(h)>=0;}
-  function esArchivo(){return texto(window.location&&window.location.protocol).toLowerCase()==='file:';}
+  function apiBase(){
+    var forzada=texto(window.TITULOS_API_BASE||'');
+    if(forzada)return forzada.replace(/\/$/,'');
+    if(esLocal())return 'http://127.0.0.1:5001/titulos-ec2fa/us-central1';
+    return 'https://us-central1-titulos-ec2fa.cloudfunctions.net';
+  }
   function proxyUrl(){
     var forzada=texto(window.ESTUDIANTE_IA_PROXY_URL||'');
-    var origen;
-    if(forzada)return forzada;
-    if(esLocal())return 'http://127.0.0.1:8788/api/ia';
-    if(esArchivo())return 'https://titulos.pages.dev/api/ia';
-    origen=texto(window.location&&window.location.origin);
-    return (origen&&origen!=='null'?origen.replace(/\/$/,''):'https://titulos.pages.dev')+'/api/ia';
+    if(forzada)return forzada.replace(/\/$/,'');
+    return apiBase()+'/api/ia';
   }
 
   function normalizarMotor(motor){
