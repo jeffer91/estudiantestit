@@ -210,58 +210,10 @@ Función:
     return [];
   }
 
-  function leerConfigApp(){
-    var colecciones = cfg().colecciones || {};
-    var documentos = cfg().documentos || {};
-    return fs().leerDocumento(colecciones.titulosConfig, documentos.appConfig)
-      .then(function(resp){ return resp.data || {}; });
-  }
-
-  function listarSheets(periodo){
-    return leerConfigApp().then(function(app){
-      var url = texto(app.sheetsWebAppUrl || app.sheetsUrl || app.sheetsEndpoint);
-      var token = texto(app.sheetsToken || "");
-      if (!url || app.sheetsActivo === false || texto(app.sheetsActivo).toLowerCase() === "false") return [];
-
-      function consultarHoja(hoja){
-        var payload = {
-          accion: "LISTAR_ENVIOS_COORDINADOR",
-          origen: "administrador",
-          version: "1.4.0",
-          token: token,
-          fechaCliente: new Date().toISOString(),
-          data: {
-            hoja: hoja,
-            coordinador: null,
-            carreras: [],
-            estado: "",
-            vista: "",
-            periodo: periodo && (periodo.id || periodo.label) || "",
-            token: token
-          }
-        };
-
-        return fetch(url, {
-          method: "POST",
-          mode: "cors",
-          cache: "no-store",
-          headers: { "Content-Type": "text/plain;charset=utf-8" },
-          body: JSON.stringify(payload)
-        }).then(function(resp){
-          if (!resp.ok) throw new Error("Sheets respondió HTTP " + resp.status);
-          return resp.text();
-        }).then(function(body){
-          var json = body ? JSON.parse(body) : {};
-          if (json && json.ok === false) throw new Error(json.mensaje || json.error || "Error en Google Sheets");
-          return extraerLista(json).map(normalizarTitulo).filter(function(item){ return item.cedula; });
-        });
-      }
-
-      return Promise.all([
-        consultarHoja("Envios").catch(function(){ return []; }),
-        consultarHoja("Resoluciones").catch(function(){ return []; })
-      ]).then(function(partes){ return (partes[0] || []).concat(partes[1] || []); });
-    }).catch(function(){ return []; });
+  function listarSheets(){
+    /* Compatibilidad histórica: la fuente operativa es Firebase.
+       No se consulta ninguna URL externa desde el navegador. */
+    return Promise.resolve([]);
   }
 
   function indexar(lista){
@@ -412,7 +364,7 @@ Función:
         periodo: periodo,
         estudiantes: filas,
         total: filas.length,
-        sheetsDisponible: sheets.length > 0
+        sheetsDisponible: false
       };
     });
   }
