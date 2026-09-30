@@ -37,19 +37,11 @@
     var host = texto(window.location && window.location.hostname).toLowerCase();
     return ['localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]'].indexOf(host) >= 0;
   }
-  function esArchivo() {
-    return texto(window.location && window.location.protocol).toLowerCase() === 'file:';
-  }
   function apiBase() {
     var forced = texto(window.TITULOS_API_BASE || '');
-    var origin;
     if (forced) return forced.replace(/\/$/, '');
-    if (esLocal()) return 'http://127.0.0.1:8788';
-    if (esArchivo()) return 'https://titulos.pages.dev';
-    origin = texto(window.location && window.location.origin);
-    return origin && origin !== 'null'
-      ? origin.replace(/\/$/, '')
-      : 'https://titulos.pages.dev';
+    if (esLocal()) return 'http://127.0.0.1:5001/titulos-ec2fa/us-central1';
+    return 'https://us-central1-titulos-ec2fa.cloudfunctions.net';
   }
   function proxyUrl() { return apiBase() + '/api/titulos'; }
   function enviarProxy(action, data, method) {
@@ -95,7 +87,7 @@
     });
   }
   function guardarConfiguracion() {
-    return Promise.reject(new Error('La configuración se administra en la hoja Claves.'));
+    return Promise.reject(new Error('La conexión se administra en el backend Firebase.'));
   }
   function si(value) {
     return value === true || ['SI', 'SÍ', 'TRUE', '1', 'YES'].indexOf(texto(value).toUpperCase()) >= 0;
