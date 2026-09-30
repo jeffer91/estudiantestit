@@ -1,0 +1,57 @@
+name: Validar backend Firebase GitHub Pages
+
+on:
+  push:
+    branches:
+      - github-pages-backend-firebase
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Instalar backend
+        run: npm --prefix firebase-backend/functions ci --no-audit --no-fund
+
+      - name: Validar sintaxis
+        shell: bash
+        run: |
+          node --check firebase-backend/functions/index.js
+          node --check firebase-backend/functions/_lib/http.js
+          node --check firebase-backend/functions/_lib/firestore.js
+          node --check firebase-backend/functions/_lib/ia-firebase.js
+          node --check firebase-backend/functions/api/titulos.js
+          node --check firebase-backend/functions/api/trabajo-titulacion.js
+          node --check firebase-backend/functions/api/investigadores.js
+          node --check firebase-backend/functions/api/estadisticas.js
+          node --check firebase-backend/functions/api/ia.js
+          node --check github-pages/firebase-auth-client.js
+          node --check github-pages/runtime-config.js
+
+      - name: Verificar independencia de Cloudflare
+        shell: bash
+        run: |
+          ! grep -R "pages.dev\|workers.dev\|Cloudflare" firebase-backend/functions --include='*.js'
+          grep -q "https://jeffer91.github.io" firebase-backend/functions/index.js
+          grep -q "cloudfunctions.net" github-pages/runtime-config.js
+          grep -q "Auth.Persistence.NONE" github-pages/firebase-auth-client.js
+          grep -q "trustedCoordinatorCareers" firebase-backend/functions/api/titulos.js
+          grep -q "trustedCoordinatorCareers" firebase-backend/functions/api/trabajo-titulacion.js
+
+      - name: Importar Functions
+        run: node -e "import('./firebase-backend/functions/index.js').then(() => console.log('Firebase Functions OK'))"
