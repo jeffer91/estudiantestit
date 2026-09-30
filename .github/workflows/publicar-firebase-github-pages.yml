@@ -40,7 +40,7 @@ jobs:
           node-version: 20
 
       - name: Instalar dependencias del backend
-        run: npm --prefix firebase-backend/functions ci --no-audit --no-fund
+        run: npm --prefix firebase-backend/functions install --no-audit --no-fund
 
       - name: Validar importación
         run: node -e "import('./firebase-backend/functions/index.js').then(() => console.log('Backend Firebase OK'))"
