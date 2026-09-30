@@ -291,40 +291,13 @@
   }
 
   function registrarEnSheets(datos) {
-    var sheets = window.EstudianteMVPSheets;
     var payload;
-
-    if (!datos || datos.registrada || !sheets || typeof sheets.leerConfiguracion !== 'function') return;
-
+    if (!datos || datos.registrada) return;
     datos.registrada = true;
     payload = construirPayloadSeguro(datos);
-
-    sheets.leerConfiguracion()
-      .then(function (configSheets) {
-        if (!configSheets || !configSheets.activo || !configSheets.endpoint) return null;
-
-        return fetch(configSheets.endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({
-            accion: 'LOG',
-            action: 'LOG',
-            tipo: 'LOG',
-            origen: 'estudiantes-mvp',
-            fechaCliente: new Date().toISOString(),
-            idRegistro: datos.codigo,
-            datos: {
-              nivel: 'ERROR',
-              modulo: 'DiagnosticoIAPropuesta',
-              mensaje: 'Fallo de generación IA ' + datos.codigo,
-              detalle: JSON.stringify(payload),
-              idRegistro: datos.codigo,
-              prueba: false
-            }
-          })
-        });
-      })
-      .catch(function () {});
+    try {
+      console.warn('[Diagnóstico IA]', payload);
+    } catch (_error) {}
   }
 
   function construirPayloadSeguro(datos) {
