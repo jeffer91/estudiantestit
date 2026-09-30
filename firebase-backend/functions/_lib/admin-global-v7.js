@@ -425,7 +425,7 @@ async function baseStudentsForEnrollments(rows, env) {
   if (ids.length > MAX_SAFE_POPULATION) {
     throw new Error(
       `El período contiene ${ids.length} estudiantes. El Administrador admite hasta ` +
-      `${MAX_SAFE_POPULATION} estudiantes por carga para proteger el límite de Cloudflare.`
+      `${MAX_SAFE_POPULATION} estudiantes por carga para proteger el límite operativo del backend.`
     );
   }
 
