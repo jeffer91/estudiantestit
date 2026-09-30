@@ -1137,8 +1137,8 @@ export async function onRequest({ request, env }) {
 
     /* En Firebase Functions la identidad del coordinador viene de Firebase Auth.
        No confiamos en un nombre/carrera enviado por el navegador cuando existe
-       una sesión verificada. La ruta Cloudflare heredada sigue funcionando sin
-       este bloque durante la transición. */
+       una sesión verificada. La autorización del backend Firebase siempre
+       prevalece sobre cualquier dato enviado por el navegador. */
     if (userRole === 'coordinator' && verifiedUser) {
       const trustedCareers = Array.isArray(verifiedUser.carreras)
         ? verifiedUser.carreras.map(text).filter(Boolean)
