@@ -283,6 +283,35 @@ async function callGemini(provider, prompt, options) {
   return output;
 }
 
+async function callCohere(provider, prompt, options) {
+  const endpoint = text(provider.endpoint || 'https://api.cohere.com/v2/chat');
+  if (!provider.credencial) throw new Error(`${provider.nombre} no tiene credencial configurada.`);
+  const response = await fetchTimed(endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${provider.credencial}`
+    },
+    body: JSON.stringify({
+      model: text(provider.modelo || provider.model),
+      messages: [{ role: 'user', content: prompt }],
+      temperature: Number(options.temperatura ?? options.temperature ?? provider.temperatura ?? 0.3),
+      max_tokens: Number(options.maxTokens || options.max_tokens || provider.maxTokens || 3000)
+    })
+  }, options.timeoutMs || provider.timeoutMs);
+  const data = await readJson(response, provider.nombre);
+  const content = data && data.message && Array.isArray(data.message.content)
+    ? data.message.content
+    : [];
+  const output = text(
+    content.map((item) => item && (item.text || item.content) || '').filter(Boolean).join('\n')
+    || data.text
+    || data.response
+  );
+  if (!output) throw new Error(`${provider.nombre} respondió sin texto.`);
+  return output;
+}
+
 async function callOpenAiCompatible(provider, prompt, options) {
   const endpoint = text(provider.endpoint);
   if (!endpoint) throw new Error(`${provider.nombre} no tiene endpoint configurado.`);
@@ -334,7 +363,9 @@ export async function generateWithProvider(providerIdValue, promptValue, options
     const signature = `${runtimeProvider.tipo} ${runtimeProvider.endpoint} ${runtimeProvider.nombre}`.toLowerCase();
     const output = /gemini|generativelanguage/.test(signature)
       ? await callGemini(runtimeProvider, prompt, options)
-      : await callOpenAiCompatible(runtimeProvider, prompt, options);
+      : /cohere/.test(signature)
+        ? await callCohere(runtimeProvider, prompt, options)
+        : await callOpenAiCompatible(runtimeProvider, prompt, options);
     const latencyMs = Date.now() - started;
     await setDocument('TITULOS', 'ia', provider.id, {
       ultimaPruebaOk: true,
