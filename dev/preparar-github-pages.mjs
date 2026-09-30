@@ -300,7 +300,7 @@ if (!workBuilt.includes(firebaseApiBase)) {
 if (!coordinatorBuilt.includes(firebaseApiBase)) {
   throw new Error('GitHub Pages: Coordinadores no apunta al backend Firebase propio.');
 }
-if (!investigatorBuilt.includes(firebaseApiBase + '/api/investigadores')) {
+if (!investigatorBuilt.includes(firebaseApiBase) || !investigatorBuilt.includes("INVESTIGACION_API_BASE+'/api/investigadores'")) {
   throw new Error('GitHub Pages: Investigación no apunta al backend Firebase propio.');
 }
 if (!adminBuilt.includes(firebaseApiBase)) {
