@@ -20,9 +20,10 @@
     <section id="loginView" class="card login-card">
       <p class="eyebrow">Acceso de investigadores</p>
       <h2>Ingresa con tu cédula</h2>
-      <p class="muted">En el primer ingreso registrarás tu PIN personal.</p>
+      <p class="muted">En el primer ingreso necesitarás el código temporal entregado por Administración para crear tu PIN personal.</p>
       <form id="loginForm" class="stack">
         <label><span>Cédula</span><input id="cedulaInput" inputmode="numeric" maxlength="10" autocomplete="username" required></label>
+        <div id="activationWrap" hidden><label><span>Código de activación</span><input id="activationInput" type="text" inputmode="text" maxlength="12" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" placeholder="Código entregado por Administración"></label></div>
         <div id="pinWrap" hidden><label><span>PIN</span><input id="pinInput" type="password" inputmode="numeric" maxlength="8" autocomplete="current-password"></label></div>
         <div id="pinConfirmWrap" hidden><label><span>Confirma tu PIN</span><input id="pinConfirmInput" type="password" inputmode="numeric" maxlength="8" autocomplete="new-password"></label></div>
         <button id="loginBtn" class="primary" type="submit">Continuar</button>
