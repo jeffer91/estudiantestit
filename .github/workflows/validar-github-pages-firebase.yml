@@ -46,7 +46,7 @@ jobs:
           grep -q "cloudfunctions.net" .pages-github/trabajo-titulacion/index.html
           grep -q "firebase-auth-client.js" .pages-github/coordinadores/index.html
           grep -q "firebase-auth-client.js" .pages-github/administrador/index.html
-          if grep -R -E "pages\\.dev|workers\\.dev|[Cc]loudflare|script\\.google\\.com" .pages-github --include='*.html' --include='*.js' --include='*.css' --include='*.json'; then
+          if grep -R -E "pages\\.dev|workers\\.dev|[Cc]loudflare|script\\.google\\.com|127\\.0\\.0\\.1:8787|127\\.0\\.0\\.1:8788" .pages-github --include='*.html' --include='*.js' --include='*.css' --include='*.json'; then
             echo "Se encontraron dependencias de Cloudflare en el artefacto." >&2
             exit 1
           fi
