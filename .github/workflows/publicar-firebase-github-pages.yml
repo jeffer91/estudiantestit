@@ -1,0 +1,55 @@
+name: Publicar backend Firebase de GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'firebase-backend/**'
+      - 'firebase.json'
+      - '.firebaserc'
+      - '.github/workflows/publicar-firebase-github-pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: firebase-github-pages-backend-main
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && vars.GCP_SERVICE_ACCOUNT != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Autenticar Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Instalar dependencias del backend
+        run: npm --prefix firebase-backend/functions ci --no-audit --no-fund
+
+      - name: Validar importación
+        run: node -e "import('./firebase-backend/functions/index.js').then(() => console.log('Backend Firebase OK'))"
+
+      - name: Publicar Functions
+        run: npx --yes firebase-tools deploy --only functions --project titulos-ec2fa --config firebase.json
+
+      - name: Comprobar health
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location             --retry 8 --retry-delay 5 --retry-all-errors             --connect-timeout 15 --max-time 60             https://us-central1-titulos-ec2fa.cloudfunctions.net/api/health
