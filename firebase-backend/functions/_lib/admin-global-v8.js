@@ -34,8 +34,7 @@ export {
 };
 
 /* 510 cédulas equivalen como máximo a 17 bloques por campo. Consultando
-   cedula + numeroIdentificacion son 34 subrequests adicionales, todavía dentro
-   del margen previsto para una carga normal del Administrador en Cloudflare. */
+   cedula + numeroIdentificacion son 34 subrequests adicionales, dentro del margen previsto para una carga normal del Administrador. */
 const MAX_SECONDARY_VERIFICATION = 510;
 
 function normalized(value) {
@@ -182,7 +181,7 @@ async function recoverMissingSubmissions(global, payload, env) {
     throw new Error(
       `Hay ${unique.length} estudiantes marcados inicialmente como no enviados. ` +
       `Se detuvo antes de confirmarlos porque la verificación secundaria admite hasta ` +
-      `${MAX_SECONDARY_VERIFICATION} cédulas por carga para no exceder el límite de Cloudflare.`
+      `${MAX_SECONDARY_VERIFICATION} cédulas por carga para no exceder el límite operativo del backend.`
     );
   }
 
