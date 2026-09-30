@@ -88,6 +88,8 @@ function patchLegacyText(value) {
   out = out.replaceAll('https://titulos-investigadores.pages.dev', firebaseApiBase);
   out = out.replaceAll('https://titulos.pages.dev', firebaseApiBase);
   out = out.replaceAll('https://jeffer91.github.io/api/', firebaseApiBase + '/api/');
+  out = out.replaceAll('http://127.0.0.1:8788', 'http://127.0.0.1:5001/titulos-ec2fa/us-central1');
+  out = out.replaceAll('http://127.0.0.1:8787', 'http://127.0.0.1:5001/titulos-ec2fa/us-central1');
   return out;
 }
 
@@ -317,7 +319,7 @@ if (!read('administrador/404.html').includes(projectBase + '/administrador/')) {
 }
 
 
-const forbiddenOrigins = ['pages.dev', 'workers.dev', 'cloudflare', 'script.google.com'];
+const forbiddenOrigins = ['pages.dev', 'workers.dev', 'cloudflare', 'script.google.com', '127.0.0.1:8787', '127.0.0.1:8788'];
 const malformedApiPatterns = [
   firebaseApiBase + 'https://',
   "base()+'" + firebaseApiBase,
