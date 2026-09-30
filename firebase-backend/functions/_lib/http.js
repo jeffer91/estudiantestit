@@ -1,17 +1,13 @@
 /* Utilidades HTTP compartidas para Pages Functions. */
 
 export const ALLOWED_ORIGINS = new Set([
-  'null',
-  'https://titulos.pages.dev',
-  'https://titulos-administrador.pages.dev',
-  'https://titulos-coordinadores.pages.dev',
-  'https://titulos-investigadores.pages.dev',
-  'https://coordinadores.pages.dev',
   'https://jeffer91.github.io',
   'http://127.0.0.1:5500',
   'http://localhost:5500',
-  'http://127.0.0.1:8788',
-  'http://localhost:8788'
+  'http://127.0.0.1:5173',
+  'http://localhost:5173',
+  'http://127.0.0.1:5001',
+  'http://localhost:5001'
 ]);
 
 export function text(value) {
@@ -44,49 +40,20 @@ function isPagesHost(host, projectHost) {
 
 export function originAllowed(originValue) {
   const origin = text(originValue);
-  if (!origin || ALLOWED_ORIGINS.has(origin)) return true;
-  try {
-    const url = new URL(origin);
-    if (url.protocol !== 'https:') return false;
-    return (
-      isPagesHost(url.hostname.toLowerCase(), 'titulos.pages.dev') ||
-      isPagesHost(url.hostname.toLowerCase(), 'titulos-administrador.pages.dev') ||
-      isPagesHost(url.hostname.toLowerCase(), 'titulos-coordinadores.pages.dev') ||
-      isPagesHost(url.hostname.toLowerCase(), 'titulos-investigadores.pages.dev') ||
-      isPagesHost(url.hostname.toLowerCase(), 'coordinadores.pages.dev')
-    );
-  } catch (_error) {
-    return false;
-  }
+  return !origin || ALLOWED_ORIGINS.has(origin);
 }
 
 export function role(request) {
   const verified = request && request.__verifiedRole ? text(request.__verifiedRole).toLowerCase() : '';
-  if (['admin','coordinator','investigator','student'].includes(verified)) return verified;
+  if (['admin', 'coordinator', 'investigator', 'student'].includes(verified)) return verified;
 
   const host = requestHost(request);
-
-  if (isPagesHost(host, 'titulos-administrador.pages.dev')) return 'admin';
-  if (
-    isPagesHost(host, 'titulos-coordinadores.pages.dev') ||
-    isPagesHost(host, 'coordinadores.pages.dev')
-  ) {
-    return 'coordinator';
-  }
-  if (isPagesHost(host, 'titulos-investigadores.pages.dev')) return 'investigator';
-  if (isPagesHost(host, 'titulos.pages.dev')) return 'student';
-
   if (['localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]'].includes(host)) {
     const app = appId(request);
     if (app === 'administrador' || app === 'admin') return 'admin';
-    if (app === 'coordinadores' || app === 'coordinador' || app === 'coordinator') {
-      return 'coordinator';
-    }
-    if (app === 'investigadores' || app === 'investigador' || app === 'investigator') {
-      return 'investigator';
-    }
+    if (app === 'coordinadores' || app === 'coordinador' || app === 'coordinator') return 'coordinator';
+    if (app === 'investigadores' || app === 'investigador' || app === 'investigator') return 'investigator';
   }
-
   return 'student';
 }
 
