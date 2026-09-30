@@ -487,111 +487,32 @@
     window.EstudianteMVPFirebaseCore = Object.freeze(extendido);
   }
 
-  function enviarConsultaSheetsAlternativa(endpoint, cedula, variantes) {
-    if (!endpoint || !cedula || !window.fetch) {
-      return Promise.resolve(null);
-    }
-
-    return window.fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'text/plain;charset=utf-8'
-      },
-      body: JSON.stringify({
-        accion: 'CONSULTAR_ENVIO_CEDULA',
-        tipo: 'CONSULTAR_ENVIO_CEDULA',
-        consultarEnvio: true,
-        cedula: cedula,
-        numeroIdentificacion: cedula,
-        cedulaAlternativa: variantes[0] || '',
-        cedulasEquivalentes: variantes,
-        fechaCliente: fechaIso()
-      })
-    }).then(function (respuesta) {
-      return respuesta.text().then(function (texto) {
-        var data;
-
-        try {
-          data = JSON.parse(texto || '{}');
-        } catch (errorJson) {
-          data = null;
-        }
-
-        if (!respuesta.ok || !data) {
-          return null;
-        }
-
-        return {
-          ok: data.ok !== false,
-          encontrado: data.encontrado === true,
-          cedula: data.cedula || cedula,
-          envio: data.envio || null,
-          mensaje: data.mensaje || ''
-        };
-      });
-    }).catch(function () {
-      return null;
-    });
-  }
-
   function instalarCompatibilidadSheets() {
     var base = window.EstudianteMVPSheets;
     var extendido;
     var consultarOriginal;
 
-    if (!base || base.__cedulaCompatibilidad === true) {
-      return;
-    }
-
+    if (!base || base.__cedulaCompatibilidad === true) return;
     consultarOriginal = base.consultarEnvioPorCedula;
-
-    if (typeof consultarOriginal !== 'function') {
-      return;
-    }
+    if (typeof consultarOriginal !== 'function') return;
 
     extendido = copiarApi(base);
-
-    extendido.consultarEnvioPorCedula = function (valor) {
+    extendido.consultarEnvioPorCedula = function (valor, periodo) {
       var variantes = obtenerVariantesCedula(valor);
       var principal = variantes[0] || '';
       var alternativa = variantes[1] || '';
-      var resultadoPrincipal;
 
-      if (!principal) {
-        return consultarOriginal.call(base, valor);
-      }
+      if (!principal) return consultarOriginal.call(base, valor, periodo);
 
-      return consultarOriginal.call(base, principal)
+      return consultarOriginal.call(base, principal, periodo)
         .then(function (resultado) {
-          resultadoPrincipal = resultado;
-
-          if (
-            resultado &&
-            resultado.encontrado === true
-          ) {
-            return resultado;
-          }
-
-          if (!alternativa || typeof base.leerConfiguracion !== 'function') {
-            return resultado;
-          }
-
-          return base.leerConfiguracion()
-            .then(function (configuracion) {
-              return enviarConsultaSheetsAlternativa(
-                configuracion && configuracion.endpoint,
-                alternativa,
-                variantes
-              );
+          if (resultado && resultado.encontrado === true) return resultado;
+          if (!alternativa) return resultado;
+          return consultarOriginal.call(base, alternativa, periodo)
+            .then(function (alternativo) {
+              return alternativo && alternativo.encontrado === true ? alternativo : resultado;
             })
-            .then(function (resultadoAlternativo) {
-              return resultadoAlternativo && resultadoAlternativo.encontrado
-                ? resultadoAlternativo
-                : resultadoPrincipal;
-            })
-            .catch(function () {
-              return resultadoPrincipal;
-            });
+            .catch(function () { return resultado; });
         });
     };
 
