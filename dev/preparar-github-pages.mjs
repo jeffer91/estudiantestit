@@ -278,8 +278,10 @@ const studentBuilt = read('estudiantes/index.html');
 const workBuilt = read('trabajo-titulacion/index.html');
 const coordinatorBuilt = read('coordinadores/index.html');
 const investigatorBuilt = read('investigadores/js/investigadores.app.js');
+const investigatorHtmlBuilt = read('investigadores/index.html');
 const adminBuilt = read('administrador/index.html');
 const adminApiBuilt = read('administrador/ad-js/ad-api.service.js');
+const adminInvestigationBuilt = read('administrador/ad-js/ad-google-sheets.app.js');
 
 if (!studentBuilt.includes('estudiante.trabajo-titulacion.route.js')) {
   throw new Error('GitHub Pages: Estudiantes no carga el enrutador de Trabajo de Titulación.');
@@ -393,8 +395,23 @@ if (!investigatorBuilt.includes("window.addEventListener('pagehide',liberarAlSal
 if (!investigatorBuilt.includes("'Content-Type':'text/plain;charset=UTF-8'")) {
   throw new Error('GitHub Pages: Investigación no tiene fallback keepalive simple.');
 }
+if (!investigatorHtmlBuilt.includes('id="activationInput"') || !investigatorBuilt.includes('codigoActivacion')) {
+  throw new Error('GitHub Pages: Investigación no exige código de activación en el primer acceso.');
+}
+if (!adminInvestigationBuilt.includes('codigoActivacion') || !adminInvestigationBuilt.includes('Generar código')) {
+  throw new Error('GitHub Pages: Administración no muestra la activación segura de investigadores.');
+}
 
 const backendIndex = fs.readFileSync(path.join(root, 'firebase-backend', 'functions', 'index.js'), 'utf8');
+const requisitosBackend = fs.readFileSync(path.join(root, 'firebase-backend', 'functions', '_lib', 'requisitos-firebase-fast.js'), 'utf8');
+const investigadoresBackend = fs.readFileSync(path.join(root, 'firebase-backend', 'functions', 'api', 'investigadores.js'), 'utf8');
+
+if (!requisitosBackend.includes('...(phoneRequested ? {')) {
+  throw new Error('Backend Firebase: los datos de contacto del estudiante no están protegidos.');
+}
+if (!investigadoresBackend.includes('activacionHash') || !investigadoresBackend.includes('ACTIVATION_CODE_TTL_MS')) {
+  throw new Error('Backend Firebase: falta activación segura del primer acceso de Investigación.');
+}
 for (const route of [
   'acceso-estudiante', 'admin-flujo', 'admin-trabajo-titulacion', 'claves',
   'estadisticas', 'historial-titulos', 'ia', 'investigadores', 'requisitos',
