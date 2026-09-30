@@ -26,8 +26,8 @@
   }
 
   function cargarComplementosComunes(){
-    /* Se cargan desde la interfaz base, no desde el build de Cloudflare, para
-       que navegador y Electron ejecuten exactamente los mismos complementos. */
+    /* Se cargan desde la interfaz base para que navegador y Electron
+       ejecuten exactamente los mismos complementos. */
     cargarComplemento('./ad-js/ad-performance.patch.js','data-ad-performance');
     cargarComplemento('./ad-js/ad-trabajo-titulacion-admin.patch.js','data-ad-trabajo-titulacion-admin');
     cargarComplemento('./ad-js/ad-titulos-admin.patch.js','data-ad-titulos-admin');
