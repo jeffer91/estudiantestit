@@ -43,6 +43,10 @@ const SESSION_MS = 8 * 60 * 60 * 1000;
 const LOGIN_MAX_ATTEMPTS = 5;
 const LOGIN_LOCK_MS = 15 * 60 * 1000;
 const PBKDF2_ITERATIONS = 100000;
+const ACTIVATION_CODE_TTL_MS = 24 * 60 * 60 * 1000;
+const ACTIVATION_MAX_ATTEMPTS = 5;
+const ACTIVATION_LOCK_MS = 15 * 60 * 1000;
+const ACTIVATION_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const enc = new TextEncoder();
 
 function cedula(value) {
@@ -94,6 +98,69 @@ function validarPin(pin) {
   return value;
 }
 
+function normalizarCodigoActivacion(value) {
+  return text(value).toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+function generarCodigoActivacion() {
+  const bytes = new Uint8Array(10);
+  crypto.getRandomValues(bytes);
+  return [...bytes].map((value) => ACTIVATION_ALPHABET[value % ACTIVATION_ALPHABET.length]).join('');
+}
+
+async function hashCodigoActivacion(cedulaInvestigador, code) {
+  return sha256('INVESTIGACION_ACTIVACION:' + cedulaInvestigador + ':' + normalizarCodigoActivacion(code));
+}
+
+function activacionVigente(investigador) {
+  return Boolean(
+    investigador &&
+    text(investigador.activacionHash) &&
+    Date.parse(investigador.activacionExpiraEn || '') > Date.now()
+  );
+}
+
+async function crearActivacion(cedulaInvestigador) {
+  const codigo = generarCodigoActivacion();
+  return {
+    codigo,
+    hash: await hashCodigoActivacion(cedulaInvestigador, codigo),
+    expiraEn: new Date(Date.now() + ACTIVATION_CODE_TTL_MS).toISOString()
+  };
+}
+
+async function validarActivacion(investigador, cedulaInvestigador, codigo, env) {
+  const bloqueoHasta = Date.parse(investigador.activacionBloqueoHasta || '');
+  if (Number.isFinite(bloqueoHasta) && bloqueoHasta > Date.now()) {
+    throw new Error('La activación está temporalmente bloqueada por varios intentos fallidos. Solicita un nuevo código al administrador.');
+  }
+  if (!activacionVigente(investigador)) {
+    throw new Error('No existe un código de activación vigente. Solicita uno al administrador.');
+  }
+
+  const normalizado = normalizarCodigoActivacion(codigo);
+  if (normalizado.length < 8) {
+    throw new Error('Ingresa el código de activación entregado por el administrador.');
+  }
+
+  const hash = await hashCodigoActivacion(cedulaInvestigador, normalizado);
+  if (hash !== text(investigador.activacionHash)) {
+    const intentos = Number(investigador.activacionIntentosFallidos || 0) + 1;
+    const bloquear = intentos >= ACTIVATION_MAX_ATTEMPTS;
+    await setDocument('TITULOS', 'investigadores', cedulaInvestigador, {
+      activacionIntentosFallidos: bloquear ? 0 : intentos,
+      activacionBloqueoHasta: bloquear ? new Date(Date.now() + ACTIVATION_LOCK_MS).toISOString() : '',
+      ultimoIntentoActivacionFallidoEn: nowIso(),
+      actualizadoEn: nowIso()
+    }, { merge: true, ...(investigador._updateTime ? { updateTime: investigador._updateTime } : {}) }, env);
+
+    throw new Error(bloquear
+      ? 'Demasiados intentos de activación. Solicita un nuevo código al administrador.'
+      : 'Código de activación incorrecto.');
+  }
+  return true;
+}
+
 async function asegurarCatalogo(env) {
   const existentes = await listCollection('TITULOS', 'investigadores', { pageSize: 100, maxDocuments: 500 }, env);
   const ids = new Set(existentes.map((item) => cedula(item.cedula || item.id)).filter(Boolean));
@@ -109,6 +176,10 @@ async function asegurarCatalogo(env) {
       activo: true,
       pinHash: '',
       pinSalt: '',
+      activacionHash: '',
+      activacionExpiraEn: '',
+      activacionIntentosFallidos: 0,
+      activacionBloqueoHasta: '',
       creadoEn: fecha,
       actualizadoEn: fecha
     },
@@ -186,12 +257,20 @@ async function consultarAcceso(payload, env) {
   if (!c) throw new Error('Ingresa una cédula válida de 10 dígitos.');
   const investigador = await investigadorActivo(c, env);
   if (!investigador) return { ok: true, encontrado: false, mensaje: 'Cédula no habilitada para Investigación.' };
+  const requiereRegistroPin = !text(investigador.pinHash);
   return {
     ok: true,
     encontrado: true,
     cedula: investigador.cedula,
     nombre: investigador.nombre,
-    requiereRegistroPin: !text(investigador.pinHash)
+    requiereRegistroPin,
+    requiereCodigoActivacion: requiereRegistroPin,
+    activacionVigente: requiereRegistroPin && activacionVigente(investigador),
+    mensaje: requiereRegistroPin
+      ? (activacionVigente(investigador)
+          ? 'Ingresa el código de activación entregado por Administración y crea tu PIN personal.'
+          : 'Tu acceso aún no tiene un código de activación vigente. Solicítalo a Administración.')
+      : 'Acceso habilitado. Ingresa tu PIN.'
   };
 }
 
@@ -202,6 +281,7 @@ async function registrarPin(payload, env) {
   const investigador = await investigadorActivo(c, env);
   if (!investigador) throw new Error('Cédula no habilitada para Investigación.');
   if (text(investigador.pinHash)) throw new Error('Este investigador ya tiene un PIN registrado.');
+  await validarActivacion(investigador, c, payload.codigoActivacion || payload.activationCode, env);
   const salt = randomHex(16);
   const hash = await pinHash(pin, salt);
   const actualizado = await setDocument('TITULOS', 'investigadores', c, {
@@ -211,6 +291,11 @@ async function registrarPin(payload, env) {
     pinCreadoEn: nowIso(),
     intentosFallidos: 0,
     bloqueoLoginHasta: '',
+    activacionHash: '',
+    activacionExpiraEn: '',
+    activacionIntentosFallidos: 0,
+    activacionBloqueoHasta: '',
+    activacionUsadaEn: nowIso(),
     actualizadoEn: nowIso()
   }, { merge: true, updateTime: investigador._updateTime }, env);
   const sesion = await crearSesion(actualizado, env);
@@ -224,7 +309,15 @@ async function login(payload, env) {
   const investigador = await investigadorActivo(c, env);
   if (!investigador) throw new Error('Cédula no habilitada para Investigación.');
   if (!text(investigador.pinHash) || !text(investigador.pinSalt)) {
-    return { ok: false, requiereRegistroPin: true, mensaje: 'Primero registra tu PIN.' };
+    return {
+      ok: false,
+      requiereRegistroPin: true,
+      requiereCodigoActivacion: true,
+      activacionVigente: activacionVigente(investigador),
+      mensaje: activacionVigente(investigador)
+        ? 'Primero activa tu acceso y registra tu PIN.'
+        : 'Solicita un código de activación a Administración antes de registrar tu PIN.'
+    };
   }
   const bloqueoHasta = Date.parse(investigador.bloqueoLoginHasta || '');
   if (Number.isFinite(bloqueoHasta) && bloqueoHasta > Date.now()) {
@@ -590,7 +683,10 @@ async function adminListar(env) {
       cedula: item.cedula,
       nombre: item.nombre,
       activo: item.activo !== false,
-      tienePin: Boolean(text(item.pinHash))
+      tienePin: Boolean(text(item.pinHash)),
+      requiereActivacion: !text(item.pinHash),
+      activacionVigente: !text(item.pinHash) && activacionVigente(item),
+      activacionExpiraEn: !text(item.pinHash) ? text(item.activacionExpiraEn) : ''
     })).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
   };
 }
@@ -600,31 +696,58 @@ async function adminGuardar(payload, env) {
   const nombre = text(payload.nombre).replace(/\s+/g, ' ').trim();
   if (!c || !nombre) throw new Error('Nombre y cédula son obligatorios.');
   const actual = await getDocument('TITULOS', 'investigadores', c, env);
+  const necesitaActivacion = !actual || (!text(actual.pinHash) && !activacionVigente(actual));
+  const activacion = necesitaActivacion ? await crearActivacion(c) : null;
   await setDocument('TITULOS', 'investigadores', c, {
     cedula: c,
     nombre,
     activo: payload.activo !== false,
     actualizadoEn: nowIso(),
-    ...(actual ? {} : { creadoEn: nowIso(), pinHash: '', pinSalt: '' })
+    ...(actual ? {} : { creadoEn: nowIso(), pinHash: '', pinSalt: '' }),
+    ...(activacion ? {
+      activacionHash: activacion.hash,
+      activacionExpiraEn: activacion.expiraEn,
+      activacionIntentosFallidos: 0,
+      activacionBloqueoHasta: '',
+      activacionGeneradaEn: nowIso()
+    } : {})
   }, actual ? { merge: true, updateTime: actual._updateTime } : { merge: false, exists: false }, env);
-  return { ok: true, mensaje: 'Investigador guardado.' };
+  return {
+    ok: true,
+    mensaje: activacion
+      ? 'Investigador guardado. Comparte el código de activación por un canal seguro; vence en 24 horas.'
+      : 'Investigador guardado.',
+    codigoActivacion: activacion ? activacion.codigo : '',
+    activacionExpiraEn: activacion ? activacion.expiraEn : ''
+  };
 }
 
 async function adminResetPin(payload, env) {
   const c = cedula(payload.cedula);
   const actual = await getDocument('TITULOS', 'investigadores', c, env);
   if (!actual) throw new Error('Investigador no encontrado.');
+  const activacion = await crearActivacion(c);
   await setDocument('TITULOS', 'investigadores', c, {
     pinHash: '',
     pinSalt: '',
     pinIterations: PBKDF2_ITERATIONS,
     intentosFallidos: 0,
     bloqueoLoginHasta: '',
+    activacionHash: activacion.hash,
+    activacionExpiraEn: activacion.expiraEn,
+    activacionIntentosFallidos: 0,
+    activacionBloqueoHasta: '',
+    activacionGeneradaEn: nowIso(),
     pinReiniciadoEn: nowIso(),
     actualizadoEn: nowIso()
   }, { merge: true, updateTime: actual._updateTime }, env);
   await revocarSesiones(c, env);
-  return { ok: true, mensaje: 'PIN restablecido y sesiones anteriores cerradas. Se solicitará uno nuevo en el próximo ingreso.' };
+  return {
+    ok: true,
+    mensaje: 'PIN restablecido y sesiones anteriores cerradas. Comparte el nuevo código de activación por un canal seguro; vence en 24 horas.',
+    codigoActivacion: activacion.codigo,
+    activacionExpiraEn: activacion.expiraEn
+  };
 }
 
 async function execute(action, payload, userRole, env) {
