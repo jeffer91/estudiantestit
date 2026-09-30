@@ -1,6 +1,6 @@
 /* Datos sanitizados para el reporte PDF de Firebase Títulos.
  * El reporte es estrictamente de lectura y usa límites por colección para no
- * agotar subrequests de Cloudflare en una sola invocación.
+ * agotar lecturas o memoria en una sola invocación.
  */
 import { listCollection, nowIso, text } from './firestore-fixed.js';
 
