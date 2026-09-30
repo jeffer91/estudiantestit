@@ -46,7 +46,7 @@ jobs:
           grep -q "cloudfunctions.net" .pages-github/trabajo-titulacion/index.html
           grep -q "firebase-auth-client.js" .pages-github/coordinadores/index.html
           grep -q "firebase-auth-client.js" .pages-github/administrador/index.html
-          if grep -R -E "pages\\.dev|workers\\.dev" .pages-github --include='*.html' --include='*.js' --include='*.css' --include='*.json'; then
+          if grep -R -E "pages\\.dev|workers\\.dev|[Cc]loudflare" .pages-github --include='*.html' --include='*.js' --include='*.css' --include='*.json'; then
             echo "Se encontraron dependencias de Cloudflare en el artefacto." >&2
             exit 1
           fi
@@ -63,6 +63,14 @@ jobs:
             exit 1
           fi
           grep -q "investigacionEndpoint()" .pages-github/investigadores/js/investigadores.app.js
+          grep -q "window.TITULOS_API_BASE" .pages-github/estudiantes/js/ia.providers.service.js
+          grep -q "return apiBase()+'/api/ia'" .pages-github/estudiantes/js/ia.providers.service.js
+          grep -q "window.addEventListener('pagehide',liberarAlSalir)" .pages-github/investigadores/js/investigadores.app.js
+          grep -q "'Content-Type':'text/plain;charset=UTF-8'" .pages-github/investigadores/js/investigadores.app.js
+          if grep -R -E "(fetch|sendBeacon)\\([[:space:]]*['\\\"]/api/" .pages-github --include='*.js'; then
+            echo "Se encontró una llamada API same-origin en GitHub Pages." >&2
+            exit 1
+          fi
           if grep -q -E "fetch\\(['\\\"]/api/investigadores|sendBeacon\\(['\\\"]/api/investigadores" .pages-github/investigadores/js/investigadores.app.js; then
             echo "Investigación todavía usa una ruta same-origin." >&2
             exit 1
