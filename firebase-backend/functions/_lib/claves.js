@@ -108,12 +108,12 @@ export async function requestClaves(env, action, data = {}, timeoutMs) {
       servicios,
       registros: servicios,
       total: servicios.length,
-      origen: 'FIREBASE_REST_CLOUDFLARE'
+      origen: 'FIREBASE_FUNCTIONS_GITHUB_PAGES'
     };
   }
   if (normalized === 'GUARDAR_SERVICIO') {
     throw new Error(
-      'Títulos y UTET se configuran en Cloudflare Pages; no se guardan endpoints ni tokens desde el navegador.'
+      'Títulos y UTET se administran desde el backend Firebase de GitHub Pages; no se guardan endpoints ni tokens desde el navegador.'
     );
   }
   if (normalized === 'CONSULTAR_ESTUDIANTE_REQUISITOS' || normalized === 'CONSULTAR_ACCESO_ESTUDIANTE') {
