@@ -317,7 +317,7 @@ if (!read('administrador/404.html').includes(projectBase + '/administrador/')) {
 }
 
 
-const forbiddenOrigins = ['pages.dev', 'workers.dev', 'cloudflare'];
+const forbiddenOrigins = ['pages.dev', 'workers.dev', 'cloudflare', 'script.google.com'];
 const malformedApiPatterns = [
   firebaseApiBase + 'https://',
   "base()+'" + firebaseApiBase,
