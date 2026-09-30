@@ -6,8 +6,8 @@ export const ALLOWED_ORIGINS = new Set([
   'https://titulos-administrador.pages.dev',
   'https://titulos-coordinadores.pages.dev',
   'https://titulos-investigadores.pages.dev',
-  'https://jeffer91.github.io',
   'https://coordinadores.pages.dev',
+  'https://jeffer91.github.io',
   'http://127.0.0.1:5500',
   'http://localhost:5500',
   'http://127.0.0.1:8788',
@@ -61,6 +61,9 @@ export function originAllowed(originValue) {
 }
 
 export function role(request) {
+  const verified = request && request.__verifiedRole ? text(request.__verifiedRole).toLowerCase() : '';
+  if (['admin','coordinator','investigator','student'].includes(verified)) return verified;
+
   const host = requestHost(request);
 
   if (isPagesHost(host, 'titulos-administrador.pages.dev')) return 'admin';
@@ -91,7 +94,7 @@ export function corsHeaders(request) {
   const origin = requestOrigin(request);
   const headers = {
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, X-Titulos-App',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Titulos-App',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin'
   };
