@@ -1,17 +1,13 @@
 /* Configuración Estudiantes: Requisitos consulta, Títulos operación y Claves configuración. */
 (function(window,document){
 'use strict';
-var hostActual=String(window.location&&window.location.hostname||'').toLowerCase();
-if(!window.TITULOS_API_BASE&&(hostActual==='github.io'||/\\.github\\.io$/.test(hostActual))){
-  window.TITULOS_API_BASE='https://titulos.pages.dev';
-}
 var CONFIG=Object.freeze({
   app:Object.freeze({nombre:'Estudiantes MVP',version:'2.1.0',entorno:'produccion',origenCaptura:'estudiantes-mvp',modoDiagnostico:true}),
   fuentes:Object.freeze({requisitos:'REQUISITOS_BDLOCAL_SYNC',titulos:'RESPALDO TITULOS APP',claves:'Claves'}),
   collections:Object.freeze({estudiantes:'REQUISITOS',ia:'CLAVES_IA',titulos:'TITULOS',titulosLogs:'TITULOS_LOGS',appConfig:'CLAVES'}),
   documentos:Object.freeze({sheetsConfig:'TITULOS',iaConfig:'IA',appMvpConfig:'ESTUDIANTES_MVP'}),
   proceso:Object.freeze({periodoIdFallback:'2026-02__2026-08',periodoLabelFallback:'Febrero 2026 a Agosto 2026',maxIntentos:1,propuestasObligatorias:3,titulosPorPropuesta:3}),
-  ia:Object.freeze({proveedoresOrden:Object.freeze(['gemini','groq','openrouter','cloudflare']),proveedorPrincipal:'gemini',timeoutMs:45000,temperatura:0.4,maxTokens:900}),
+  ia:Object.freeze({proveedoresOrden:Object.freeze(['groq','gemini','openrouter','mistral','cohere']),proveedorPrincipal:'groq',timeoutMs:45000,temperatura:0.4,maxTokens:900}),
   sheets:Object.freeze({accionEnvio:'ENVIO_ESTUDIANTE',accionPing:'PING',timeoutMs:45000}),
   ui:Object.freeze({pasos:Object.freeze(['consulta','datos','telegram','propuestas','resumen','enviar']),pasoInicial:'consulta'}),
   textos:Object.freeze({tituloApp:'Registro de Títulos Académicos',subtituloApp:'Consulta tus datos y registra tus propuestas de titulación.',mensajeConsulta:'Ingresa tu número de cédula para consultar tus datos académicos.',mensajeNoEncontrado:'No encontramos un estudiante con esa cédula. Revisa el número e intenta nuevamente.',mensajeRequisitosListo:'REQUISITOS_BDLOCAL_SYNC conectado correctamente.',mensajeRequisitosError:'No se pudo consultar REQUISITOS_BDLOCAL_SYNC.',mensajeCargando:'Cargando información, espera un momento...',mensajeTelegram:'Ingresa tu usuario de Telegram para continuar.',mensajeEnvioOk:'Tu registro fue enviado correctamente.',mensajeEnvioPendiente:'No se pudo conectar con RESPALDO TITULOS APP. El avance permanece guardado en este navegador.'})
