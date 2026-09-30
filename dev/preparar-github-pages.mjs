@@ -117,8 +117,12 @@ write('estudiantes/js/estudiante.trabajo-titulacion.route.js', studentRoute);
 
 let studentConsulta = read('estudiantes/js/estudiante.consulta.revision.js');
 studentConsulta = studentConsulta.replace(
-  /\n\s*if \(\/\\\.github\\\.io\$\/\.test\(host\)\) \{[\s\S]*?return consultarAccesoFirebaseDirecto\(identificacion\);\n\s*\}/,
-  ''
+  /\n\s*var FIREBASE_UTET_PUBLICO[\s\S]*?\n\s*function asegurarEstilosModal\(\)/,
+  '\n\n  function asegurarEstilosModal()'
+);
+studentConsulta = studentConsulta.replace(
+  /\n\s*var host = texto\(window\.location && window\.location\.hostname\)\.toLowerCase\(\);\n\n\s*if \(\/\\\.github\\\.io\$\/\.test\(host\)\) \{[\s\S]*?\n\s*\}\n/,
+  '\n'
 );
 studentConsulta = studentConsulta.replace(
   /\.catch\(function \(error\) \{[\s\S]*?return consultarAccesoFirebaseDirecto\(identificacion\)[\s\S]*?\n\s*\}\)\n\s*\.then\(function \(resultado\)/,
@@ -281,20 +285,26 @@ if (!studentBuilt.includes('estudiante.trabajo-titulacion.route.js')) {
 if (read('estudiantes/js/estudiante.trabajo-titulacion.route.js').includes("window.location.assign('/trabajo-titulacion/")) {
   throw new Error('GitHub Pages: Estudiantes conserva una ruta absoluta incompatible con Project Pages.');
 }
-if (!studentBuilt.includes('https://titulos.pages.dev')) {
-  throw new Error('GitHub Pages: falta backend configurado para Estudiantes.');
+if (!studentBuilt.includes(firebaseApiBase)) {
+  throw new Error('GitHub Pages: Estudiantes no apunta al backend Firebase propio.');
 }
-if (!workBuilt.includes('https://titulos.pages.dev')) {
-  throw new Error('GitHub Pages: falta backend configurado para Trabajo de Titulación.');
+if (!workBuilt.includes(firebaseApiBase)) {
+  throw new Error('GitHub Pages: Trabajo de Titulación no apunta al backend Firebase propio.');
 }
-if (!coordinatorBuilt.includes('https://titulos-coordinadores.pages.dev')) {
-  throw new Error('GitHub Pages: falta backend configurado para Coordinadores.');
+if (!coordinatorBuilt.includes(firebaseApiBase)) {
+  throw new Error('GitHub Pages: Coordinadores no apunta al backend Firebase propio.');
 }
 if (!investigatorBuilt.includes(firebaseApiBase + '/api/investigadores')) {
-  throw new Error('GitHub Pages: falta backend configurado para Investigación.');
+  throw new Error('GitHub Pages: Investigación no apunta al backend Firebase propio.');
 }
-if (!adminBuilt.includes('https://titulos-administrador.pages.dev')) {
-  throw new Error('GitHub Pages: falta backend configurado para Administrador.');
+if (!adminBuilt.includes(firebaseApiBase)) {
+  throw new Error('GitHub Pages: Administrador no apunta al backend Firebase propio.');
+}
+if (!coordinatorBuilt.includes('firebase-auth-client.js')) {
+  throw new Error('GitHub Pages: Coordinadores no carga Firebase Auth.');
+}
+if (!adminBuilt.includes('firebase-auth-client.js')) {
+  throw new Error('GitHub Pages: Administrador no carga Firebase Auth.');
 }
 if (!adminApiBuilt.includes('function esGitHubPages(){return false;}')) {
   throw new Error('GitHub Pages: el Administrador todavía está desviando operaciones a Firebase directo.');
@@ -323,8 +333,9 @@ while (scanStack.length) {
     }
   }
 }
-if (read('estudiantes/js/estudiante.consulta.revision.js').includes('consultarAccesoFirebaseDirecto(identificacion);')) {
-  throw new Error('GitHub Pages: Estudiantes todavía usa acceso directo a Firestore.');
+const studentConsultaBuilt = read('estudiantes/js/estudiante.consulta.revision.js');
+if (studentConsultaBuilt.includes('firestore.googleapis.com') || studentConsultaBuilt.includes('consultarAccesoFirebaseDirecto')) {
+  throw new Error('GitHub Pages: Estudiantes todavía contiene acceso directo a Firestore.');
 }
 
 console.log('[GitHub Pages] Sitio preparado en .pages-github.');
