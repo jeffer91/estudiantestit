@@ -153,20 +153,14 @@ write('trabajo-titulacion/js/trabajo-titulacion.js', workJs);
 injectApiBase('coordinadores/index.html', firebaseApiBase);
 injectApiBase('coordinadores/coordinador.html', firebaseApiBase);
 
-// Investigadores: usar el backend Firebase propio en fetch y sendBeacon.
+// Investigadores: el código fuente ya usa Firebase Functions y libera el bloqueo al cerrar.
 let investigatorJs = read('investigadores/js/investigadores.app.js');
-const investigatorHeader = "(function(window,document){'use strict';";
-if (!investigatorJs.includes(investigatorHeader)) {
-  throw new Error('No se encontró el encabezado de Investigación.');
+if (!investigatorJs.includes('function investigacionEndpoint()')) {
+  throw new Error('Investigación no define su endpoint Firebase.');
 }
-investigatorJs = investigatorJs.replace(
-  investigatorHeader,
-  investigatorHeader + "var INVESTIGACION_API_BASE=String(window.TITULOS_API_BASE||'" + firebaseApiBase + "').replace(/\\\/$/,'');function investigacionEndpoint(){return INVESTIGACION_API_BASE+'/api/investigadores';}"
-);
-investigatorJs = investigatorJs
-  .replaceAll("fetch('/api/investigadores'", "fetch(investigacionEndpoint()")
-  .replaceAll("navigator.sendBeacon('/api/investigadores'", "navigator.sendBeacon(investigacionEndpoint()");
-write('investigadores/js/investigadores.app.js', investigatorJs);
+if (investigatorJs.includes("fetch('/api/investigadores'") || investigatorJs.includes("sendBeacon('/api/investigadores'")) {
+  throw new Error('Investigación conserva una llamada same-origin.');
+}
 
 // Administrador: la interfaz permanece en GitHub Pages.
 // El Administrador usa exclusivamente el backend Firebase propio; no depende de Cloudflare.
@@ -323,7 +317,7 @@ if (!read('administrador/404.html').includes(projectBase + '/administrador/')) {
 }
 
 
-const forbiddenOrigins = ['pages.dev', 'workers.dev'];
+const forbiddenOrigins = ['pages.dev', 'workers.dev', 'cloudflare'];
 const malformedApiPatterns = [
   firebaseApiBase + 'https://',
   "base()+'" + firebaseApiBase,
@@ -341,7 +335,7 @@ while (scanStack.length) {
     if (!/\.(?:html|js|css|json)$/i.test(item.name)) continue;
     const value = fs.readFileSync(full, 'utf8');
     for (const forbidden of forbiddenOrigins) {
-      if (value.includes(forbidden)) {
+      if (value.toLowerCase().includes(forbidden.toLowerCase())) {
         throw new Error('GitHub Pages todavía contiene dependencia de ' + forbidden + ': ' + path.relative(output, full));
       }
     }
@@ -363,6 +357,7 @@ if (studentConsultaBuilt.includes('consultarAccesoFirebaseDirecto')) {
 const studentRequirementsBuilt = read('estudiantes/js/requisitos.estudiantes.service.js');
 const studentSheetsBuilt = read('estudiantes/js/sheets.service.js');
 const studentIaBuilt = read('estudiantes/js/ia.config.service.js');
+const studentIaProviderBuilt = read('estudiantes/js/ia.providers.service.js');
 const workJsBuilt = read('trabajo-titulacion/js/trabajo-titulacion.js');
 const coordinatorApiBuilt = read('coordinadores/js/coordinador.sheets.primary.js');
 
@@ -375,6 +370,12 @@ if (!studentSheetsBuilt.includes("apiBase() + '/api/titulos'")) {
 if (!studentIaBuilt.includes("apiBase() + '/api/ia")) {
   throw new Error('GitHub Pages: Estudiantes no conserva el resolver correcto para /api/ia.');
 }
+if (!studentIaProviderBuilt.includes('window.TITULOS_API_BASE') || !studentIaProviderBuilt.includes("return apiBase()+'/api/ia'")) {
+  throw new Error('GitHub Pages: el generador real de IA no usa TITULOS_API_BASE.');
+}
+if (studentIaProviderBuilt.includes('titulos.pages.dev') || studentIaProviderBuilt.includes('window.location.origin')) {
+  throw new Error('GitHub Pages: el generador real de IA conserva un origen heredado.');
+}
 if (!workJsBuilt.includes('fetch(apiBase()+path')) {
   throw new Error('GitHub Pages: Trabajo de Titulación no usa apiBase()+path.');
 }
@@ -383,6 +384,12 @@ if (!coordinatorApiBuilt.includes("return base()+'/api/titulos'") || !coordinato
 }
 if (!investigatorBuilt.includes('investigacionEndpoint()') || investigatorBuilt.includes("fetch('/api/investigadores'") || investigatorBuilt.includes("sendBeacon('/api/investigadores'")) {
   throw new Error('GitHub Pages: Investigación no resuelve correctamente fetch/sendBeacon.');
+}
+if (!investigatorBuilt.includes("window.addEventListener('pagehide',liberarAlSalir)") || investigatorBuilt.includes("window.addEventListener('beforeunload'")) {
+  throw new Error('GitHub Pages: Investigación no usa la liberación robusta por pagehide.');
+}
+if (!investigatorBuilt.includes("'Content-Type':'text/plain;charset=UTF-8'")) {
+  throw new Error('GitHub Pages: Investigación no tiene fallback keepalive simple.');
 }
 
 const backendIndex = fs.readFileSync(path.join(root, 'firebase-backend', 'functions', 'index.js'), 'utf8');
@@ -393,6 +400,21 @@ for (const route of [
 ]) {
   if (!backendIndex.includes("['" + route + "'")) {
     throw new Error('Backend Firebase: falta la ruta /api/' + route + '.');
+  }
+}
+
+const sameOriginApiPattern = /(?:fetch|sendBeacon)\s*\(\s*['"]\/api\//;
+const runtimeStack = [output];
+while (runtimeStack.length) {
+  const directory = runtimeStack.pop();
+  for (const item of fs.readdirSync(directory, { withFileTypes: true })) {
+    const full = path.join(directory, item.name);
+    if (item.isDirectory()) { runtimeStack.push(full); continue; }
+    if (!/\.js$/i.test(item.name)) continue;
+    const value = fs.readFileSync(full, 'utf8');
+    if (sameOriginApiPattern.test(value)) {
+      throw new Error('GitHub Pages conserva una llamada API same-origin: ' + path.relative(output, full));
+    }
   }
 }
 
