@@ -102,6 +102,7 @@ function patchDirectoryForFirebase(directory) {
     const value = patchLegacyText(fs.readFileSync(full, 'utf8'));
     fs.writeFileSync(full, value, 'utf8');
   }
+}
 
 // Estudiantes: conservar la pantalla original y agregar una entrada limpia /estudiantes/.
 // GitHub Pages carga además el enrutador que detecta Trabajo de Titulación.
@@ -143,7 +144,7 @@ write('trabajo-titulacion/index.html', workHtml);
 injectApiBase('trabajo-titulacion/index.html', firebaseApiBase);
 let workJs = read('trabajo-titulacion/js/trabajo-titulacion.js');
 const oldApiBase = "function apiBase(){var origin=text(window.location&&window.location.origin);if(['http://localhost:5500','http://127.0.0.1:5500'].indexOf(origin)>=0)return'http://127.0.0.1:8788';return origin&&origin!=='null'?origin:'https://titulos.pages.dev';}";
-const newApiBase = "function apiBase(){var forced=text(window.TITULOS_API_BASE||'');var origin=text(window.location&&window.location.origin);if(forced)return forced.replace(/\\\/$/,'');if(['http://localhost:5500','http://127.0.0.1:5500'].indexOf(origin)>=0)return'http://127.0.0.1:5001/titulos-ec2fa/us-central1/api';return '" + firebaseApiBase + "';}";
+const newApiBase = "function apiBase(){var forced=text(window.TITULOS_API_BASE||'');var origin=text(window.location&&window.location.origin);if(forced)return forced.replace(/\\\/$/,'');if(['http://localhost:5500','http://127.0.0.1:5500'].indexOf(origin)>=0)return'http://127.0.0.1:5001/titulos-ec2fa/us-central1';return '" + firebaseApiBase + "';}";
 if (!workJs.includes(oldApiBase)) throw new Error('No se pudo adaptar apiBase de Trabajo de Titulación.');
 workJs = workJs.replace(oldApiBase, newApiBase);
 write('trabajo-titulacion/js/trabajo-titulacion.js', workJs);
