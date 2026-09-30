@@ -5,9 +5,8 @@
   Funciones principales:
   - Centralizar la configuración general de coordinadores-mvp.
   - Mantener la app independiente de estudiantes-mvp.
-  - Definir endpoint de Google Sheets / Apps Script.
+  - Resolver el backend Firebase central del sistema.
   - Definir acciones, estados, hojas, columnas y textos base.
-  - Adaptarse a las hojas reales ya creadas: Envios, Coordinadores y Resoluciones.
   - No modificar ni romper la lógica actual de la app de estudiantes.
   - Exponer configuración global en window.CoordinadorMVPConfig.
 */
@@ -25,17 +24,8 @@
     }),
 
     sheets: Object.freeze({
-      /*
-        Pega aquí el endpoint del Apps Script publicado.
-
-        Debe ser una URL tipo:
-        https://script.google.com/macros/s/XXXXXXXXXXXX/exec
-
-        IMPORTANTE:
-        - Este endpoint puede ser el mismo que usa la app de estudiantes.
-        - La lógica de estudiante no se daña porque coordinadores enviará acciones distintas:
-          LISTAR_COORDINADORES, LISTAR_ENVIOS_COORDINADOR, APROBAR_ENVIO_COORDINADOR, etc.
-      */
+      /* Compatibilidad de nombres históricos. El endpoint real se obtiene de
+         window.TITULOS_API_BASE y apunta a Firebase Functions. */
       endpoint: '',
 
       timeoutMs: 45000,
@@ -127,8 +117,8 @@
       textoCargandoCoordinadores: 'Cargando coordinadores...',
       textoCargandoEnvios: 'Cargando estudiantes...',
       textoGuardandoRevision: 'Guardando validación...',
-      textoConexionOk: 'Conexión correcta con Google Sheets.',
-      textoConexionError: 'No se pudo conectar con Google Sheets.'
+      textoConexionOk: 'Conexión correcta con Firebase.',
+      textoConexionError: 'No se pudo conectar con Firebase.'
     }),
 
     /*
@@ -498,7 +488,7 @@
       comentarioDevolucion: 'Para devolver, escribe una observación para respaldo interno.',
       seleccionaCoordinador: 'Selecciona un coordinador antes de continuar.',
 
-      endpointFaltante: 'No hay endpoint configurado. Pega la URL del Apps Script en coordinador.config.js.',
+      endpointFaltante: 'No está disponible el backend Firebase de Titulación.',
       sinCoordinadores: 'No se encontraron coordinadores activos.',
       sinEnvios: 'No hay estudiantes para mostrar en esta vista.'
     })
@@ -540,7 +530,8 @@
   }
 
   function obtenerEndpoint() {
-    return obtener('sheets.endpoint', '');
+    var base = String(window.TITULOS_API_BASE || '').trim().replace(/\/$/, '');
+    return base ? base + '/api/titulos' : '';
   }
 
   function hayEndpointConfigurado() {
