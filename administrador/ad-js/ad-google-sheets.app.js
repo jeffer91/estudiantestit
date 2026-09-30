@@ -357,38 +357,13 @@
   function probarIA(id){
     var proveedor=state.proveedores.find(function(item){return item.id===id;});
     var nombre=texto(proveedor&&proveedor.nombre)||id;
-    var key='';
-    var keyInput=$('ad-ia-credencial');
-    var editingId=texto($('ad-ia-id')&&$('ad-ia-id').value);
-    var storageKey='ad-ia-temporal:'+id;
-
-    if(editingId===id&&keyInput)key=texto(keyInput.value);
-    if(!key){
-      try{key=texto(sessionStorage.getItem(storageKey));}catch(_error){}
-    }
-    if(!key){
-      key=texto(window.prompt(
-        'Ingresa una API key temporal para probar '+nombre+'.\n\n'+
-        'La clave se usará solo para esta prueba y no se guardará en Firebase.'
-      ));
-    }
-    if(!key){
-      mostrarDiagnosticoIA(
-        nombre,
-        'Prueba cancelada. Para probar '+nombre+' desde GitHub Pages se necesita una API key temporal.',
-        false
-      );
-      return;
-    }
-    try{sessionStorage.setItem(storageKey,key);}catch(_error){}
-
     busy(true,'Probando IA...');
-    api().probarIA(id,'Responde únicamente: conexión correcta.',key)
+    api().probarIA(id,'Responde únicamente: conexión correcta.')
       .then(function(r){
         var latencia=Number(r.latencyMs||0);
         mostrarDiagnosticoIA(
           nombre,
-          'Conexión correcta.'+(latencia?' Tiempo de respuesta: '+latencia+' ms.':''),
+          'Conexión correcta mediante el backend Firebase.'+(latencia?' Tiempo de respuesta: '+latencia+' ms.':''),
           true
         );
         return cargarIA();
@@ -396,10 +371,8 @@
       .catch(function(error){
         var diagnostico=traducirDiagnosticoIA(error);
         var bajo=texto(mensaje(error)).toLowerCase();
-        var pago=bajo.indexOf('payment required')>=0||bajo.indexOf('billing')>=0||bajo.indexOf('insufficient balance')>=0;
-        if(pago){
+        if(bajo.indexOf('payment required')>=0||bajo.indexOf('billing')>=0||bajo.indexOf('insufficient balance')>=0){
           diagnostico+=' Este proveedor no cumple la regla de uso gratuito para la aplicación.';
-          try{sessionStorage.removeItem(storageKey);}catch(_error){}
         }
         mostrarDiagnosticoIA(nombre,diagnostico,false);
         return cargarIA();
