@@ -414,12 +414,14 @@ function minimumStudent(document, cedula, periodOrIncludePhone, includePhone) {
     periodo: periodLabel,
     sede,
     Sede: sede,
-    correoInstitucional: emailInstitutional,
-    CorreoInstitucional: emailInstitutional,
-    correoPersonal: emailPersonal,
-    CorreoPersonal: emailPersonal,
-    celular: phone,
-    Celular: phone,
+    ...(phoneRequested ? {
+      correoInstitucional: emailInstitutional,
+      CorreoInstitucional: emailInstitutional,
+      correoPersonal: emailPersonal,
+      CorreoPersonal: emailPersonal,
+      celular: phone,
+      Celular: phone
+    } : {}),
     fuente: 'FIREBASE_UTET',
     fuentePeriodo: text(period && period.source)
   };
