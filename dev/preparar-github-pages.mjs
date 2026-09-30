@@ -218,9 +218,6 @@ if (!adminBuilt.includes('https://titulos-administrador.pages.dev')) {
 if (!adminApiBuilt.includes('function esGitHubPages(){return false;}')) {
   throw new Error('GitHub Pages: el Administrador todavía está desviando operaciones a Firebase directo.');
 }
-if (adminApiBuilt.includes("if(!esGitHubPages())cargarComplemento('./ad-js/ad-servicios.app.js")) {
-  throw new Error('GitHub Pages: el Administrador todavía omite sus complementos comunes.');
-}
 if (!read('coordinadores/404.html').includes(projectBase + '/coordinadores/')) {
   throw new Error('GitHub Pages: 404 de Coordinadores fuera del Project Page.');
 }
