@@ -63,6 +63,10 @@ jobs:
             exit 1
           fi
           grep -q "investigacionEndpoint()" .pages-github/investigadores/js/investigadores.app.js
+          grep -q 'id="activationInput"' .pages-github/investigadores/index.html
+          grep -q "codigoActivacion" .pages-github/investigadores/js/investigadores.app.js
+          grep -q "Generar código" .pages-github/administrador/ad-js/ad-google-sheets.app.js
+          grep -q "codigoActivacion" .pages-github/administrador/ad-js/ad-google-sheets.app.js
           grep -q "window.TITULOS_API_BASE" .pages-github/estudiantes/js/ia.providers.service.js
           grep -q "return apiBase()+'/api/ia'" .pages-github/estudiantes/js/ia.providers.service.js
           grep -q "window.addEventListener('pagehide',liberarAlSalir)" .pages-github/investigadores/js/investigadores.app.js
