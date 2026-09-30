@@ -1,5 +1,5 @@
 import { getPublicStatus, requestClaves, runService } from '../_lib/claves.js';
-import { commitDocuments, getDocument, nowIso } from '../_lib/firestore-fixed.js';
+import { commitDocuments, getDocument, nowIso, queryEqual } from '../_lib/firestore-fixed.js';
 import { corsHeaders, jsonReply, normalizeAction, readJson, rejectUnknownOrigin, role, text } from '../_lib/http.js';
 
 const ACCESS_ACTION = 'CONSULTAR_ACCESO_ESTUDIANTE';
@@ -67,6 +67,120 @@ const LIST_TTL = new Map([
   ['LISTAR_ENVIOS_COORDINADOR', 60 * 1000],
   ['LISTAR_ENVIOS_POR_CARRERA', 60 * 1000]
 ]);
+
+const COORDINATOR_RESTRICTED = new Set([
+  'LISTAR_ENVIOS_COORDINADOR',
+  'LISTAR_ENVIOS_POR_CARRERA',
+  'APROBAR_ENVIO_COORDINADOR',
+  'DEVOLVER_ENVIO_COORDINADOR',
+  'GUARDAR_REVISION_COORDINADOR',
+  'GUARDAR_RESOLUCION',
+  'MOVER_DEVUELTO_COORDINADOR',
+  'GUARDAR_LOG'
+]);
+const COORDINATOR_WRITE = new Set([
+  'APROBAR_ENVIO_COORDINADOR',
+  'DEVOLVER_ENVIO_COORDINADOR',
+  'GUARDAR_REVISION_COORDINADOR',
+  'GUARDAR_RESOLUCION',
+  'MOVER_DEVUELTO_COORDINADOR'
+]);
+
+function normalCareer(value) {
+  return text(value).toLowerCase().normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function trustedCoordinatorCareers(user) {
+  return new Set(
+    (user && Array.isArray(user.carreras) ? user.carreras : [])
+      .map(normalCareer)
+      .filter(Boolean)
+  );
+}
+
+function submissionCareer(row) {
+  return normalCareer(row && (
+    row.carrera || row.carreraNombre || row.nombreCarrera || row.NombreCarrera
+  ));
+}
+
+function looksLikeSubmission(row) {
+  return Boolean(
+    row && typeof row === 'object' &&
+    (
+      row.envioId || row.idRegistro || row.cedula || row.numeroIdentificacion ||
+      row.titulo1 || row.titulo2 || row.titulo3
+    )
+  );
+}
+
+function filterCoordinatorResult(value, allowedCareers) {
+  if (Array.isArray(value)) {
+    const containsSubmissions = value.some(looksLikeSubmission);
+    if (containsSubmissions) {
+      return value
+        .filter((row) => allowedCareers.has(submissionCareer(row)))
+        .map((row) => filterCoordinatorResult(row, allowedCareers));
+    }
+    return value.map((item) => filterCoordinatorResult(item, allowedCareers));
+  }
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, child]) => [key, filterCoordinatorResult(child, allowedCareers)])
+  );
+}
+
+function sameRequestedPeriod(row, payload) {
+  const requested = text(payload.periodoId || payload.periodoLabel || payload.periodo).toLowerCase();
+  if (!requested) return true;
+  const values = [
+    row && row.periodoId,
+    row && row.periodoLabel,
+    row && row.periodoNombre,
+    row && row.periodo
+  ].map((value) => text(value).toLowerCase()).filter(Boolean);
+  return values.includes(requested);
+}
+
+async function assertCoordinatorWriteAccess(payload, user, env) {
+  if (!user) return;
+  const allowedCareers = trustedCoordinatorCareers(user);
+  if (!allowedCareers.size) {
+    const error = new Error('Tu usuario no tiene carreras asignadas para revisión.');
+    error.status = 403;
+    throw error;
+  }
+
+  const envioId = text(payload.envioId || payload.idRegistro || payload.id || payload._id);
+  let candidates = [];
+  if (envioId) {
+    const row = await getDocument('TITULOS', 'envios', envioId, env);
+    if (row) candidates = [row];
+  } else {
+    const cedula = normalizeCedula(payload.cedula || payload.numeroIdentificacion || payload.identificacion);
+    if (cedula) {
+      candidates = await queryEqual('TITULOS', 'envios', 'cedula', cedula, 100, env);
+      candidates = candidates.filter((row) => sameRequestedPeriod(row, payload));
+    }
+  }
+
+  if (!candidates.length) {
+    const error = new Error('No se pudo verificar el expediente que intentas modificar.');
+    error.status = 403;
+    throw error;
+  }
+
+  const accessible = candidates.filter((row) => allowedCareers.has(submissionCareer(row)));
+  if (accessible.length !== candidates.length) {
+    const error = new Error('Este expediente no pertenece a una carrera asignada a tu usuario.');
+    error.status = 403;
+    throw error;
+  }
+}
 
 const CACHE_LIMIT = 400;
 const verificationCache = new Map();
@@ -990,6 +1104,7 @@ export async function onRequest({ request, env }) {
     const input = await readJson(request);
     const action = normalizeAction(input.accion || input.action || input.tipo);
     const userRole = role(request);
+    const verifiedUser = request && request.__verifiedUser ? request.__verifiedUser : null;
 
     if (!action) throw new Error('No se indicó una acción.');
     if (!allowed(userRole, action)) {
@@ -1020,6 +1135,42 @@ export async function onRequest({ request, env }) {
     delete payload.token;
     delete payload.acceso;
 
+    /* En Firebase Functions la identidad del coordinador viene de Firebase Auth.
+       No confiamos en un nombre/carrera enviado por el navegador cuando existe
+       una sesión verificada. La ruta Cloudflare heredada sigue funcionando sin
+       este bloque durante la transición. */
+    if (userRole === 'coordinator' && verifiedUser) {
+      const trustedCareers = Array.isArray(verifiedUser.carreras)
+        ? verifiedUser.carreras.map(text).filter(Boolean)
+        : [];
+      const allowedCareers = trustedCoordinatorCareers(verifiedUser);
+
+      payload.coordinadorId = text(verifiedUser.coordinadorId || verifiedUser.uid);
+      payload.idCoordinador = payload.coordinadorId;
+      payload.coordinador = text(verifiedUser.nombre || verifiedUser.email);
+      payload.nombreCoordinador = payload.coordinador;
+
+      if (COORDINATOR_RESTRICTED.has(action)) {
+        if (!allowedCareers.size) {
+          return jsonReply(request, {
+            ok: false,
+            mensaje: 'Tu usuario no tiene carreras asignadas para revisión.'
+          }, 403);
+        }
+        payload.carreras = trustedCareers;
+        if (payload.carrera && !allowedCareers.has(normalCareer(payload.carrera))) {
+          return jsonReply(request, {
+            ok: false,
+            mensaje: 'La carrera solicitada no está asignada a tu usuario.'
+          }, 403);
+        }
+      }
+
+      if (COORDINATOR_WRITE.has(action)) {
+        await assertCoordinatorWriteAccess(payload, verifiedUser, env);
+      }
+    }
+
     /* La escritura es la autoridad final. No hacemos una segunda consulta
        obligatoria aquí antes de ENVIO_ESTUDIANTE: el servicio de Firebase
        valida duplicados/reenvíos dentro de la misma ruta que va a guardar.
@@ -1043,6 +1194,10 @@ export async function onRequest({ request, env }) {
       );
     }
 
+    if (userRole === 'coordinator' && verifiedUser && ['LISTAR_ENVIOS_COORDINADOR','LISTAR_ENVIOS_POR_CARRERA'].includes(action)) {
+      result = filterCoordinatorResult(result, trustedCoordinatorCareers(verifiedUser));
+    }
+
     if (userRole === 'student' && action === 'ENVIO_ESTUDIANTE') {
       result = await registerStudentSubmission(payload, result, env);
     }
@@ -1056,6 +1211,19 @@ export async function onRequest({ request, env }) {
       result = await registerReturnToStudent(payload, result, env, userRole);
       result = await registerAdminFinalCorrection(payload, result, env);
     }
+    if (userRole === 'coordinator' && verifiedUser && action === 'LISTAR_COORDINADORES') {
+      const id = text(verifiedUser.coordinadorId || verifiedUser.uid);
+      const nombre = text(verifiedUser.nombre || verifiedUser.email).toLowerCase();
+      const filterOwn = (items) => (Array.isArray(items) ? items : []).filter((item) => {
+        const itemId = text(item && (item.id || item.idRegistro || item.coordinadorId));
+        const itemName = text(item && (item.nombre || item.coordinador)).toLowerCase();
+        return (id && itemId === id) || (nombre && itemName === nombre);
+      });
+      if (result && typeof result === 'object') {
+        if (Array.isArray(result.coordinadores)) result.coordinadores = filterOwn(result.coordinadores);
+        if (Array.isArray(result.registros)) result.registros = filterOwn(result.registros);
+      }
+    }
     if (WRITE_ACTIONS.has(action)) clearCaches();
     return jsonReply(request, result);
   } catch (error) {
@@ -1063,6 +1231,6 @@ export async function onRequest({ request, env }) {
       ok: false,
       servicio: 'TITULOS',
       mensaje: error.message || String(error)
-    }, error && error.duplicado ? 409 : 502);
+    }, Number(error && error.status) || (error && error.duplicado ? 409 : 502));
   }
 }
