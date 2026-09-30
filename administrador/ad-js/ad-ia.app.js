@@ -6,7 +6,7 @@ Función:
 - Listar, agregar, editar, activar y desactivar proveedores.
 - Mostrar claramente si cada proveedor tiene una clave guardada.
 - Conservar la clave al editar sin volver a mostrarla.
-- Crear el catálogo inicial de 10 opciones.
+- Gestionar el catálogo aprobado de 5 proveedores gratuitos.
 - Probar una IA o todas las IA activas.
 ========================================================= */
 
@@ -46,23 +46,12 @@ Función:
   }
 
   function prioridadFallback(id){
-    var mapa = {
-      gemini:1,
-      groq:2,
-      cerebras:3,
-      cloudflare:4,
-      nvidia:5,
-      github_models:6,
-      openrouter:7,
-      openrouter_qwen:8,
-      openrouter_deepseek:9,
-      huggingface:10
-    };
-    return mapa[texto(id).toLowerCase()] || 999;
+    var mapa={groq:1,gemini:2,openrouter:3,mistral:4,cohere:5};
+    return mapa[texto(id).toLowerCase()]||999;
   }
 
   function tieneClave(proveedor){
-    return Boolean(texto(proveedor && (proveedor.apiKey || proveedor.key)));
+    return Boolean(proveedor && (proveedor.apiKeyConfigurada===true || texto(proveedor.apiKey || proveedor.key)));
   }
 
   function claveEnmascarada(proveedor){
@@ -225,8 +214,7 @@ Función:
       '<div class="ad-card">',
       '  <div class="ad-ia-toolbar">',
       '    <div class="ad-ia-toolbar__buttons">',
-      '      <button class="ad-btn ad-btn-primary" id="ad-ia-agregar" type="button">Agregar IA</button>',
-      '      <button class="ad-btn ad-btn-secondary" id="ad-ia-catalogo" type="button">Cargar catálogo de 10</button>',
+      '      <button class="ad-btn ad-btn-secondary" id="ad-ia-catalogo" type="button">Cargar catálogo de 5</button>',
       '      <button class="ad-btn ad-btn-secondary" id="ad-ia-probar-todas" type="button">Probar todas las activas</button>',
       '      <button class="ad-btn ad-btn-secondary" id="ad-ia-recargar" type="button">Recargar</button>',
       '    </div>',
@@ -261,8 +249,7 @@ Función:
       '      <label>Tipo<select id="ad-ia-tipo" required>',
       '        <option value="openai-compatible">OpenAI compatible</option>',
       '        <option value="gemini">Gemini</option>',
-      '        <option value="cloudflare">Cloudflare</option>',
-      '        <option value="generic">Genérico</option>',
+      '        <option value="cohere">Cohere</option>',
       '      </select></label>',
       '      <label class="ad-ia-field-double">Endpoint<input id="ad-ia-endpoint" type="url" placeholder="https://..."></label>',
       '      <label>Modelo<input id="ad-ia-modelo" type="text" placeholder="modelo-gratuito"></label>',
@@ -280,7 +267,7 @@ Función:
       '    <div class="ad-ia-actions">',
       '      <button class="ad-btn ad-btn-primary" type="submit">Guardar proveedor</button>',
       '      <button class="ad-btn ad-btn-secondary" type="button" id="ad-ia-form-probar">Guardar y probar</button>',
-      '      <button class="ad-btn ad-btn-secondary" type="button" id="ad-ia-form-limpiar">Limpiar</button>',
+      '      <button class="ad-btn ad-btn-secondary" type="button" id="ad-ia-form-limpiar">Cancelar</button>',
       '    </div>',
       '  </form>',
       '</div>'
@@ -300,12 +287,11 @@ Función:
   }
 
   function conectarEventos(){
-    $("ad-ia-agregar").addEventListener("click",function(){ abrirFormulario(null); });
     $("ad-ia-catalogo").addEventListener("click",crearCatalogo);
     $("ad-ia-probar-todas").addEventListener("click",probarTodas);
     $("ad-ia-recargar").addEventListener("click",function(){ cargar(); });
     $("ad-ia-form-cerrar").addEventListener("click",cerrarFormulario);
-    $("ad-ia-form-limpiar").addEventListener("click",function(){ abrirFormulario(null); });
+    $("ad-ia-form-limpiar").addEventListener("click",cerrarFormulario);
     $("ad-ia-form-probar").addEventListener("click",guardarYProbar);
     $("ad-ia-form").addEventListener("submit",function(evento){
       evento.preventDefault();
@@ -333,7 +319,7 @@ Función:
       setEstado(
         estado.proveedores.length
           ? "Proveedores cargados correctamente."
-          : "No hay proveedores. Presiona “Cargar catálogo de 10”.",
+          : "No hay proveedores. Presiona “Cargar catálogo de 5”.",
         estado.proveedores.length ? "success" : "warning"
       );
     }).catch(function(error){
@@ -420,7 +406,7 @@ Función:
 
     if (tieneClave(proveedor)) {
       ayuda.classList.add("is-saved");
-      ayuda.textContent = "Clave guardada correctamente: " + claveEnmascarada(proveedor) + ". Déjala vacía para conservarla.";
+      ayuda.textContent = "Clave guardada de forma segura. Déjala vacía para conservarla.";
       input.placeholder = "Dejar vacío para conservar la clave guardada";
     } else {
       ayuda.textContent = "Este proveedor todavía no tiene una clave guardada.";
@@ -532,7 +518,7 @@ Función:
       setEstado(
         resultado.totalCreados
           ? "Catálogo actualizado. Proveedores nuevos: " + resultado.totalCreados + "."
-          : "Los 10 proveedores del catálogo ya existen.",
+          : "Los 5 proveedores del catálogo ya existen.",
         "success"
       );
       return cargar(true);
