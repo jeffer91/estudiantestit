@@ -1,6 +1,11 @@
-/* Proveedores de IA almacenados en Firebase Títulos. */
+/* Proveedores de IA almacenados en Firebase Títulos.
+   Las credenciales nuevas se guardan en Google Secret Manager.
+   Firestore conserva únicamente configuración y el nombre del secreto. */
 
+import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
 import { listCollection, nowIso, setDocument, slug, text } from './firestore.js';
+
+const secretClient = new SecretManagerServiceClient();
 
 function active(provider) {
   return provider && provider.activo !== false && text(provider.estado || 'ACTIVO').toUpperCase() !== 'INACTIVO';
@@ -10,33 +15,105 @@ function providerId(value) {
   return slug(value).replace(/[^a-z0-9_-]/g, '');
 }
 
+function projectId() {
+  if (text(process.env.GCLOUD_PROJECT)) return text(process.env.GCLOUD_PROJECT);
+  if (text(process.env.GOOGLE_CLOUD_PROJECT)) return text(process.env.GOOGLE_CLOUD_PROJECT);
+  try {
+    const config = JSON.parse(process.env.FIREBASE_CONFIG || '{}');
+    if (text(config.projectId)) return text(config.projectId);
+  } catch (_error) {}
+  return 'titulos-ec2fa';
+}
+
+function providerSecretId(idValue) {
+  const id = providerId(idValue);
+  if (!id) throw new Error('Proveedor de IA inválido.');
+  return ('titulos-ia-' + id).replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 250);
+}
+
+function secretResource(secretId) {
+  return `projects/${projectId()}/secrets/${secretId}`;
+}
+
+async function ensureSecret(secretId) {
+  try {
+    await secretClient.getSecret({ name: secretResource(secretId) });
+  } catch (error) {
+    const code = Number(error && error.code);
+    if (code !== 5) throw error;
+    await secretClient.createSecret({
+      parent: `projects/${projectId()}`,
+      secretId,
+      secret: { replication: { automatic: {} } }
+    });
+  }
+  return secretId;
+}
+
+async function addCredentialVersion(secretId, credential) {
+  const value = text(credential);
+  const id = text(secretId);
+  if (!id || !value) return id;
+  await secretClient.addSecretVersion({
+    parent: secretResource(id),
+    payload: { data: Buffer.from(value, 'utf8') }
+  });
+  return id;
+}
+
+async function saveCredentialSecret(id, credential, existingSecretId = '') {
+  const value = text(credential);
+  if (!value) return text(existingSecretId);
+  const secretId = text(existingSecretId) || providerSecretId(id);
+  if (!text(existingSecretId)) await ensureSecret(secretId);
+  await addCredentialVersion(secretId, value);
+  return secretId;
+}
+
+async function readCredentialSecret(secretId) {
+  const id = text(secretId);
+  if (!id) return '';
+  const [version] = await secretClient.accessSecretVersion({
+    name: secretResource(id) + '/versions/latest'
+  });
+  return text(version && version.payload && version.payload.data
+    ? Buffer.from(version.payload.data).toString('utf8')
+    : '');
+}
+
 export async function listProviders(includeInactive = false, env) {
   const rows = await listCollection('TITULOS', 'ia', { maxDocuments: 500 }, env);
   const providers = rows
-    .map((row) => ({
-      ...row,
-      id: providerId(row.id || row.proveedor || row.nombre),
-      proveedor: providerId(row.id || row.proveedor || row.nombre),
-      nombre: text(row.nombre || row.name || row.id),
-      tipo: text(row.tipo || 'openai-compatible'),
-      activo: active(row),
-      estado: active(row) ? 'ACTIVO' : 'INACTIVO',
-      prioridad: Number(row.prioridad || 999),
-      endpoint: text(row.endpoint),
-      modelo: text(row.modelo || row.model),
-      model: text(row.model || row.modelo),
-      credencial: text(row.credencial || row.apiKey || row.token),
-      timeoutMs: Number(row.timeoutMs || 45000),
-      maxTokens: Number(row.maxTokens || 3000),
-      temperatura: Number(row.temperatura ?? 0.3),
-      descripcion: text(row.descripcion),
-      apiKeyConfigurada: Boolean(text(row.credencial || row.apiKey || row.token)),
-      endpointConfigurado: Boolean(text(row.endpoint)),
-      ultimaPruebaOk: row.ultimaPruebaOk === true,
-      ultimaPruebaEn: text(row.ultimaPruebaEn),
-      ultimaLatenciaMs: Number(row.ultimaLatenciaMs || 0),
-      ultimoError: text(row.ultimoError)
-    }))
+    .map((row) => {
+      const id = providerId(row.id || row.proveedor || row.nombre);
+      const legacyCredential = text(row.credencial || row.apiKey || row.token);
+      const secretId = text(row.secretId || row.secretName || row.secretoId);
+      return {
+        ...row,
+        id,
+        proveedor: id,
+        nombre: text(row.nombre || row.name || row.id),
+        tipo: text(row.tipo || 'openai-compatible'),
+        activo: active(row),
+        estado: active(row) ? 'ACTIVO' : 'INACTIVO',
+        prioridad: Number(row.prioridad || 999),
+        endpoint: text(row.endpoint),
+        modelo: text(row.modelo || row.model),
+        model: text(row.model || row.modelo),
+        credencial: legacyCredential,
+        secretId,
+        timeoutMs: Number(row.timeoutMs || 45000),
+        maxTokens: Number(row.maxTokens || 3000),
+        temperatura: Number(row.temperatura ?? 0.3),
+        descripcion: text(row.descripcion),
+        apiKeyConfigurada: row.secretConfigurado === true || Boolean(legacyCredential),
+        endpointConfigurado: Boolean(text(row.endpoint)),
+        ultimaPruebaOk: row.ultimaPruebaOk === true,
+        ultimaPruebaEn: text(row.ultimaPruebaEn),
+        ultimaLatenciaMs: Number(row.ultimaLatenciaMs || 0),
+        ultimoError: text(row.ultimoError)
+      };
+    })
     .filter((provider) => provider.id && (includeInactive || provider.activo));
 
   providers.sort((a, b) => a.prioridad - b.prioridad || a.nombre.localeCompare(b.nombre, 'es'));
@@ -46,16 +123,32 @@ export async function listProviders(includeInactive = false, env) {
 export async function saveProvider(provider = {}, env) {
   const id = providerId(provider.id || provider.proveedor || provider.nombre);
   if (!id) throw new Error('El proveedor de IA necesita un identificador.');
+
   const current = (await listProviders(true, env)).find((item) => item.id === id) || {};
-  const credential = text(provider.credencial || provider.apiKey || provider.token) || current.credencial || '';
-  const activeValue = provider.activo === false || text(provider.estado).toUpperCase() === 'INACTIVO' ? false : true;
+  const incomingCredential = text(provider.credencial || provider.apiKey || provider.token);
+  const credentialToStore = incomingCredential || (!text(current.secretId) ? text(current.credencial) : '');
+  let secretId = text(current.secretId);
+
+  if (credentialToStore) {
+    secretId = await saveCredentialSecret(id, credentialToStore, secretId);
+  }
+
+  const activeValue = provider.activo === false || text(provider.estado).toUpperCase() === 'INACTIVO'
+    ? false
+    : true;
 
   const saved = await setDocument('TITULOS', 'ia', id, {
     nombre: text(provider.nombre || provider.name || current.nombre || id),
     tipo: text(provider.tipo || current.tipo || 'openai-compatible'),
     endpoint: text(provider.endpoint || current.endpoint),
     modelo: text(provider.modelo || provider.model || current.modelo),
-    credencial: credential,
+    secretId,
+    secretConfigurado: incomingCredential
+      ? true
+      : current.apiKeyConfigurada === true,
+    credencial: null,
+    apiKey: null,
+    token: null,
     estado: activeValue ? 'ACTIVO' : 'INACTIVO',
     activo: activeValue,
     prioridad: Number(provider.prioridad || current.prioridad || 999),
@@ -65,7 +158,59 @@ export async function saveProvider(provider = {}, env) {
     descripcion: text(provider.descripcion || current.descripcion),
     actualizadoEn: nowIso()
   }, { merge: true }, env);
-  return { ...saved, id };
+
+  return {
+    ...saved,
+    id,
+    secretId,
+    apiKeyConfigurada: incomingCredential
+      ? true
+      : current.apiKeyConfigurada === true
+  };
+}
+
+export async function migrateProviderSecrets(env) {
+  const providers = await listProviders(true, env);
+  let migrated = 0;
+  let cleaned = 0;
+  let provisioned = 0;
+
+  for (const provider of providers) {
+    const legacy = text(provider.credencial);
+    let secretId = text(provider.secretId);
+    if (!secretId) {
+      secretId = providerSecretId(provider.id);
+      await ensureSecret(secretId);
+      provisioned += 1;
+    }
+
+    let configured = provider.apiKeyConfigurada === true;
+    if (legacy) {
+      await addCredentialVersion(secretId, legacy);
+      migrated += 1;
+      configured = true;
+    }
+
+    await setDocument('TITULOS', 'ia', provider.id, {
+      secretId,
+      secretConfigurado: configured,
+      credencial: null,
+      apiKey: null,
+      token: null,
+      actualizadoEn: nowIso()
+    }, { merge: true }, env);
+
+    if (legacy) cleaned += 1;
+  }
+
+  return {
+    ok: true,
+    total: providers.length,
+    migrados: migrated,
+    secretosProvisionados: provisioned,
+    limpiadosFirestore: cleaned,
+    mensaje: `Secret Manager listo para ${providers.length} proveedores. ${migrated} credenciales migradas desde Firestore.`
+  };
 }
 
 export async function toggleProvider(idValue, activeValue, env) {
@@ -147,7 +292,7 @@ async function callOpenAiCompatible(provider, prompt, options) {
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${provider.credencial}`,
-      'HTTP-Referer': 'https://titulos.pages.dev',
+      'HTTP-Referer': 'https://jeffer91.github.io/estudiantestit',
       'X-Title': 'IA de Titulación'
     },
     body: JSON.stringify({
@@ -175,15 +320,21 @@ export async function generateWithProvider(providerIdValue, promptValue, options
   const provider = providers.find((item) => item.id === id);
   if (!provider) throw new Error('No se encontró el proveedor de IA.');
   if (!provider.activo && options.allowInactive !== true) throw new Error('El proveedor de IA está inactivo.');
+
   const prompt = text(promptValue);
   if (!prompt) throw new Error('No se recibió el contenido de la solicitud.');
+
+  const credential = text(provider.secretId)
+    ? await readCredentialSecret(provider.secretId)
+    : text(provider.credencial);
+  const runtimeProvider = { ...provider, credencial: credential };
   const started = Date.now();
 
   try {
-    const signature = `${provider.tipo} ${provider.endpoint} ${provider.nombre}`.toLowerCase();
+    const signature = `${runtimeProvider.tipo} ${runtimeProvider.endpoint} ${runtimeProvider.nombre}`.toLowerCase();
     const output = /gemini|generativelanguage/.test(signature)
-      ? await callGemini(provider, prompt, options)
-      : await callOpenAiCompatible(provider, prompt, options);
+      ? await callGemini(runtimeProvider, prompt, options)
+      : await callOpenAiCompatible(runtimeProvider, prompt, options);
     const latencyMs = Date.now() - started;
     await setDocument('TITULOS', 'ia', provider.id, {
       ultimaPruebaOk: true,
