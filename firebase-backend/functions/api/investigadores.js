@@ -664,8 +664,23 @@ export async function onRequest({ request, env }) {
   }
 
   try {
-    const input = await readJson(request);
+    var contentType = text(request.headers.get('Content-Type')).toLowerCase();
+    var beaconText = contentType.indexOf('text/plain') >= 0;
+    var input;
+    if (beaconText) {
+      var raw = await request.text();
+      try {
+        input = raw ? JSON.parse(raw) : {};
+      } catch (_error) {
+        throw new Error('El cierre de Investigación envió un formato no válido.');
+      }
+    } else {
+      input = await readJson(request);
+    }
     const action = normalizeAction(input.accion || input.action);
+    if (beaconText && action !== 'LIBERAR_REVISION') {
+      return jsonReply(request, { ok: false, mensaje: 'Formato de cierre permitido únicamente para liberar una revisión.' }, 415);
+    }
     const payload = input.datos && typeof input.datos === 'object' ? input.datos : input;
     const userRole = role(request);
     if (!['investigator', 'admin'].includes(userRole)) {
