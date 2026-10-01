@@ -6,8 +6,8 @@
   <title>Registro de Títulos Académicos</title>
   <meta name="description" content="Formulario público para registrar propuestas de títulos académicos." />
   <link rel="icon" href="data:," />
-  <link rel="stylesheet" href="css/app.css?v=2.5.1" />
-  <link rel="stylesheet" href="css/estudiante.consulta.revision.css?v=2.5.1" />
+  <link rel="stylesheet" href="css/app.css?v=2.5.2" />
+  <link rel="stylesheet" href="css/estudiante.consulta.revision.css?v=2.5.2" />
 </head>
 <body>
   <div id="memoriaPopup" class="memory-modal" hidden role="dialog" aria-modal="true" aria-labelledby="memoriaPopupTitulo">
@@ -94,21 +94,20 @@
     <section class="card step-panel" data-step-panel="telegram" hidden>
       <div class="section-heading">
         <p class="section-kicker">Paso 3</p>
-        <h2>Registra tu Telegram</h2>
-        <p>Registra primero tu Telegram en el sistema institucional y luego confirma aquí el mismo usuario.</p>
+        <h2>Registro de Telegram obligatorio</h2>
+        <p>El registro de Telegram es obligatorio y constituye un requisito para continuar con el proceso de titulación.</p>
       </div>
       <form id="formTelegram" class="form-grid">
         <div class="telegram-register-card field--full">
           <div>
-            <strong>Registro institucional de Telegram</strong>
-            <p>Abre el Sistema de Cronogramas Académicos, ingresa tu cédula y completa allí el registro de Telegram. Después regresa a esta pantalla y continúa.</p>
+            <strong>Requisito obligatorio</strong>
+            <p>Realiza el registro en el Sistema de Cronogramas Académicos antes de continuar.</p>
           </div>
           <a class="btn btn--primary" href="https://registroinduccionesitsqmet.netlify.app/cronogramas/vista/cedula-solicitud.html" target="_blank" rel="noopener noreferrer">Registrar Telegram</a>
         </div>
-        <div id="estadoTelegram" class="status-message field--full"></div>
         <div class="form-actions field--full">
           <button type="button" class="btn btn--ghost" data-accion="volver-paso" data-paso="datos">Volver</button>
-          <button type="submit" class="btn btn--primary">Continuar</button>
+          <button type="button" class="btn btn--primary" data-accion="ir-paso" data-paso="propuestas">Continuar</button>
         </div>
       </form>
     </section>
@@ -222,21 +221,21 @@
     </section>
   </main>
 
-  <script src="js/app.config.js?v=2.5.1"></script>
-  <script src="js/app.utils.js?v=2.5.1"></script>
-  <script src="js/requisitos.estudiantes.service.js?v=2.5.1"></script>
-  <script src="js/ia.config.service.js?v=2.5.1"></script>
-  <script src="js/titulos.cola.service.js?v=2.5.1"></script>
-  <script src="js/sheets.service.js?v=2.5.1"></script>
-  <script src="js/ia.prompt.service.js?v=2.5.1"></script>
-  <script src="js/ia.providers.service.js?v=2.5.1"></script>
-  <script src="js/ia.titulacion.service.js?v=2.5.1"></script>
-  <script src="js/estudiante.state.js?v=2.5.1"></script>
-  <script src="js/estudiante.ui.js?v=2.5.1"></script>
-  <script src="js/estudiante.modales.js?v=2.5.1"></script>
-  <script src="js/estudiante.memoria.service.js?v=2.5.1"></script>
-  <script src="js/estudiante.propuestas.paginacion.js?v=2.5.1"></script>
-  <script src="js/estudiante.app.js?v=2.5.1"></script>
-  <script src="js/estudiante.consulta.revision.js?v=2.5.1"></script>
+  <script src="js/app.config.js?v=2.5.2"></script>
+  <script src="js/app.utils.js?v=2.5.2"></script>
+  <script src="js/requisitos.estudiantes.service.js?v=2.5.2"></script>
+  <script src="js/ia.config.service.js?v=2.5.2"></script>
+  <script src="js/titulos.cola.service.js?v=2.5.2"></script>
+  <script src="js/sheets.service.js?v=2.5.2"></script>
+  <script src="js/ia.prompt.service.js?v=2.5.2"></script>
+  <script src="js/ia.providers.service.js?v=2.5.2"></script>
+  <script src="js/ia.titulacion.service.js?v=2.5.2"></script>
+  <script src="js/estudiante.state.js?v=2.5.2"></script>
+  <script src="js/estudiante.ui.js?v=2.5.2"></script>
+  <script src="js/estudiante.modales.js?v=2.5.2"></script>
+  <script src="js/estudiante.memoria.service.js?v=2.5.2"></script>
+  <script src="js/estudiante.propuestas.paginacion.js?v=2.5.2"></script>
+  <script src="js/estudiante.app.js?v=2.5.2"></script>
+  <script src="js/estudiante.consulta.revision.js?v=2.5.2"></script>
 </body>
 </html>
