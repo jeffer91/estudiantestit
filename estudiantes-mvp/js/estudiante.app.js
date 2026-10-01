@@ -8,7 +8,7 @@
   - Validar siempre la cédula y los nombres antes de continuar.
   - Recuperar títulos guardados después de validar la identidad.
   - Mantener desactivado el modal de recuperación de avance.
-  - Validar Telegram, propuestas y título favorito.
+  - Guiar el registro institucional de Telegram y validar propuestas y título favorito.
   - Activar IA de Titulación.
   - Guardar automáticamente el avance.
   - Enviar a Google Sheets y respaldar en Firebase.
@@ -1209,51 +1209,14 @@
   }
 
   function manejarTelegram(evento) {
-    var utils = obtenerUtils();
-    var ui = obtenerUI();
-    var state = obtenerState();
-
-    var input =
-      document.getElementById('telegramInput');
-
-    var validacion;
-
     evento.preventDefault();
-
-    validacion = utils.validarTelegram(
-      input ? input.value : ''
-    );
-
-    if (!validacion.ok) {
-      ui.mostrarEstado(
-        '#estadoTelegram',
-        validacion.mensaje,
-        'error'
-      );
-
-      ui.enfocar(
-        validacion.selector ||
-          '#telegramInput'
-      );
-
-      return;
-    }
-
-    state.setTelegram(validacion.data);
-    ui.pintarTelegram(validacion.data);
-
-    ui.mostrarEstado(
-      '#estadoTelegram',
-      'Telegram guardado correctamente.',
-      'success'
-    );
 
     guardarAvance({
       pasoActual: 'propuestas',
 
       propuestaActual:
-        state.obtenerPropuestaActual
-          ? state.obtenerPropuestaActual()
+        obtenerState().obtenerPropuestaActual
+          ? obtenerState().obtenerPropuestaActual()
           : 1
     });
 

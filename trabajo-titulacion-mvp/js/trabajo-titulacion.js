@@ -181,7 +181,7 @@
   function preload(envio){
     if(!envio)return;
     state.previous=envio;
-    if(envio.telegram)$('telegramInput').value=text(envio.telegram);
+    if(envio.telegram)state.telegram=text(envio.telegram);
     var existing=existingProposals(envio);
     [1,2,3].forEach(function(number){
       var item=existing.find(function(candidate){return candidate.number===number;});
@@ -237,9 +237,6 @@
   }
 
   function continueToProposals(){
-    var telegram=text($('telegramInput').value);
-    if(!/^@[A-Za-z][A-Za-z0-9_]{4,31}$/.test(telegram)){status('datosEstado','Ingresa un usuario de Telegram válido, por ejemplo: @usuario.','error');return;}
-    state.telegram=telegram;
     status('datosEstado','','info');
     showStep(3);
   }
