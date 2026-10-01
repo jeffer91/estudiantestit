@@ -43,6 +43,14 @@ function injectApiBase(relativePath, apiBase) {
     write(relativePath, html);
   }
 }
+function cacheBustLocalAssets(relativePath) {
+  let html = read(relativePath);
+  html = html.replace(
+    /((?:src|href)=(?:\"|')(?:js|css)\/[^\"'?]+)(?:\?[^\"']*)?((?:\"|'))/g,
+    '$1?v=github-' + buildId + '$2'
+  );
+  write(relativePath, html);
+}
 function injectRuntime(relativePath, options = {}) {
   let html = read(relativePath);
   const depth = relativePath.split('/').length - 1;
@@ -113,6 +121,7 @@ if (!studentHtml.includes('estudiante.trabajo-titulacion.route.js')) {
   );
   write('estudiantes/estudiante.html', studentHtml);
 }
+cacheBustLocalAssets('estudiantes/estudiante.html');
 fs.copyFileSync(path.join(output, 'estudiantes', 'estudiante.html'), path.join(output, 'estudiantes', 'index.html'));
 
 // Trabajo de Titulación: Firestore directo + rutas relativas compatibles con project pages.
@@ -124,6 +133,7 @@ if (!directWorkHtml.includes('firebase-direct-public.js')) {
   directWorkHtml = directWorkHtml.replace('</head>', '  <script src="../firebase-direct-public.js?v=github-' + buildId + '"></script>\n</head>');
   write('trabajo-titulacion/index.html', directWorkHtml);
 }
+cacheBustLocalAssets('trabajo-titulacion/index.html');
 removePublicCloudflareFallbacks('estudiantes');
 removePublicCloudflareFallbacks('trabajo-titulacion');
 
@@ -240,6 +250,12 @@ if (!studentBuilt.includes('firebase-direct-public.js')) {
 }
 if (!workBuilt.includes('firebase-direct-public.js')) {
   throw new Error('GitHub Pages: falta Firebase directo para Trabajo de Titulación.');
+}
+if (!studentBuilt.includes('estudiante.app.js?v=github-' + buildId)) {
+  throw new Error('GitHub Pages: Estudiantes no invalida la caché de sus scripts por despliegue.');
+}
+if (!workBuilt.includes('trabajo-titulacion.js?v=github-' + buildId)) {
+  throw new Error('GitHub Pages: Trabajo de Titulación no invalida la caché de sus scripts por despliegue.');
 }
 if (!coordinatorBuilt.includes('https://titulos-coordinadores.pages.dev')) {
   throw new Error('GitHub Pages: falta backend configurado para Coordinadores.');
