@@ -273,6 +273,34 @@ a {
   grid-column: 1 / -1;
 }
 
+.telegram-register-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 22px;
+  padding: 18px 20px;
+  border: 1px solid #c7d7ea;
+  border-left: 5px solid var(--gold);
+  border-radius: var(--radius-small);
+  background: var(--primary-soft);
+}
+
+.telegram-register-card strong {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--primary);
+  font-size: 1rem;
+}
+
+.telegram-register-card p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.telegram-register-card .btn {
+  flex: 0 0 auto;
+}
+
 .field label {
   color: #111827;
   font-weight: 800;
@@ -899,6 +927,11 @@ section[data-step-panel="propuestas"]:not([hidden]) .proposal-card:not([hidden])
   .data-grid,
   .summary-grid {
     grid-template-columns: 1fr;
+  }
+
+  .telegram-register-card {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .form-actions,

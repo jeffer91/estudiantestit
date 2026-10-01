@@ -95,13 +95,20 @@
       <div class="section-heading">
         <p class="section-kicker">Paso 3</p>
         <h2>Registra tu Telegram</h2>
-        <p>Este usuario servirá para identificar tu contacto durante el proceso de titulación.</p>
+        <p>Registra primero tu Telegram en el sistema institucional y luego confirma aquí el mismo usuario.</p>
       </div>
       <form id="formTelegram" class="form-grid">
+        <div class="telegram-register-card field--full">
+          <div>
+            <strong>Registro institucional de Telegram</strong>
+            <p>Abre el Sistema de Cronogramas Académicos, ingresa tu cédula y completa allí el registro de Telegram. Después regresa a esta pantalla.</p>
+          </div>
+          <a class="btn btn--primary" href="https://registroinduccionesitsqmet.netlify.app/cronogramas/vista/cedula-solicitud.html" target="_blank" rel="noopener noreferrer">Registrar Telegram</a>
+        </div>
         <div class="field field--full">
-          <label for="telegramInput">Usuario de Telegram</label>
+          <label for="telegramInput">Usuario de Telegram registrado</label>
           <input id="telegramInput" type="text" autocomplete="off" placeholder="@usuario" required />
-          <small>Debe iniciar con letra y tener entre 5 y 32 caracteres.</small>
+          <small>Escribe el mismo @usuario que registraste en el enlace anterior. Debe iniciar con letra y tener entre 5 y 32 caracteres.</small>
         </div>
         <div id="estadoTelegram" class="status-message field--full"></div>
         <div class="form-actions field--full">
