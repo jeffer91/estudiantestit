@@ -15,6 +15,15 @@
     return String(value === null || value === undefined ? '' : value).trim();
   }
 
+  function esGitHubPages() {
+    var host = text(window.location && window.location.hostname).toLowerCase();
+    return host === 'github.io' || /\.github\.io$/.test(host);
+  }
+
+  function firebaseDirecto() {
+    return window.TitulosFirebaseDirectPublic || null;
+  }
+
   function cedula(value) {
     var digits = text(value).replace(/\D/g, '');
     if (digits.length === 9) digits = '0' + digits;
@@ -71,6 +80,15 @@
   }
 
   function consultarAcademico(id) {
+    var directo = firebaseDirecto();
+    if (esGitHubPages() && directo) {
+      return directo.getStudent(id).then(function (student) {
+        return {
+          periodoId: text(student.periodoId || student.periodId),
+          periodoLabel: text(student.periodoLabel || student.periodo || student.periodoId)
+        };
+      });
+    }
     return post('/api/requisitos', 'CONSULTAR_ESTUDIANTE_TITULACION', {
       cedula: id,
       numeroIdentificacion: id
@@ -86,6 +104,21 @@
 
   function consultarTrabajo(id, academic) {
     academic = academic || {};
+    var directo = firebaseDirecto();
+    if (esGitHubPages() && directo) {
+      return directo.getWorkEnvio(
+        id,
+        text(academic.periodoId || academic.periodoLabel)
+      ).then(function (envio) {
+        return envio
+          ? { ok: true, encontrado: true, existe: true, envio: envio, registro: envio }
+          : { ok: true, encontrado: false, existe: false };
+      }).catch(function () {
+        // La consulta académica principal no debe quedar bloqueada si el
+        // documento opcional de Trabajo de Titulación no está disponible.
+        return { ok: true, encontrado: false, existe: false, verificacionDisponible: false };
+      });
+    }
     return post('/api/trabajo-titulacion', 'CONSULTAR_ENVIO_TRABAJO_TITULACION', {
       cedula: id,
       numeroIdentificacion: id,

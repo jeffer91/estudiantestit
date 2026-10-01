@@ -40,6 +40,13 @@
   function esArchivo() {
     return texto(window.location && window.location.protocol).toLowerCase() === 'file:';
   }
+  function esGitHubPages() {
+    var host = texto(window.location && window.location.hostname).toLowerCase();
+    return host === 'github.io' || /\.github\.io$/.test(host);
+  }
+  function firebaseDirecto() {
+    return window.TitulosFirebaseDirectPublic || null;
+  }
   function apiBase() {
     var forced = texto(window.TITULOS_API_BASE || '');
     var origin;
@@ -82,6 +89,17 @@
     });
   }
   function leerConfiguracion() {
+    if (esGitHubPages() && firebaseDirecto()) {
+      return Promise.resolve({
+        activo: true,
+        nombre: 'Firebase Títulos directo',
+        timeoutMs: 45000,
+        version: 'github-pages-directo',
+        estado: 'ACTIVO',
+        origen: 'firebase-directo',
+        raw: { ok: true, modo: 'FIREBASE_DIRECTO' }
+      });
+    }
     return enviarProxy('CONFIGURACION_PUBLICA', {}, 'GET').then(function (result) {
       return {
         activo: result.activo !== false,
@@ -163,6 +181,29 @@
       });
     }
 
+    if (esGitHubPages() && firebaseDirecto()) {
+      return firebaseDirecto().getStudent(id).then(function (student) {
+        return consultarEnvioPorCedula(id, student.periodoId || student.periodoLabel).then(function (directo) {
+          return {
+            ok: true,
+            encontrado: true,
+            cedula: id,
+            estudiante: student,
+            registro: student,
+            tieneEnvio: directo.encontrado === true && directo.permiteReenvio !== true,
+            encontradoEnvio: directo.existe === true,
+            permiteReenvio: directo.permiteReenvio === true,
+            envio: directo.envio || null,
+            estadoEnvio: directo.estado || '',
+            periodoId: student.periodoId || '',
+            periodoLabel: student.periodoLabel || '',
+            fuente: 'FIREBASE_DIRECTO',
+            mensaje: 'Consulta directa completada.'
+          };
+        });
+      });
+    }
+
     return enviarProxy(
       'CONSULTAR_ACCESO_ESTUDIANTE',
       { cedula: id, numeroIdentificacion: id },
@@ -217,6 +258,25 @@
         ok: false,
         encontrado: false,
         mensaje: 'No se recibió una cédula válida.'
+      });
+    }
+
+    if (esGitHubPages() && firebaseDirecto()) {
+      return firebaseDirecto().getArticleEnvio(id, periodo).then(function (envio) {
+        var status = envio ? firebaseDirecto().state(envio) : '';
+        var permite = status === 'DEVUELTO';
+        return {
+          ok: true,
+          encontrado: Boolean(envio) && !permite,
+          existe: Boolean(envio),
+          permiteReenvio: permite,
+          cedula: id,
+          envio: envio,
+          estado: status,
+          mensaje: envio ? 'Envío consultado directamente en Firebase.' : 'No registras un envío previo.'
+        };
+      }).catch(function (error) {
+        return { ok: false, encontrado: false, cedula: id, error: error, mensaje: error.message || 'No se pudo consultar el envío previo.' };
       });
     }
 
@@ -357,6 +417,7 @@
         duplicado.envio = previo.envio;
         throw duplicado;
       }
+      if (esGitHubPages() && firebaseDirecto()) return firebaseDirecto().saveArticleEnvio(data);
       return enviarProxy('ENVIO_ESTUDIANTE', data, 'POST');
     }).then(function (result) {
       return {
@@ -371,6 +432,13 @@
   }
 
   function probarConexion() {
+    if (esGitHubPages() && firebaseDirecto()) {
+      return Promise.resolve({
+        ok: true,
+        respuesta: { ok: true, modo: 'FIREBASE_DIRECTO' },
+        mensaje: 'Firebase directo disponible.'
+      });
+    }
     return enviarProxy('PING', {}, 'GET').then(function (result) {
       return {
         ok: true,

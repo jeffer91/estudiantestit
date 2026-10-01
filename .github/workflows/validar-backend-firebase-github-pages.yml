@@ -3,6 +3,7 @@ name: Validar backend Firebase GitHub Pages
 on:
   push:
     branches:
+      - main
       - github-pages-backend-firebase
       - github-pages-usar-firebase-backend
   pull_request:

@@ -43,8 +43,47 @@ function injectApiBase(relativePath, apiBase) {
     write(relativePath, html);
   }
 }
+function injectRuntime(relativePath, options = {}) {
+  let html = read(relativePath);
+  const depth = relativePath.split('/').length - 1;
+  const prefix = '../'.repeat(depth);
+  const runtimeSrc = prefix + 'runtime-config.js?v=github-' + buildId;
+  const authSrc = prefix + 'firebase-auth-client.js?v=github-' + buildId;
+  const scripts = [];
+
+  if (!html.includes('runtime-config.js')) {
+    scripts.push('  <script src="' + runtimeSrc + '"></script>');
+  }
+  if (options.auth === true && !html.includes('firebase-auth-client.js')) {
+    scripts.push('  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>');
+    scripts.push('  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>');
+    scripts.push('  <script src="' + authSrc + '"></script>');
+  }
+  if (!scripts.length) return;
+  if (!html.includes('</head>')) throw new Error('No se encontró </head> en ' + relativePath);
+  html = html.replace('</head>', scripts.join('\n') + '\n</head>');
+  write(relativePath, html);
+}
 function removeIfExists(relativePath) {
   fs.rmSync(path.join(output, relativePath), { recursive: true, force: true });
+}
+function removePublicCloudflareFallbacks(directory) {
+  const target = path.join(output, directory);
+  for (const entry of fs.readdirSync(target, { withFileTypes: true })) {
+    const relativePath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      removePublicCloudflareFallbacks(relativePath);
+      continue;
+    }
+    if (!/\.(?:html|js|json|txt)$/i.test(entry.name)) continue;
+    let content = read(relativePath);
+    content = content
+      .replaceAll('https://titulos.pages.dev', 'https://jeffer91.github.io/estudiantestit')
+      .replaceAll('https://titulos-coordinadores.pages.dev', 'https://jeffer91.github.io/estudiantestit')
+      .replaceAll('https://titulos-investigadores.pages.dev', 'https://jeffer91.github.io/estudiantestit')
+      .replaceAll('https://titulos-administrador.pages.dev', 'https://jeffer91.github.io/estudiantestit');
+    write(relativePath, content);
+  }
 }
 
 copyDir(path.join(root, '.pages-estudiantes', 'estudiantes'), path.join(output, 'estudiantes'));
@@ -52,10 +91,15 @@ copyDir(path.join(root, '.pages-estudiantes', 'trabajo-titulacion'), path.join(o
 copyDir(path.join(root, '.pages-coordinadores'), path.join(output, 'coordinadores'));
 copyDir(path.join(root, '.pages-investigadores'), path.join(output, 'investigadores'));
 copyDir(path.join(root, '.pages-administrador'), path.join(output, 'administrador'));
+fs.copyFileSync(path.join(root, 'github-pages', 'firebase-direct-public.js'), path.join(output, 'firebase-direct-public.js'));
 
-// Estudiantes: conservar la pantalla original y agregar una entrada limpia /estudiantes/.
-// GitHub Pages carga además el enrutador que detecta Trabajo de Titulación.
-injectApiBase('estudiantes/estudiante.html', 'https://titulos.pages.dev');
+// Estudiantes: en GitHub Pages la consulta y el envío público usan Firestore
+// directamente, sin Cloudflare ni Firebase Functions.
+let directStudentHtml = read('estudiantes/estudiante.html');
+if (!directStudentHtml.includes('firebase-direct-public.js')) {
+  directStudentHtml = directStudentHtml.replace('</head>', '  <script src="../firebase-direct-public.js?v=github-' + buildId + '"></script>\n</head>');
+  write('estudiantes/estudiante.html', directStudentHtml);
+}
 let studentRoute = read('estudiantes/js/estudiante.trabajo-titulacion.route.js');
 studentRoute = studentRoute.replace("window.location.assign('/trabajo-titulacion/?cedula='", "window.location.assign('../trabajo-titulacion/?cedula='");
 write('estudiantes/js/estudiante.trabajo-titulacion.route.js', studentRoute);
@@ -71,38 +115,29 @@ if (!studentHtml.includes('estudiante.trabajo-titulacion.route.js')) {
 }
 fs.copyFileSync(path.join(output, 'estudiantes', 'estudiante.html'), path.join(output, 'estudiantes', 'index.html'));
 
-// Trabajo de Titulación: API de Cloudflare + rutas relativas compatibles con project pages.
+// Trabajo de Titulación: Firestore directo + rutas relativas compatibles con project pages.
 let workHtml = read('trabajo-titulacion/index.html');
 workHtml = workHtml.replaceAll('\"/estudiantes/', '\"../estudiantes/').replaceAll("'/estudiantes/", "'../estudiantes/");
 write('trabajo-titulacion/index.html', workHtml);
-injectApiBase('trabajo-titulacion/index.html', 'https://titulos.pages.dev');
-let workJs = read('trabajo-titulacion/js/trabajo-titulacion.js');
-const oldApiBase = "function apiBase(){var origin=text(window.location&&window.location.origin);if(['http://localhost:5500','http://127.0.0.1:5500'].indexOf(origin)>=0)return'http://127.0.0.1:8788';return origin&&origin!=='null'?origin:'https://titulos.pages.dev';}";
-const newApiBase = "function apiBase(){var forced=text(window.TITULOS_API_BASE||'');var origin=text(window.location&&window.location.origin);if(forced)return forced.replace(/\\/$/,'');if(['http://localhost:5500','http://127.0.0.1:5500'].indexOf(origin)>=0)return'http://127.0.0.1:8788';return origin&&origin!=='null'?origin:'https://titulos.pages.dev';}";
-if (!workJs.includes(oldApiBase)) throw new Error('No se pudo adaptar apiBase de Trabajo de Titulación.');
-workJs = workJs.replace(oldApiBase, newApiBase);
-write('trabajo-titulacion/js/trabajo-titulacion.js', workJs);
+let directWorkHtml = read('trabajo-titulacion/index.html');
+if (!directWorkHtml.includes('firebase-direct-public.js')) {
+  directWorkHtml = directWorkHtml.replace('</head>', '  <script src="../firebase-direct-public.js?v=github-' + buildId + '"></script>\n</head>');
+  write('trabajo-titulacion/index.html', directWorkHtml);
+}
+removePublicCloudflareFallbacks('estudiantes');
+removePublicCloudflareFallbacks('trabajo-titulacion');
 
-// Coordinadores: usar el backend ya desplegado en Cloudflare Pages.
+// Coordinadores conserva temporalmente su backend existente mientras se migra
+// la escritura privilegiada a reglas de Firestore compatibles con Spark.
 injectApiBase('coordinadores/index.html', 'https://titulos-coordinadores.pages.dev');
 injectApiBase('coordinadores/coordinador.html', 'https://titulos-coordinadores.pages.dev');
 
-// Investigadores: sus llamadas eran same-origin; en GitHub Pages deben ir al backend oficial.
+// Investigadores conserva temporalmente su backend existente.
 let investigatorJs = read('investigadores/js/investigadores.app.js');
-investigatorJs = investigatorJs.replaceAll("'/api/investigadores'", "'https://titulos-investigadores.pages.dev/api/investigadores'");
+investigatorJs = investigatorJs.replaceAll("apiBase()+'/api/investigadores'", "'https://titulos-investigadores.pages.dev/api/investigadores'");
 write('investigadores/js/investigadores.app.js', investigatorJs);
 
-// Administrador: la interfaz permanece en GitHub Pages.
-// Mientras se valida la migración completa, reutiliza el backend administrativo existente
-// sin modificar ni desplegar nada en Cloudflare.
-let adminApi = read('administrador/ad-js/ad-api.service.js');
-const githubDetector = "function esGitHubPages(){var h=texto(window.location&&window.location.hostname).toLowerCase();return h==='github.io'||/\\.github\\.io$/.test(h);}";
-if (!adminApi.includes(githubDetector)) {
-  throw new Error('No se encontró el detector de GitHub Pages del Administrador.');
-}
-adminApi = adminApi.replace(githubDetector, 'function esGitHubPages(){return false;}');
-write('administrador/ad-js/ad-api.service.js', adminApi);
-
+// Administrador ya dispone de lecturas directas de Firebase en GitHub Pages.
 let adminHtml = read('administrador/ad-index.html');
 adminHtml = adminHtml
   .replace(/<script>\s*window\.TITULOS_API_BASE=[\s\S]*?<\/script>\s*/gi, '')
@@ -200,11 +235,11 @@ if (!studentBuilt.includes('estudiante.trabajo-titulacion.route.js')) {
 if (read('estudiantes/js/estudiante.trabajo-titulacion.route.js').includes("window.location.assign('/trabajo-titulacion/")) {
   throw new Error('GitHub Pages: Estudiantes conserva una ruta absoluta incompatible con Project Pages.');
 }
-if (!studentBuilt.includes('https://titulos.pages.dev')) {
-  throw new Error('GitHub Pages: falta backend configurado para Estudiantes.');
+if (!studentBuilt.includes('firebase-direct-public.js')) {
+  throw new Error('GitHub Pages: falta Firebase directo para Estudiantes.');
 }
-if (!workBuilt.includes('https://titulos.pages.dev')) {
-  throw new Error('GitHub Pages: falta backend configurado para Trabajo de Titulación.');
+if (!workBuilt.includes('firebase-direct-public.js')) {
+  throw new Error('GitHub Pages: falta Firebase directo para Trabajo de Titulación.');
 }
 if (!coordinatorBuilt.includes('https://titulos-coordinadores.pages.dev')) {
   throw new Error('GitHub Pages: falta backend configurado para Coordinadores.');
@@ -215,9 +250,6 @@ if (!investigatorBuilt.includes('https://titulos-investigadores.pages.dev/api/in
 if (!adminBuilt.includes('https://titulos-administrador.pages.dev')) {
   throw new Error('GitHub Pages: falta backend configurado para Administrador.');
 }
-if (!adminApiBuilt.includes('function esGitHubPages(){return false;}')) {
-  throw new Error('GitHub Pages: el Administrador todavía está desviando operaciones a Firebase directo.');
-}
 if (!read('coordinadores/404.html').includes(projectBase + '/coordinadores/')) {
   throw new Error('GitHub Pages: 404 de Coordinadores fuera del Project Page.');
 }
@@ -225,6 +257,25 @@ if (!read('administrador/404.html').includes(projectBase + '/administrador/')) {
   throw new Error('GitHub Pages: 404 del Administrador fuera del Project Page.');
 }
 
+for (const directory of ['estudiantes', 'trabajo-titulacion']) {
+  const pending = [directory];
+  while (pending.length) {
+    const relative = pending.pop();
+    const absolute = path.join(output, relative);
+    const stat = fs.statSync(absolute);
+    if (stat.isDirectory()) {
+      for (const child of fs.readdirSync(absolute)) pending.push(path.join(relative, child));
+      continue;
+    }
+    if (!/\.(?:html|js|css|md|json|txt)$/i.test(relative)) continue;
+    const content = read(relative);
+    if (/pages\.dev|workers\.dev|cloudfunctions\.net/i.test(content)) {
+      throw new Error('GitHub Pages: dependencia de backend externo detectada en ' + relative + '.');
+    }
+  }
+}
+
 console.log('[GitHub Pages] Sitio preparado en .pages-github.');
 console.log('[GitHub Pages] Rutas: /estudiantes/, /trabajo-titulacion/, /coordinadores/, /investigadores/, /administrador/.');
+console.log('[GitHub Pages] Estudiantes y Trabajo de Titulación: Firebase directo (plan Spark compatible).');
 console.log('[GitHub Pages] Smoke checks de las cinco páginas: OK.');

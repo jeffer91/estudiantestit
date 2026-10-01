@@ -5,6 +5,7 @@ build/
 .pages-estudiantes/
 .pages-coordinadores/
 .pages-administrador/
+.pages-github/
 .env
 .env.*
 .dev.vars

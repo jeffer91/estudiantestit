@@ -2,8 +2,8 @@
 (function(window,document){
 'use strict';
 var hostActual=String(window.location&&window.location.hostname||'').toLowerCase();
-if(!window.TITULOS_API_BASE&&(hostActual==='github.io'||/\\.github\\.io$/.test(hostActual))){
-  window.TITULOS_API_BASE='https://titulos.pages.dev';
+if(hostActual==='github.io'||/\.github\.io$/.test(hostActual)){
+  window.TITULOS_MODO_FIREBASE_DIRECTO=true;
 }
 var CONFIG=Object.freeze({
   app:Object.freeze({nombre:'Estudiantes MVP',version:'2.1.0',entorno:'produccion',origenCaptura:'estudiantes-mvp',modoDiagnostico:true}),
