@@ -91,7 +91,7 @@
       authReady.then(function(){
         return window.firebase.auth().signInWithEmailAndPassword(email,password);
       }).catch(function(error){
-        setMessage(required==='admin'?'Usuario o contraseña incorrectos.':(error&&error.message?error.message:'No se pudo iniciar sesión.'));
+        setMessage(loginErrorMessage(error));
       });
     });
     return root;
@@ -100,6 +100,16 @@
   function setMessage(message){
     var el=document.getElementById('titulos-auth-msg');
     if(el)el.textContent=message||'';
+  }
+
+  function loginErrorMessage(error){
+    var code=text(error&&error.code).toLowerCase();
+    var message=text(error&&error.message).toUpperCase();
+    if(code.indexOf('configuration-not-found')>=0||message.indexOf('CONFIGURATION_NOT_FOUND')>=0){
+      return 'Firebase Authentication aún no está habilitado en el proyecto Títulos.';
+    }
+    if(required==='admin')return 'Usuario o contraseña incorrectos.';
+    return error&&error.message?error.message:'No se pudo iniciar sesión.';
   }
 
   function showLogin(message){
