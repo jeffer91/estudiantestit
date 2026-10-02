@@ -9,7 +9,7 @@
   function normal(value){return text(value).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();}
   function esGitHubPages(){var h=text(window.location&&window.location.hostname).toLowerCase();return h==='github.io'||/\.github\.io$/.test(h);}
   function firebaseDirecto(){return window.TitulosFirebaseDirectPublic||null;}
-  function apiBase(){var forced=text(window.TITULOS_API_BASE||'');var origin=text(window.location&&window.location.origin);if(forced)return forced.replace(/\/$/,'');if(['http://localhost:5500','http://127.0.0.1:5500'].indexOf(origin)>=0)return'http://127.0.0.1:8788';return origin&&origin!=='null'?origin:'https://titulos.pages.dev';}
+  function apiBase(){var forced=text(window.TITULOS_API_BASE||'');var origin=text(window.location&&window.location.origin);if(forced)return forced.replace(/\/$/,'');if(['http://localhost:5500','http://127.0.0.1:5500'].indexOf(origin)>=0)return'http://127.0.0.1:8788';return origin&&origin!=='null'?origin:'';}
   function request(path,action,data){
     var directo=firebaseDirecto();
     data=data||{};
