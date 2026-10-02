@@ -72,7 +72,7 @@
     var fields=required==='admin'
       ? '<label>Usuario<input id="titulos-auth-cedula" type="text" inputmode="numeric" pattern="[0-9]{10}" maxlength="10" autocomplete="username" required></label><label>Contraseña<input id="titulos-auth-pin" type="password" inputmode="numeric" pattern="[0-9]{4,8}" maxlength="8" autocomplete="current-password" required></label>'
       : '<label>Correo<input id="titulos-auth-email" type="email" autocomplete="username" required></label><label>Contraseña<input id="titulos-auth-password" type="password" autocomplete="current-password" required></label>';
-    root.innerHTML='<div class="card"><h2>Acceso protegido</h2><p>'+(required==='admin'?'Administrador de Titulación':'Coordinación de Titulación')+'</p><form id="titulos-auth-form">'+fields+'<button type="submit">Ingresar</button><div class="msg" id="titulos-auth-msg"></div></form></div>';
+    root.innerHTML='<div class="card"><h2>Acceso protegido</h2><p>'+(required==='admin'?'Administrador de Titulación':'Coordinación de Titulación')+'</p><form id="titulos-auth-form">'+fields+'<button type="submit" data-no-lock="true">Ingresar</button><div class="msg" id="titulos-auth-msg"></div></form></div>';
     document.body.appendChild(root);
     root.querySelector('form').addEventListener('submit',function(event){
       event.preventDefault();
