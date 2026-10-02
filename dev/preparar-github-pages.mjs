@@ -43,15 +43,6 @@ function injectApiBase(relativePath, apiBase) {
     write(relativePath, html);
   }
 }
-function injectStudentIaProxy(relativePath, proxyUrl) {
-  let html = read(relativePath);
-  const marker = 'window.ESTUDIANTE_IA_PROXY_URL=' + JSON.stringify(proxyUrl);
-  if (!html.includes(marker)) {
-    if (!html.includes('</head>')) throw new Error('No se encontró </head> en ' + relativePath);
-    html = html.replace('</head>', '  <script>' + marker + ';</script>\n</head>');
-    write(relativePath, html);
-  }
-}
 function cacheBustLocalAssets(relativePath) {
   let html = read(relativePath);
   html = html.replace(
@@ -109,6 +100,8 @@ copyDir(path.join(root, '.pages-coordinadores'), path.join(output, 'coordinadore
 copyDir(path.join(root, '.pages-investigadores'), path.join(output, 'investigadores'));
 copyDir(path.join(root, '.pages-administrador'), path.join(output, 'administrador'));
 fs.copyFileSync(path.join(root, 'github-pages', 'firebase-direct-public.js'), path.join(output, 'firebase-direct-public.js'));
+fs.copyFileSync(path.join(root, 'github-pages', 'runtime-config.js'), path.join(output, 'runtime-config.js'));
+fs.copyFileSync(path.join(root, 'github-pages', 'firebase-auth-client.js'), path.join(output, 'firebase-auth-client.js'));
 
 // Estudiantes: en GitHub Pages la consulta y el envío público usan Firestore
 // directamente, sin Cloudflare ni Firebase Functions.
@@ -131,6 +124,7 @@ if (!studentHtml.includes('estudiante.trabajo-titulacion.route.js')) {
   write('estudiantes/estudiante.html', studentHtml);
 }
 cacheBustLocalAssets('estudiantes/estudiante.html');
+injectRuntime('estudiantes/estudiante.html');
 fs.copyFileSync(path.join(output, 'estudiantes', 'estudiante.html'), path.join(output, 'estudiantes', 'index.html'));
 
 // Trabajo de Titulación: Firestore directo + rutas relativas compatibles con project pages.
@@ -145,21 +139,16 @@ if (!directWorkHtml.includes('firebase-direct-public.js')) {
 cacheBustLocalAssets('trabajo-titulacion/index.html');
 removePublicCloudflareFallbacks('estudiantes');
 removePublicCloudflareFallbacks('trabajo-titulacion');
-// GitHub Pages no puede servir /api/ia porque es hosting estático. La IA usa
-// exclusivamente el proxy seguro, sin cambiar el acceso directo a Firebase que
-// usan Estudiantes y Trabajo de Titulación para sus datos académicos.
-injectStudentIaProxy('estudiantes/estudiante.html', 'https://titulos.pages.dev/api/ia');
+
+// GitHub Pages publica toda la interfaz. Las operaciones que necesitan secretos
+// o permisos elevados pasan por Firebase Functions; ninguna pantalla usa Cloudflare.
+injectRuntime('estudiantes/estudiante.html');
 fs.copyFileSync(path.join(output, 'estudiantes', 'estudiante.html'), path.join(output, 'estudiantes', 'index.html'));
-
-// Coordinadores conserva temporalmente su backend existente mientras se migra
-// la escritura privilegiada a reglas de Firestore compatibles con Spark.
-injectApiBase('coordinadores/index.html', 'https://titulos-coordinadores.pages.dev');
-injectApiBase('coordinadores/coordinador.html', 'https://titulos-coordinadores.pages.dev');
-
-// Investigadores conserva temporalmente su backend existente.
-let investigatorJs = read('investigadores/js/investigadores.app.js');
-investigatorJs = investigatorJs.replaceAll("apiBase()+'/api/investigadores'", "'https://titulos-investigadores.pages.dev/api/investigadores'");
-write('investigadores/js/investigadores.app.js', investigatorJs);
+injectRuntime('coordinadores/index.html', { auth: true });
+injectRuntime('coordinadores/coordinador.html', { auth: true });
+injectRuntime('investigadores/index.html');
+removePublicCloudflareFallbacks('coordinadores');
+removePublicCloudflareFallbacks('investigadores');
 
 // Administrador ya dispone de lecturas directas de Firebase en GitHub Pages.
 let adminHtml = read('administrador/ad-index.html');
@@ -167,7 +156,8 @@ adminHtml = adminHtml
   .replace(/<script>\s*window\.TITULOS_API_BASE=[\s\S]*?<\/script>\s*/gi, '')
   .replace(/([?&]r=)[^"'&\\s]+/g, '$1github-pages-' + buildId);
 write('administrador/ad-index.html', adminHtml);
-injectApiBase('administrador/ad-index.html', 'https://titulos-administrador.pages.dev');
+injectRuntime('administrador/ad-index.html', { auth: true });
+removePublicCloudflareFallbacks('administrador');
 fs.copyFileSync(
   path.join(output, 'administrador', 'ad-index.html'),
   path.join(output, 'administrador', 'index.html')
@@ -262,8 +252,8 @@ if (read('estudiantes/js/estudiante.trabajo-titulacion.route.js').includes("wind
 if (!studentBuilt.includes('firebase-direct-public.js')) {
   throw new Error('GitHub Pages: falta Firebase directo para Estudiantes.');
 }
-if (!studentBuilt.includes('window.ESTUDIANTE_IA_PROXY_URL="https://titulos.pages.dev/api/ia"')) {
-  throw new Error('GitHub Pages: falta el proxy seguro de IA para Estudiantes.');
+if (!studentBuilt.includes('runtime-config.js')) {
+  throw new Error('GitHub Pages: Estudiantes no carga la configuración del backend Firebase.');
 }
 if (!workBuilt.includes('firebase-direct-public.js')) {
   throw new Error('GitHub Pages: falta Firebase directo para Trabajo de Titulación.');
@@ -274,14 +264,14 @@ if (!studentBuilt.includes('estudiante.app.js?v=github-' + buildId)) {
 if (!workBuilt.includes('trabajo-titulacion.js?v=github-' + buildId)) {
   throw new Error('GitHub Pages: Trabajo de Titulación no invalida la caché de sus scripts por despliegue.');
 }
-if (!coordinatorBuilt.includes('https://titulos-coordinadores.pages.dev')) {
-  throw new Error('GitHub Pages: falta backend configurado para Coordinadores.');
+if (!coordinatorBuilt.includes('runtime-config.js') || !coordinatorBuilt.includes('firebase-auth-client.js')) {
+  throw new Error('GitHub Pages: Coordinadores no carga Firebase Functions y Authentication.');
 }
-if (!investigatorBuilt.includes('https://titulos-investigadores.pages.dev/api/investigadores')) {
-  throw new Error('GitHub Pages: falta backend configurado para Investigación.');
+if (!read('investigadores/index.html').includes('runtime-config.js')) {
+  throw new Error('GitHub Pages: Investigación no carga la configuración del backend Firebase.');
 }
-if (!adminBuilt.includes('https://titulos-administrador.pages.dev')) {
-  throw new Error('GitHub Pages: falta backend configurado para Administrador.');
+if (!adminBuilt.includes('runtime-config.js') || !adminBuilt.includes('firebase-auth-client.js')) {
+  throw new Error('GitHub Pages: Administrador no carga Firebase Functions y Authentication.');
 }
 if (!read('coordinadores/404.html').includes(projectBase + '/coordinadores/')) {
   throw new Error('GitHub Pages: 404 de Coordinadores fuera del Project Page.');
@@ -290,7 +280,7 @@ if (!read('administrador/404.html').includes(projectBase + '/administrador/')) {
   throw new Error('GitHub Pages: 404 del Administrador fuera del Project Page.');
 }
 
-for (const directory of ['estudiantes', 'trabajo-titulacion']) {
+for (const directory of ['estudiantes', 'trabajo-titulacion', 'coordinadores', 'investigadores', 'administrador']) {
   const pending = [directory];
   while (pending.length) {
     const relative = pending.pop();
@@ -302,16 +292,18 @@ for (const directory of ['estudiantes', 'trabajo-titulacion']) {
     }
     if (!/\.(?:html|js|css|md|json|txt)$/i.test(relative)) continue;
     const content = read(relative);
-    const checkedContent = directory === 'estudiantes'
-      ? content.replaceAll('https://titulos.pages.dev/api/ia', '')
-      : content;
-    if (/pages\.dev|workers\.dev|cloudfunctions\.net/i.test(checkedContent)) {
-      throw new Error('GitHub Pages: dependencia de backend externo detectada en ' + relative + '.');
+    if (/pages\.dev|workers\.dev/i.test(content)) {
+      throw new Error('GitHub Pages: dependencia de Cloudflare detectada en ' + relative + '.');
     }
   }
 }
 
+if (!read('runtime-config.js').includes('https://us-central1-titulos-ec2fa.cloudfunctions.net')) {
+  throw new Error('GitHub Pages: runtime-config.js no apunta al backend Firebase esperado.');
+}
+
 console.log('[GitHub Pages] Sitio preparado en .pages-github.');
 console.log('[GitHub Pages] Rutas: /estudiantes/, /trabajo-titulacion/, /coordinadores/, /investigadores/, /administrador/.');
-console.log('[GitHub Pages] Estudiantes y Trabajo de Titulación: Firebase directo (plan Spark compatible).');
+console.log('[GitHub Pages] Frontend: GitHub Pages. Datos públicos: Firebase directo. IA y operaciones protegidas: Firebase Functions.');
+console.log('[GitHub Pages] Cloudflare: sin dependencias en el artefacto publicado.');
 console.log('[GitHub Pages] Smoke checks de las cinco páginas: OK.');
