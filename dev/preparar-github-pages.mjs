@@ -75,25 +75,6 @@ function injectRuntime(relativePath, options = {}) {
 function removeIfExists(relativePath) {
   fs.rmSync(path.join(output, relativePath), { recursive: true, force: true });
 }
-function removePublicCloudflareFallbacks(directory) {
-  const target = path.join(output, directory);
-  for (const entry of fs.readdirSync(target, { withFileTypes: true })) {
-    const relativePath = path.join(directory, entry.name);
-    if (entry.isDirectory()) {
-      removePublicCloudflareFallbacks(relativePath);
-      continue;
-    }
-    if (!/\.(?:html|js|json|txt)$/i.test(entry.name)) continue;
-    let content = read(relativePath);
-    content = content
-      .replaceAll('https://titulos.pages.dev', 'https://jeffer91.github.io/estudiantestit')
-      .replaceAll('https://titulos-coordinadores.pages.dev', 'https://jeffer91.github.io/estudiantestit')
-      .replaceAll('https://titulos-investigadores.pages.dev', 'https://jeffer91.github.io/estudiantestit')
-      .replaceAll('https://titulos-administrador.pages.dev', 'https://jeffer91.github.io/estudiantestit');
-    write(relativePath, content);
-  }
-}
-
 copyDir(path.join(root, '.pages-estudiantes', 'estudiantes'), path.join(output, 'estudiantes'));
 copyDir(path.join(root, '.pages-estudiantes', 'trabajo-titulacion'), path.join(output, 'trabajo-titulacion'));
 copyDir(path.join(root, '.pages-coordinadores'), path.join(output, 'coordinadores'));
@@ -103,8 +84,7 @@ fs.copyFileSync(path.join(root, 'github-pages', 'firebase-direct-public.js'), pa
 fs.copyFileSync(path.join(root, 'github-pages', 'runtime-config.js'), path.join(output, 'runtime-config.js'));
 fs.copyFileSync(path.join(root, 'github-pages', 'firebase-auth-client.js'), path.join(output, 'firebase-auth-client.js'));
 
-// Estudiantes: en GitHub Pages la consulta y el envío público usan Firestore
-// directamente, sin Cloudflare ni Firebase Functions.
+// Estudiantes: en GitHub Pages la consulta y el envío público usan Firestore directamente.
 let directStudentHtml = read('estudiantes/estudiante.html');
 if (!directStudentHtml.includes('firebase-direct-public.js')) {
   directStudentHtml = directStudentHtml.replace('</head>', '  <script src="../firebase-direct-public.js?v=github-' + buildId + '"></script>\n</head>');
@@ -137,18 +117,13 @@ if (!directWorkHtml.includes('firebase-direct-public.js')) {
   write('trabajo-titulacion/index.html', directWorkHtml);
 }
 cacheBustLocalAssets('trabajo-titulacion/index.html');
-removePublicCloudflareFallbacks('estudiantes');
-removePublicCloudflareFallbacks('trabajo-titulacion');
-
 // GitHub Pages publica toda la interfaz. Las operaciones que necesitan secretos
-// o permisos elevados pasan por Firebase Functions; ninguna pantalla usa Cloudflare.
+// o permisos elevados pasan por Firebase Functions.
 injectRuntime('estudiantes/estudiante.html');
 fs.copyFileSync(path.join(output, 'estudiantes', 'estudiante.html'), path.join(output, 'estudiantes', 'index.html'));
 injectRuntime('coordinadores/index.html', { auth: true });
 injectRuntime('coordinadores/coordinador.html', { auth: true });
 injectRuntime('investigadores/index.html');
-removePublicCloudflareFallbacks('coordinadores');
-removePublicCloudflareFallbacks('investigadores');
 
 // Administrador ya dispone de lecturas directas de Firebase en GitHub Pages.
 let adminHtml = read('administrador/ad-index.html');
@@ -157,15 +132,14 @@ adminHtml = adminHtml
   .replace(/([?&]r=)[^"'&\\s]+/g, '$1github-pages-' + buildId);
 write('administrador/ad-index.html', adminHtml);
 injectRuntime('administrador/ad-index.html', { auth: true });
-removePublicCloudflareFallbacks('administrador');
 fs.copyFileSync(
   path.join(output, 'administrador', 'ad-index.html'),
   path.join(output, 'administrador', 'index.html')
 );
 
-// Metadatos exclusivos de Cloudflare no tienen efecto en GitHub Pages.
+// Los metadatos de otros servidores estáticos no tienen efecto en GitHub Pages.
 [
-  'estudiantes/_redirects', 'estudiantes/_headers', 'estudiantes/.wrangler',
+  'estudiantes/_redirects', 'estudiantes/_headers',
   'trabajo-titulacion/_redirects', 'trabajo-titulacion/_headers',
   'coordinadores/_redirects', 'coordinadores/_headers',
   'investigadores/_redirects', 'investigadores/_headers',
@@ -293,7 +267,7 @@ for (const directory of ['estudiantes', 'trabajo-titulacion', 'coordinadores', '
     if (!/\.(?:html|js|css|md|json|txt)$/i.test(relative)) continue;
     const content = read(relative);
     if (/pages\.dev|workers\.dev/i.test(content)) {
-      throw new Error('GitHub Pages: dependencia de Cloudflare detectada en ' + relative + '.');
+      throw new Error('GitHub Pages: dependencia de hosting alternativo detectada en ' + relative + '.');
     }
   }
 }
@@ -305,5 +279,5 @@ if (!read('runtime-config.js').includes('https://us-central1-titulos-ec2fa.cloud
 console.log('[GitHub Pages] Sitio preparado en .pages-github.');
 console.log('[GitHub Pages] Rutas: /estudiantes/, /trabajo-titulacion/, /coordinadores/, /investigadores/, /administrador/.');
 console.log('[GitHub Pages] Frontend: GitHub Pages. Datos públicos: Firebase directo. IA y operaciones protegidas: Firebase Functions.');
-console.log('[GitHub Pages] Cloudflare: sin dependencias en el artefacto publicado.');
+console.log('[GitHub Pages] Hosting alternativo: sin dependencias en el artefacto publicado.');
 console.log('[GitHub Pages] Smoke checks de las cinco páginas: OK.');

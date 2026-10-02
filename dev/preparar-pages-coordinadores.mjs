@@ -21,10 +21,7 @@ fs.cpSync(source, output, {
   force: true
 });
 
-/*
-  La aplicación se sirve directamente desde la raíz del dominio:
-  https://titulos-coordinadores.pages.dev/
-*/
+/* La aplicación se copia como entrada independiente; GitHub Pages ajusta la ruta pública final. */
 fs.copyFileSync(
   path.join(output, 'coordinador.html'),
   path.join(output, 'index.html')
@@ -88,4 +85,4 @@ console.log('[Pages coordinadores] Carpeta preparada en .pages-coordinadores.');
 console.log('[Pages coordinadores] Ruta pública principal: /');
 console.log('[Pages coordinadores] Coordinador disponible también en /coordinador.html.');
 console.log('[Pages coordinadores] Estudiantes y administrador no fueron copiados.');
-console.log('[Pages coordinadores] La carpeta functions permanece en la raíz para habilitar /api/*.');
+console.log('[Pages coordinadores] Las operaciones protegidas usan el backend externo de Firebase Functions.');

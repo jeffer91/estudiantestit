@@ -143,4 +143,4 @@ console.log('[Pages estudiantes] Trabajo de Titulación: /trabajo-titulacion/');
 console.log(`[Pages estudiantes] Consulta secuencial, historial y enrutamiento por tipo activos (${VERSION}).`);
 console.log('[Pages estudiantes] Firebase UTET → Google Sheets Estudiantes → Firebase Títulos.');
 console.log('[Pages estudiantes] Coordinadores y administrador no fueron copiados.');
-console.log('[Pages estudiantes] La carpeta functions permanece en la raíz para habilitar /api/*.');
+console.log('[Pages estudiantes] La IA y operaciones protegidas usan el backend externo de Firebase Functions.');
