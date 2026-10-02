@@ -21,10 +21,16 @@ concurrency:
 
 jobs:
   deploy:
-    if: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && vars.GCP_SERVICE_ACCOUNT != '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
+      - name: Verificar configuración de despliegue
+        env:
+          WIF_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          WIF_SERVICE_ACCOUNT: ${{ vars.GCP_SERVICE_ACCOUNT }}
+        run: |
+          test -n "$WIF_PROVIDER" || { echo "::error::Falta la variable GCP_WORKLOAD_IDENTITY_PROVIDER"; exit 1; }
+          test -n "$WIF_SERVICE_ACCOUNT" || { echo "::error::Falta la variable GCP_SERVICE_ACCOUNT"; exit 1; }
       - name: Descargar repositorio
         uses: actions/checkout@v4
 
@@ -40,7 +46,7 @@ jobs:
           node-version: 20
 
       - name: Instalar dependencias del backend
-        run: npm --prefix firebase-backend/functions install --no-audit --no-fund
+        run: npm --prefix firebase-backend/functions ci --no-audit --no-fund
 
       - name: Validar importación
         run: node -e "import('./firebase-backend/functions/index.js').then(() => console.log('Backend Firebase OK'))"
