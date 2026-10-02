@@ -1,6 +1,6 @@
 /**
  * API relay de Claves.
- * Los secretos se utilizan dentro de Apps Script y nunca se devuelven al navegador ni a Cloudflare.
+ * Los secretos se utilizan dentro de Apps Script y nunca se devuelven al navegador.
  * Requiere CLAVES_01_CONFIG.gs en el mismo proyecto.
  */
 function doGet() {
@@ -670,7 +670,7 @@ function clavesProveedor_(id) {
 }
 
 function clavesHostIAValido_(url) {
-  return /^https:\/\/(generativelanguage\.googleapis\.com|api\.groq\.com|api\.cerebras\.ai|integrate\.api\.nvidia\.com|models\.github\.ai|openrouter\.ai|router\.huggingface\.co|api\.cloudflare\.com)\//i.test(url);
+  return /^https:\/\/(generativelanguage\.googleapis\.com|api\.groq\.com|api\.cerebras\.ai|integrate\.api\.nvidia\.com|models\.github\.ai|openrouter\.ai|router\.huggingface\.co)\//i.test(url);
 }
 
 function clavesGenerarIA_(datos) {
