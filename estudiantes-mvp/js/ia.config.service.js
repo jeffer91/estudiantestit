@@ -18,7 +18,11 @@
       ? window.location.origin
       : 'https://titulos.pages.dev';
   }
-  function apiUrl(){ return apiBase() + '/api/ia?action=list'; }
+  function apiUrl(){
+    var proxy = texto(window.ESTUDIANTE_IA_PROXY_URL || '');
+    if (proxy) return proxy + (proxy.indexOf('?') >= 0 ? '&' : '?') + 'action=list';
+    return apiBase() + '/api/ia?action=list';
+  }
 
   function normalizarMotor(data,index){
     data = data || {};
