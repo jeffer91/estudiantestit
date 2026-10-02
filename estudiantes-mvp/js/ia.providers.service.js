@@ -11,9 +11,9 @@
     var origen;
     if(forzada)return forzada;
     if(esLocal())return 'http://127.0.0.1:8788/api/ia';
-    if(esArchivo())return 'https://titulos.pages.dev/api/ia';
+    if(esArchivo())return '';
     origen=texto(window.location&&window.location.origin);
-    return (origen&&origen!=='null'?origen.replace(/\/$/,''):'https://titulos.pages.dev')+'/api/ia';
+    return (texto(window.TITULOS_API_BASE||'')||(origen&&origen!=='null'?origen.replace(/\/$/,''):''))+'/api/ia';
   }
 
   function normalizarMotor(motor){
@@ -33,6 +33,74 @@
     };
   }
 
+  function limitarPalabras(valor,maximo){
+    var palabras=texto(valor).split(/\s+/).filter(Boolean);
+    return palabras.slice(0,Math.max(1,Number(maximo||3))).join(' ');
+  }
+
+  function ajustarTitulo(valor){
+    var palabras=texto(valor).replace(/[.;:]+$/,'').split(/\s+/).filter(Boolean);
+    var apoyo=['con','base','exclusiva','en','la','información','registrada','por','el','estudiante'];
+    var indice=0;
+    if(palabras.length>30)palabras=palabras.slice(0,30);
+    while(palabras.length<20){palabras.push(apoyo[indice%apoyo.length]);indice+=1;}
+    return palabras.join(' ');
+  }
+
+  function extraerCampo(bloque,nombre,respaldo){
+    var patron=new RegExp('^- '+nombre+':\\s*(.+)$','mi');
+    var match=String(bloque||'').match(patron);
+    var valor=texto(match&&match[1]);
+    if(!valor||/^no especificado$/i.test(valor))return respaldo;
+    return limitarPalabras(valor,3);
+  }
+
+  function extraerBloque(prompt,numero){
+    var patron=new RegExp('SECCI(?:Ó|O)N '+numero+'[^\\n]*\\n([\\s\\S]*?)(?=\\nSECCI(?:Ó|O)N [123]|\\nFORMATO JSON|$)','i');
+    var match=String(prompt||'').match(patron);
+    return match?match[1]:String(prompt||'');
+  }
+
+  function titulosInternos(numero,prompt){
+    var bloque=extraerBloque(prompt,numero);
+    var tema=extraerCampo(bloque,'Tema general','el tema registrado');
+    var lugar=extraerCampo(bloque,'Lugar o contexto','el contexto registrado');
+    var grupo=extraerCampo(bloque,'Grupo de estudio','el grupo registrado');
+    var problema=extraerCampo(bloque,'Problema o necesidad','la necesidad registrada');
+    var objetivo=extraerCampo(bloque,'Objetivo','el objetivo registrado');
+    var periodo=extraerCampo(bloque,'Año o período','el período registrado');
+    var plantillas;
+
+    if(numero===1){
+      plantillas=[
+        'Análisis de '+tema+' en '+lugar+' con '+grupo+', considerando '+problema+' y el objetivo '+objetivo+' durante '+periodo+' como diagnóstico académico inicial',
+        'Diagnóstico de '+tema+' para '+grupo+' en '+lugar+', considerando '+problema+' y '+objetivo+' durante '+periodo+' como base del análisis académico',
+        'Caracterización de '+tema+' en '+lugar+' para '+grupo+', relacionando '+problema+' con '+objetivo+' durante '+periodo+' como punto inicial del estudio'
+      ];
+    }else if(numero===2){
+      plantillas=[
+        'Diseño de una propuesta de mejora para '+tema+' en '+lugar+' con '+grupo+', orientada a '+objetivo+' ante '+problema+' durante '+periodo,
+        'Propuesta de estrategia para optimizar '+tema+' en '+lugar+' dirigida a '+grupo+', considerando '+problema+' y el objetivo '+objetivo+' durante '+periodo,
+        'Desarrollo de un plan de mejora sobre '+tema+' para '+grupo+' en '+lugar+', orientado a '+objetivo+' frente a '+problema+' durante '+periodo
+      ];
+    }else{
+      plantillas=[
+        'Evaluación del resultado esperado de '+tema+' en '+lugar+' para '+grupo+', considerando '+problema+' y su relación con '+objetivo+' durante '+periodo,
+        'Valoración de los resultados esperados sobre '+tema+' para '+grupo+' en '+lugar+', orientada a '+objetivo+' ante '+problema+' durante '+periodo,
+        'Análisis del impacto esperado de una mejora en '+tema+' para '+grupo+' en '+lugar+', considerando '+problema+' y el objetivo '+objetivo+' durante '+periodo
+      ];
+    }
+    return plantillas.map(function(titulo,index){return{numero:index+1,titulo:ajustarTitulo(titulo),justificacion:'Alternativa construida con los datos registrados para este enfoque académico.'};});
+  }
+
+  function generarInterno(prompt){
+    return JSON.stringify({secciones:[
+      {seccion:1,etapa:'diagnostico_inicial',titulos:titulosInternos(1,prompt)},
+      {seccion:2,etapa:'propuesta_mejora',titulos:titulosInternos(2,prompt)},
+      {seccion:3,etapa:'evaluacion_resultado',titulos:titulosInternos(3,prompt)}
+    ]});
+  }
+
   function generarTexto(motor,prompt,opciones){
     var p=normalizarMotor(motor);
     var controller=typeof AbortController==='function'?new AbortController():null;
@@ -41,6 +109,8 @@
     opciones=opciones||{};
 
     if(!texto(prompt))return Promise.reject(new Error('No se recibió información para generar las sugerencias.'));
+    if(p.id==='motor_interno')return Promise.resolve(generarInterno(prompt));
+    if(!texto(proxyUrl()))return Promise.reject(new Error('No está configurado el servicio seguro de IA.'));
 
     limite=Math.min(20000,Math.max(5000,numero(opciones.timeoutMs||p.timeoutMs,20000)));
     if(controller)timer=window.setTimeout(function(){controller.abort();},limite+1000);

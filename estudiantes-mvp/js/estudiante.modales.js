@@ -7,8 +7,7 @@
   - Mostrar títulos generados por IA en un modal separado.
   - Mostrar confirmación bonita cuando el estudiante ya tiene un título definido.
   - Extraer correctamente el texto de sugerencias IA aunque lleguen como objetos.
-  - Colorear el marco según el proveedor IA usado:
-    Gemini azul, Groq verde, OpenRouter morado, Cloudflare naranja.
+  - Colorear el marco según el proveedor IA usado.
 */
 (function (window, document) {
   'use strict';
@@ -34,11 +33,6 @@
       nombre: 'OpenRouter',
       clase: 'student-modal--openrouter',
       color: '#7c3aed'
-    },
-    cloudflare: {
-      nombre: 'Cloudflare',
-      clase: 'student-modal--cloudflare',
-      color: '#f97316'
     }
   };
 
@@ -95,7 +89,6 @@
       '.student-modal--gemini .student-modal__card{border:3px solid #2563eb;}',
       '.student-modal--groq .student-modal__card{border:3px solid #16a34a;}',
       '.student-modal--openrouter .student-modal__card{border:3px solid #7c3aed;}',
-      '.student-modal--cloudflare .student-modal__card{border:3px solid #f97316;}',
       '@keyframes studentOrbSpin{to{transform:rotate(360deg);}}',
       '@keyframes studentScan{0%{transform:translateX(-110%);}50%{transform:translateX(90%);}100%{transform:translateX(250%);}}',
       '@media (max-width:560px){.student-modal__card{padding:24px 18px;border-radius:24px;}.student-modal__actions{justify-content:stretch;}.student-modal__btn{width:100%;}}'
@@ -166,7 +159,6 @@
       .replace(/[^a-z0-9_-]/g, '');
 
     if (texto.indexOf('openrouter') !== -1) return 'openrouter';
-    if (texto.indexOf('cloudflare') !== -1) return 'cloudflare';
     if (texto.indexOf('groq') !== -1) return 'groq';
     if (texto.indexOf('gemini') !== -1) return 'gemini';
 

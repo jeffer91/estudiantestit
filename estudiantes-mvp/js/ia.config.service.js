@@ -16,7 +16,7 @@
     if (esLocal()) return 'http://127.0.0.1:8788';
     return window.location.origin && window.location.origin !== 'null'
       ? window.location.origin
-      : 'https://titulos.pages.dev';
+      : '';
   }
   function apiUrl(){
     var proxy = texto(window.ESTUDIANTE_IA_PROXY_URL || '');
@@ -50,6 +50,23 @@
     };
   }
 
+  function motorInterno(){
+    return normalizarMotor({
+      id:'motor_interno',
+      activo:true,
+      prioridad:900,
+      timeoutMs:5000,
+      maxTokens:1500,
+      temperatura:0
+    },899);
+  }
+
+  function conRespaldoInterno(lista){
+    lista=Array.isArray(lista)?lista.slice():[];
+    if(!lista.some(function(motor){return motor&&motor.id==='motor_interno';}))lista.push(motorInterno());
+    return lista.sort(function(a,b){return a.prioridad-b.prioridad;});
+  }
+
   function listarProveedores(forzar){
     if (cache && !forzar) return Promise.resolve(cache.slice());
 
@@ -67,9 +84,13 @@
       })
       .then(function(json){
         var lista = Array.isArray(json.proveedores) ? json.proveedores : [];
-        cache = lista.map(normalizarMotor)
+        cache = conRespaldoInterno(lista.map(normalizarMotor)
           .filter(function(motor){ return motor.id && motor.activo === true; })
-          .sort(function(a,b){ return a.prioridad - b.prioridad; });
+          .sort(function(a,b){ return a.prioridad - b.prioridad; }));
+        return cache.slice();
+      })
+      .catch(function(){
+        cache=conRespaldoInterno([]);
         return cache.slice();
       });
   }
