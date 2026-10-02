@@ -22,6 +22,7 @@
   var adminSession='';
   var currentRole='';
   var ready=false;
+  var loginBusy=false;
   var authReady=Promise.resolve();
 
   function text(value){return String(value===null||value===undefined?'':value).trim();}
@@ -77,6 +78,7 @@
     document.body.appendChild(root);
     root.querySelector('form').addEventListener('submit',function(event){
       event.preventDefault();
+      if(loginBusy)return;
       var email='';
       var password='';
       if(required==='admin'){
@@ -89,14 +91,21 @@
         password=document.getElementById('titulos-auth-password').value;
       }
       setMessage('Verificando acceso...');
+      loginBusy=true;
+      var submitButton=root.querySelector('button[type="submit"]');
+      if(submitButton){submitButton.disabled=true;submitButton.textContent='Verificando...';}
+      function finishAttempt(){
+        loginBusy=false;
+        if(submitButton){submitButton.disabled=false;submitButton.textContent='Ingresar';}
+      }
       if(required==='admin'){
-        loginAdmin(cedula,password).catch(function(error){setMessage(loginErrorMessage(error));});
+        loginAdmin(cedula,password).catch(function(error){setMessage(loginErrorMessage(error));}).finally(finishAttempt);
       }else{
         authReady.then(function(){
           return window.firebase.auth().signInWithEmailAndPassword(email,password);
         }).catch(function(error){
           setMessage(loginErrorMessage(error));
-        });
+        }).finally(finishAttempt);
       }
     });
     return root;
@@ -112,6 +121,9 @@
     var message=text(error&&error.message).toUpperCase();
     if(code.indexOf('configuration-not-found')>=0||message.indexOf('CONFIGURATION_NOT_FOUND')>=0){
       return 'Firebase Authentication aún no está habilitado en el proyecto Títulos.';
+    }
+    if(required==='admin'&&(message.indexOf('FAILED TO FETCH')>=0||message.indexOf('NETWORKERROR')>=0||message.indexOf('LOAD FAILED')>=0)){
+      return 'El backend de Firebase no está disponible. Firebase Functions debe estar desplegado antes de validar el acceso.';
     }
     if(required==='admin'&&(message.indexOf('HTTP 404')>=0||message.indexOf('NOT FOUND')>=0)){
       return 'El backend de Firebase aún no está desplegado. El acceso administrador ya no depende de Firebase Authentication.';
