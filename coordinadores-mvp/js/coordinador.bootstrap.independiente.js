@@ -13,7 +13,7 @@
     if(esLocal())return 'http://127.0.0.1:8788';
     var origen=texto(window.location&&window.location.origin);
     if(/^https?:\/\//i.test(origen))return origen.replace(/\/$/,'');
-    return 'https://titulos-coordinadores.pages.dev';
+    return texto(window.TITULOS_API_BASE || '').replace(/\/$/, '');
   }
 
   window.TITULOS_API_BASE=apiBase();

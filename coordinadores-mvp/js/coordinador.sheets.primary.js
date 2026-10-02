@@ -15,7 +15,7 @@ var diagnosticoEnvios={articulos:{ok:true,recibidos:0,error:''},trabajos:{ok:tru
 function config(){return window.CoordinadorMVPConfig||null;}
 function utils(){return window.CoordinadorMVPUtils||null;}
 function texto(v){return String(v===null||v===undefined?'':v).trim();}
-function base(){return texto(window.TITULOS_API_BASE||'https://titulos-coordinadores.pages.dev').replace(/\/$/,'');}
+function base(){return texto(window.TITULOS_API_BASE||'').replace(/\/$/,'');}
 function url(){return base()+'/api/titulos';}
 function urlTrabajo(){return base()+'/api/trabajo-titulacion';}
 function mensajeError(v){return v&&v.message?v.message:typeof v==='string'?v:'Error de Firebase Títulos.';}

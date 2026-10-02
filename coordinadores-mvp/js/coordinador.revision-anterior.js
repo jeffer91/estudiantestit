@@ -17,7 +17,7 @@
     var forced=text(window.TITULOS_API_BASE||'');
     var origin=text(window.location&&window.location.origin);
     if(forced)return forced.replace(/\/$/,'');
-    return origin&&origin!=='null'?origin.replace(/\/$/,''):'https://titulos-coordinadores.pages.dev';
+    return texto(window.TITULOS_API_BASE||'').replace(/\/$/,'')||(origin&&origin!=='null'?origin.replace(/\/$/,''):'');
   }
   function dateLabel(value){
     var raw=text(value),date;
