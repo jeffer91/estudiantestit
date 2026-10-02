@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import process from 'node:process';
-import { estadoActualEnvio } from '../functions/_lib/admin-global-state.js';
+import { estadoActualEnvio } from '../firebase-backend/functions/_lib/admin-global-state.js';
 
 const errors = [];
 function expect(condition, message) { if (!condition) errors.push(message); }
@@ -18,16 +18,16 @@ expect(!servicios.includes("cargarComplemento('./ad-js/ad-estadisticas-dashboard
 const base = source('administrador/ad-js/ad-google-sheets.app.js');
 expect(base.includes('!window.ADAdminStatsMinimal'), 'La app base todavía puede duplicar la carga de estadísticas.');
 
-const stats = source('functions/_lib/estadisticas-admin.js');
+const stats = source('firebase-backend/functions/_lib/estadisticas-admin.js');
 expect(stats.includes('reconcileAdminGlobalState'), 'Las estadísticas no reconcilian el estado real del envío.');
 
-const reviews = source('functions/_lib/revisiones-admin.js');
+const reviews = source('firebase-backend/functions/_lib/revisiones-admin.js');
 expect(reviews.includes('event.cedula || envio.cedula'), 'El reporte no prioriza el contexto histórico del evento.');
 expect(reviews.includes('Sin tipo registrado'), 'El reporte sigue clasificando tipos desconocidos como artículo.');
 expect(reviews.includes('10.000 revisiones'), 'El reporte no protege contra truncado silencioso.');
 
-const coordinator = source('functions/api/titulos.js');
-const investigator = source('functions/api/investigadores.js');
+const coordinator = source('firebase-backend/functions/api/titulos.js');
+const investigator = source('firebase-backend/functions/api/investigadores.js');
 expect(coordinator.includes('cedula: normalizeCedula(envio.cedula || envio.numeroIdentificacion)'), 'Coordinación no guarda snapshot histórico.');
 expect(investigator.includes('estudiante: nombresEnvio(envio)'), 'Investigación no guarda snapshot histórico.');
 

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
-import { coincidePeriodoTrabajo, esTrabajoTitulacion } from '../functions/_lib/trabajo-titulacion-unificado.js';
+import { coincidePeriodoTrabajo, esTrabajoTitulacion } from '../firebase-backend/functions/_lib/trabajo-titulacion-unificado.js';
 
 const root = process.cwd();
 const errors = [];
@@ -81,7 +81,7 @@ assert(
   'Un artículo con tipo explícito está siendo confundido con Trabajo de Titulación.'
 );
 
-const historyBackend = read('functions/_lib/titulos-historial.js');
+const historyBackend = read('firebase-backend/functions/_lib/titulos-historial.js');
 assert(
   /coordinador:\s*coordinator/.test(historyBackend),
   'El historial conserva el ReferenceError coordinador is not defined.'
@@ -109,7 +109,7 @@ assert(
   'El MutationObserver puede volver a disparar un bucle infinito después de un error.'
 );
 
-const titlesV8 = read('functions/_lib/titulos-firebase-v8.js');
+const titlesV8 = read('firebase-backend/functions/_lib/titulos-firebase-v8.js');
 assert(
   /normalized === 'ENVIO_ESTUDIANTE'/.test(titlesV8) && /saveCompatibleStudentSubmission/.test(titlesV8),
   'El reenvío de Artículo Académico no usa la ruta compatible.'

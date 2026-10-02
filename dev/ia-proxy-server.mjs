@@ -1,5 +1,5 @@
 import http from 'node:http';
-import { onRequest } from '../functions/api/ia.js';
+import { onRequest } from '../firebase-backend/functions/api/ia.js';
 
 const HOST = process.env.IA_PROXY_HOST || '127.0.0.1';
 const PORT = Number(process.env.IA_PROXY_PORT || 8787);

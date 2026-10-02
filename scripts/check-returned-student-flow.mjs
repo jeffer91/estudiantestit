@@ -1,4 +1,4 @@
-import { __test } from '../functions/_lib/titulos-firebase-v11.js';
+import { __test } from '../firebase-backend/functions/_lib/titulos-firebase-v11.js';
 
 const errors = [];
 function assert(condition, message) {

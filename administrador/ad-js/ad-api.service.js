@@ -26,8 +26,6 @@
 
   function texto(v){return String(v===null||v===undefined?'':v).trim();}
   function esLocal(){var h=texto(window.location&&window.location.hostname).toLowerCase();return['localhost','127.0.0.1','0.0.0.0','::1','[::1]'].indexOf(h)>=0;}
-  function esGitHubPages(){var h=texto(window.location&&window.location.hostname).toLowerCase();return h==='github.io'||/\.github\.io$/.test(h);}
-  function directo(){if(!window.ADFirebaseDirect)throw new Error('Firebase directo no está disponible. Recarga la página.');return window.ADFirebaseDirect;}
   function base(){var f=texto(window.TITULOS_API_BASE||'');if(f)return f.replace(/\/$/,'');if(esLocal())return API_LOCAL;var o=texto(window.location&&window.location.origin);return/^https?:\/\//i.test(o)?o.replace(/\/$/,''):'';}
   function leerRespuesta(resp,nombre){return resp.text().then(function(body){var json={};try{json=body?JSON.parse(body):{};}catch(error){throw new Error((nombre||'El servicio')+' respondió en un formato no válido.');}if(!resp.ok||json.ok===false)throw new Error(json.mensaje||json.message||json.error||('Error HTTP '+resp.status));return json;});}
   function solicitar(ruta,accion,datos,metodo){return fetch(base()+ruta,{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json','X-Titulos-App':'administrador'},body:JSON.stringify({accion:accion,action:accion,metodo:metodo||'POST',datos:datos||{}})}).then(function(resp){return leerRespuesta(resp,'El servicio');});}
@@ -153,22 +151,22 @@
     limpiarCache:limpiarCache,
     forzarActualizacion:forzarRed,
     cacheEstado:function(){var bridge=puente();return bridge?bridge.stats():Promise.resolve({entries:memoria.size,persistent:false});},
-    configTitulos:function(){return esGitHubPages()?directo().configTitulos():titulosLectura('CONFIGURACION_PUBLICA',{},'GET',TTL.configuracion);},
-    configRequisitos:function(){return esGitHubPages()?directo().configRequisitos():requisitosLectura('CONFIGURACION_PUBLICA',{},TTL.configuracion);},
-    pingTitulos:function(){return esGitHubPages()?directo().pingTitulos():titulosLectura('PING',{},'GET',TTL.ping);},
-    pingRequisitos:function(){return esGitHubPages()?directo().pingRequisitos():requisitosLectura('PING',{},TTL.ping);},
-    listarServicios:function(){return esGitHubPages()?Promise.resolve({ok:true,servicios:[],registros:[]}):clavesGet('admin-list');},
+    configTitulos:function(){return titulosLectura('CONFIGURACION_PUBLICA',{},'GET',TTL.configuracion);},
+    configRequisitos:function(){return requisitosLectura('CONFIGURACION_PUBLICA',{},TTL.configuracion);},
+    pingTitulos:function(){return titulosLectura('PING',{},'GET',TTL.ping);},
+    pingRequisitos:function(){return requisitosLectura('PING',{},TTL.ping);},
+    listarServicios:function(){return clavesGet('admin-list');},
     guardarServicio:function(servicio){return escritura(clavesPost('admin-save',{service:servicio||{}}));},
-    listarPeriodos:function(){return esGitHubPages()?directo().listarPeriodos():requisitosLectura('LISTAR_PERIODOS_TITULACION',{},TTL.periodos);},
-    listarPeriodosAdmin:function(){return esGitHubPages()?directo().listarPeriodos():adminGlobalLectura('ADMIN_LISTAR_PERIODOS',{},TTL.periodos);},
+    listarPeriodos:function(){return requisitosLectura('LISTAR_PERIODOS_TITULACION',{},TTL.periodos);},
+    listarPeriodosAdmin:function(){return adminGlobalLectura('ADMIN_LISTAR_PERIODOS',{},TTL.periodos);},
     guardarPeriodoAdmin:function(datos){return escritura(solicitar('/api/estadisticas','ADMIN_GUARDAR_PERIODO',datos||{},'POST'),true);},
-    listarCarreras:function(periodoId){return esGitHubPages()?directo().listarCarreras(periodoId):requisitosLectura('LISTAR_CARRERAS_PERIODO',{periodoId:periodoId||''},TTL.carreras);},
-    listarCarrerasAdmin:function(){return esGitHubPages()?directo().listarCarreras():adminGlobalLectura('ADMIN_LISTAR_CARRERAS',{},TTL.carreras);},
+    listarCarreras:function(periodoId){return requisitosLectura('LISTAR_CARRERAS_PERIODO',{periodoId:periodoId||''},TTL.carreras);},
+    listarCarrerasAdmin:function(){return adminGlobalLectura('ADMIN_LISTAR_CARRERAS',{},TTL.carreras);},
     asignarCarreraCoordinador:function(datos){return escritura(solicitar('/api/estadisticas','ADMIN_ASIGNAR_CARRERA_COORDINADOR',datos||{},'POST'),true);},
-    consultarEstudiante:function(cedula,periodoId){return esGitHubPages()?directo().consultarEstudiante(cedula,periodoId):solicitar('/api/titulos','CONSULTAR_ESTUDIANTE',{cedula:cedula,numeroIdentificacion:cedula,periodoId:periodoId||''},'GET');},
-    listarCoordinadores:function(){return esGitHubPages()?directo().listarCoordinadores():titulosLectura('LISTAR_COORDINADORES',{incluirInactivos:true},'GET',TTL.coordinadores);},
-    listarInvestigadores:function(){return esGitHubPages()?directo().listarInvestigadores():investigacionLectura('ADMIN_LISTAR_INVESTIGADORES',{},TTL.investigadores);},
-    resumenInvestigacion:function(){return esGitHubPages()?directo().resumenInvestigacion():investigacionLectura('ADMIN_RESUMEN_INVESTIGACION',{},TTL.investigadores);},
+    consultarEstudiante:function(cedula,periodoId){return solicitar('/api/titulos','CONSULTAR_ESTUDIANTE',{cedula:cedula,numeroIdentificacion:cedula,periodoId:periodoId||''},'GET');},
+    listarCoordinadores:function(){return titulosLectura('LISTAR_COORDINADORES',{incluirInactivos:true},'GET',TTL.coordinadores);},
+    listarInvestigadores:function(){return investigacionLectura('ADMIN_LISTAR_INVESTIGADORES',{},TTL.investigadores);},
+    resumenInvestigacion:function(){return investigacionLectura('ADMIN_RESUMEN_INVESTIGACION',{},TTL.investigadores);},
     guardarInvestigador:function(datos){return escritura(solicitar('/api/investigadores','ADMIN_GUARDAR_INVESTIGADOR',datos||{},'POST'));},
     resetPinInvestigador:function(cedula){return escritura(solicitar('/api/investigadores','ADMIN_RESETEAR_PIN_INVESTIGADOR',{cedula:cedula},'POST'));},
     liberarRevisionInvestigacion:function(envioId){return escritura(solicitar('/api/investigadores','ADMIN_LIBERAR_REVISION_INVESTIGACION',{envioId:envioId},'POST'));},
@@ -176,17 +174,17 @@
     guardarCoordinador:function(datos){return escritura(solicitar('/api/titulos','GUARDAR_COORDINADOR',datos||{},'POST'),true);},
     cambiarEstadoCoordinador:function(datos){return escritura(solicitar('/api/titulos','CAMBIAR_ESTADO_COORDINADOR',datos||{},'POST'),true);},
     asignarCarreras:function(datos){return escritura(solicitar('/api/titulos','ASIGNAR_CARRERA',datos||{},'POST'),true);},
-    listarTitulos:function(filtros){return esGitHubPages()?directo().listarTitulos(filtros||{}):titulosLectura('LISTAR_ENVIOS_POR_CARRERA',filtros||{carreras:'',carrera:'',estado:'',periodo:''},'GET',TTL.titulos);},
-    listarTitulosGlobal:function(filtros){if(esGitHubPages())return directo().listarTitulosGlobal(filtros||{}).then(function(result){window.ADAdminGlobalLast=result;return result;});var datos=datosVistaAdmin(filtros);return adminGlobalLectura('ADMIN_LISTA_GLOBAL_TITULOS',datos,TTL.global).then(function(result){window.ADAdminGlobalLast=result;return result;});},
+    listarTitulos:function(filtros){return titulosLectura('LISTAR_ENVIOS_POR_CARRERA',filtros||{carreras:'',carrera:'',estado:'',periodo:''},'GET',TTL.titulos);},
+    listarTitulosGlobal:function(filtros){var datos=datosVistaAdmin(filtros);return adminGlobalLectura('ADMIN_LISTA_GLOBAL_TITULOS',datos,TTL.global).then(function(result){window.ADAdminGlobalLast=result;return result;});},
     consultarTitulo:function(cedula,periodo){return titulosLectura('VERIFICAR_ENVIO',{cedula:cedula,numeroIdentificacion:cedula,periodo:periodo||''},'GET',TTL.titulo);},
     devolverTitulo:function(datos){return escritura(solicitar('/api/titulos','GUARDAR_RESOLUCION',datos||{},'POST'),true);},
     eliminarTitulo:function(datos){return escritura(solicitar('/api/titulos','ADMIN_ELIMINAR_TITULOS',datos||{},'POST'),true);},
-    obtenerEstadisticas:function(filtros){if(esGitHubPages())return directo().obtenerEstadisticas(filtros||{}).then(function(result){window.ADAdminStatisticsLast=result;return result;});var datos=datosVistaAdmin(filtros);return adminGlobalLectura('ADMIN_ESTADISTICAS_TITULOS',datos,TTL.estadisticas).then(function(result){window.ADAdminStatisticsLast=result;return result;});},
+    obtenerEstadisticas:function(filtros){var datos=datosVistaAdmin(filtros);return adminGlobalLectura('ADMIN_ESTADISTICAS_TITULOS',datos,TTL.estadisticas).then(function(result){window.ADAdminStatisticsLast=result;return result;});},
     exportarFirebaseTitulos:function(){return solicitar('/api/estadisticas','ADMIN_REPORTE_FIREBASE_TITULOS',{},'POST');},
-    listarIA:function(){return esGitHubPages()?directo().listarIA():iaGet('admin-list');},
-    guardarIA:function(proveedor){if(esGitHubPages())return Promise.reject(new Error('En GitHub Pages las credenciales de IA no se guardan en el navegador. Usa una API key temporal únicamente para la prueba.'));return escritura(iaPost('admin-save',{provider:proveedor||{}}));},
-    cambiarEstadoIA:function(providerId,activo){if(esGitHubPages())return Promise.reject(new Error('El estado de proveedores no se modifica desde GitHub Pages para no exponer credenciales administrativas.'));return escritura(iaPost('admin-toggle',{providerId:providerId,activo:activo===true}));},
-    probarIA:function(providerId,prompt,credencial){return esGitHubPages()?directo().probarIA(providerId,prompt||'Responde únicamente: conexión correcta.',credencial||''):iaPost('admin-test',{providerId:providerId,prompt:prompt||'Responde únicamente: conexión correcta.'});},
+    listarIA:function(){return iaGet('admin-list');},
+    guardarIA:function(proveedor){return escritura(iaPost('admin-save',{provider:proveedor||{}}));},
+    cambiarEstadoIA:function(providerId,activo){return escritura(iaPost('admin-toggle',{providerId:providerId,activo:activo===true}));},
+    probarIA:function(providerId,prompt,_credencial){return iaPost('admin-test',{providerId:providerId,prompt:prompt||'Responde únicamente: conexión correcta.'});},
     extraerServicios:function(r){return lista(r,['servicios','registros']);},
     extraerPeriodos:function(r){return lista(r,['periodos','periods','registros']);},
     extraerCarreras:function(r){return lista(r,['carreras','registros']);},
@@ -207,7 +205,7 @@
   }
 
   function cargarComplemento(ruta,atributo){if(!window.document||window.document.querySelector('script['+atributo+'="true"]'))return;var script=window.document.createElement('script');script.src=ruta;script.async=false;script.setAttribute(atributo,'true');window.document.head.appendChild(script);}
-  if(!esGitHubPages())cargarComplemento('./ad-js/ad-servicios.app.js?v=3.6.3','data-ad-servicios');
+  cargarComplemento('./ad-js/ad-servicios.app.js?v=3.6.3','data-ad-servicios');
   cargarComplemento('./ad-js/ad-correo-outlook.js?v=3.6.3','data-ad-correo-outlook');
   cargarComplemento('./ad-js/ad-administracion-global.js?v=3.6.3','data-ad-administracion-global');
   cargarComplemento('./ad-js/ad-flujo-admin.js?v=3.6.3','data-ad-flujo-admin');

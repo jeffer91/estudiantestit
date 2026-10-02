@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
-import { __test as accessTest } from '../functions/api/acceso-estudiante.js';
-import { __test as firebaseTest } from '../functions/_lib/requisitos-firebase-fast.js';
-import { __test as sheetsTest } from '../functions/_lib/requisitos-sheets-fallback.js';
+import { __test as accessTest } from '../firebase-backend/functions/api/acceso-estudiante.js';
+import { __test as firebaseTest } from '../firebase-backend/functions/_lib/requisitos-firebase-fast.js';
 
 const cedula = '1313244988';
 
@@ -49,22 +48,6 @@ const historicalEnrollment = firebaseTest.chooseEnrollmentForPeriod([
 ], 'Octubre 2025 a Marzo 2026');
 
 assert.equal(historicalEnrollment.periodoId, '2025-10__2026-03');
-
-const normalizedSheets = sheetsTest.normalizeFastStudent({
-  ok: true,
-  encontrado: true,
-  estudiante: {
-    cedula,
-    Nombres: 'MACIAS REZABALA ERICK ALEXANDER',
-    NombreCarrera: 'PROCESAMIENTO EN ALIMENTOS',
-    periodoId: '2025-11__2026-05',
-    periodoLabel: 'Noviembre 2025 a Mayo 2026'
-  }
-}, cedula);
-
-assert.equal(normalizedSheets.encontrado, true);
-assert.equal(normalizedSheets.datosCompletos, true);
-assert.equal(normalizedSheets.fuente, 'GOOGLE_SHEETS_ESTUDIANTES');
 
 const pending = accessTest.normalizeTitles({
   ok: true,
@@ -117,4 +100,4 @@ assert.equal(empty.tieneEnvio, false);
 assert.equal(empty.estado, 'SIN_ENVIO');
 assert.equal(empty.permiteReenvio, false);
 
-console.log('[Acceso estudiante] UTET mínimo, respaldo Sheets y resolución de Títulos validados.');
+console.log('[Acceso estudiante] UTET mínimo y resolución de Títulos validados sobre el backend Firebase.');

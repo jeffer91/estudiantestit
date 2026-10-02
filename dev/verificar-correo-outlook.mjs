@@ -13,7 +13,7 @@ function assert(condition, message) {
   if (!condition) errors.push(message);
 }
 
-const globalService = read('functions/_lib/admin-global.js');
+const globalService = read('firebase-backend/functions/_lib/admin-global.js');
 const api = read('administrador/ad-js/ad-api.service.js');
 const outlook = read('administrador/ad-js/ad-correo-outlook.js');
 const outlookUi = read('administrador/ad-js/ad-version.js');

@@ -4,7 +4,7 @@ import process from 'node:process';
 import {
   cedulaEstricta,
   coincidePeriodoTrabajo
-} from '../functions/_lib/trabajo-titulacion-unificado.js';
+} from '../firebase-backend/functions/_lib/trabajo-titulacion-unificado.js';
 
 const root = process.cwd();
 const errors = [];
@@ -76,23 +76,23 @@ const coordinatorState = read('coordinadores-mvp/js/coordinador.state.js');
 const coordinatorUi = read('coordinadores-mvp/js/coordinador.ui.js');
 const coordinatorApp = read('coordinadores-mvp/js/coordinador.app.js');
 const workScript = read('trabajo-titulacion-mvp/js/trabajo-titulacion.js');
-const workApi = read('functions/api/trabajo-titulacion.js');
-const unifiedWork = read('functions/_lib/trabajo-titulacion-unificado.js');
-const titlesV6 = read('functions/_lib/titulos-firebase-v6.js');
-const titlesV7 = read('functions/_lib/titulos-firebase-v7.js');
-const adminGlobal = read('functions/_lib/admin-global-v6.js');
+const workApi = read('firebase-backend/functions/api/trabajo-titulacion.js');
+const unifiedWork = read('firebase-backend/functions/_lib/trabajo-titulacion-unificado.js');
+const titlesV6 = read('firebase-backend/functions/_lib/titulos-firebase-v6.js');
+const titlesV7 = read('firebase-backend/functions/_lib/titulos-firebase-v7.js');
+const adminGlobal = read('firebase-backend/functions/_lib/admin-global-v6.js');
 const adminApi = read('administrador/ad-js/ad-api.service.js');
 const adminPdf = read('administrador/ad-js/ad-pdf-firebase.js');
 const studentRequirements = read('estudiantes-mvp/js/requisitos.estudiantes.service.js');
 const studentSheets = read('estudiantes-mvp/js/sheets.service.js');
-const studentAccess = read('functions/api/acceso-estudiante.js');
-const studentFirebaseFast = read('functions/_lib/requisitos-firebase-fast.js');
+const studentAccess = read('firebase-backend/functions/api/acceso-estudiante.js');
+const studentFirebaseFast = read('firebase-backend/functions/_lib/requisitos-firebase-fast.js');
 const studentFirebaseFastCode = withoutComments(studentFirebaseFast);
 const studentBuild = read('dev/preparar-pages-estudiantes.mjs');
 const localBuild = read('dev/preparar-pages-local.mjs');
 const coordinatorBuild = read('dev/preparar-pages-coordinadores.mjs');
 const investigatorBuild = read('dev/preparar-pages-investigadores.mjs');
-const investigatorApi = read('functions/api/investigadores.js');
+const investigatorApi = read('firebase-backend/functions/api/investigadores.js');
 const investigatorApp = read('investigadores-mvp/js/investigadores.app.js');
 const adminBuild = read('dev/preparar-pages-administrador.mjs');
 

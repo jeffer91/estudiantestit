@@ -24,6 +24,10 @@
   var authReady=Promise.resolve();
 
   function text(value){return String(value===null||value===undefined?'':value).trim();}
+  function adminEmail(cedula){
+    var normalized=text(cedula).replace(/\D/g,'');
+    return /^\d{10}$/.test(normalized)?normalized+'@admin.titulos.invalid':'';
+  }
   function allowed(role){return required==='admin'?role==='admin':(role==='coordinator'||role==='admin');}
   function apiUrl(input){
     try{
@@ -65,17 +69,29 @@
     if(root)return root;
     root=document.createElement('section');
     root.id='titulos-auth';
-    root.innerHTML='<div class="card"><h2>Acceso protegido</h2><p>'+(required==='admin'?'Administrador de Titulación':'Coordinación de Titulación')+'</p><form id="titulos-auth-form"><label>Correo<input id="titulos-auth-email" type="email" autocomplete="username" required></label><label>Contraseña<input id="titulos-auth-password" type="password" autocomplete="current-password" required></label><button type="submit">Ingresar</button><div class="msg" id="titulos-auth-msg"></div></form></div>';
+    var fields=required==='admin'
+      ? '<label>Usuario<input id="titulos-auth-cedula" type="text" inputmode="numeric" pattern="[0-9]{10}" maxlength="10" autocomplete="username" required></label><label>Contraseña<input id="titulos-auth-pin" type="password" inputmode="numeric" pattern="[0-9]{4,8}" maxlength="8" autocomplete="current-password" required></label>'
+      : '<label>Correo<input id="titulos-auth-email" type="email" autocomplete="username" required></label><label>Contraseña<input id="titulos-auth-password" type="password" autocomplete="current-password" required></label>';
+    root.innerHTML='<div class="card"><h2>Acceso protegido</h2><p>'+(required==='admin'?'Administrador de Titulación':'Coordinación de Titulación')+'</p><form id="titulos-auth-form">'+fields+'<button type="submit">Ingresar</button><div class="msg" id="titulos-auth-msg"></div></form></div>';
     document.body.appendChild(root);
     root.querySelector('form').addEventListener('submit',function(event){
       event.preventDefault();
-      var email=text(document.getElementById('titulos-auth-email').value);
-      var password=document.getElementById('titulos-auth-password').value;
+      var email='';
+      var password='';
+      if(required==='admin'){
+        email=adminEmail(document.getElementById('titulos-auth-cedula').value);
+        password=document.getElementById('titulos-auth-pin').value;
+        if(!email){setMessage('Ingresa un usuario válido de 10 dígitos.');return;}
+        if(!/^\d{4,8}$/.test(password)){setMessage('Ingresa una contraseña válida.');return;}
+      }else{
+        email=text(document.getElementById('titulos-auth-email').value);
+        password=document.getElementById('titulos-auth-password').value;
+      }
       setMessage('Verificando acceso...');
       authReady.then(function(){
         return window.firebase.auth().signInWithEmailAndPassword(email,password);
       }).catch(function(error){
-        setMessage(error&&error.message?error.message:'No se pudo iniciar sesión.');
+        setMessage(required==='admin'?'Usuario o contraseña incorrectos.':(error&&error.message?error.message:'No se pudo iniciar sesión.'));
       });
     });
     return root;

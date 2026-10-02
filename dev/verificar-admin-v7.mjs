@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { buildAdminGlobalList } from '../functions/_lib/admin-global-v7.js';
-import { enrichAdminPeriodPayload } from '../functions/_lib/estadisticas-admin.js';
+import { buildAdminGlobalList } from '../firebase-backend/functions/_lib/admin-global-v7.js';
+import { enrichAdminPeriodPayload } from '../firebase-backend/functions/_lib/estadisticas-admin.js';
 
 const originalFetch = globalThis.fetch;
 const calls = [];
+const testEnv = { FIRESTORE_ACCESS_TOKEN: 'test-only-token' };
 let scenario = 'canonical';
 
 function responseJson(value, status = 200) {
@@ -178,7 +179,7 @@ try {
   const result = await buildAdminGlobalList({
     periodoId: '2026-02__2026-08',
     periodo: 'Febrero 2026 a Agosto 2026'
-  }, {});
+  }, testEnv);
 
   assert.equal(result.total, 3, 'Debe unir matrículas guardadas con distintos campos de período.');
   assert.equal(result.totalEnviosPeriodo, 1);
@@ -210,7 +211,7 @@ try {
     periodoId: '2025-10__2026-03',
     periodoLabel: 'Octubre 2025 a Marzo 2026',
     periodo: '2026-10'
-  }, {});
+  }, testEnv);
 
   assert.equal(
     aliasResult.total,

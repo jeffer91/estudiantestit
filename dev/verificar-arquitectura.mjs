@@ -45,18 +45,18 @@ assert(!/firebase-app|firebase-firestore/i.test(investigatorHtml), 'Investigaci�
 assert(!/firebase-app|firebase-firestore/i.test(adminHtml), 'Administrador no debe cargar Firebase directamente en el navegador.');
 
 const requiredFiles = [
-  'functions/_lib/http.js',
-  'functions/_lib/firestore.js',
-  'functions/_lib/requisitos-firebase.js',
-  'functions/_lib/titulos-firebase.js',
-  'functions/_lib/ia-firebase.js',
-  'functions/_lib/claves.js',
-  'functions/api/claves.js',
-  'functions/api/titulos.js',
-  'functions/api/investigadores.js',
-  'functions/_lib/workflow-titulacion.js',
-  'functions/api/requisitos.js',
-  'functions/api/ia.js',
+  'firebase-backend/functions/_lib/http.js',
+  'firebase-backend/functions/_lib/firestore.js',
+  'firebase-backend/functions/_lib/requisitos-firebase.js',
+  'firebase-backend/functions/_lib/titulos-firebase.js',
+  'firebase-backend/functions/_lib/ia-firebase.js',
+  'firebase-backend/functions/_lib/claves.js',
+  'firebase-backend/functions/api/claves.js',
+  'firebase-backend/functions/api/titulos.js',
+  'firebase-backend/functions/api/investigadores.js',
+  'firebase-backend/functions/_lib/workflow-titulacion.js',
+  'firebase-backend/functions/api/requisitos.js',
+  'firebase-backend/functions/api/ia.js',
   'estudiantes-mvp/js/requisitos.estudiantes.service.js',
   'estudiantes-mvp/js/titulos.cola.service.js',
   'coordinadores-mvp/js/coordinador.sheets.primary.js',
@@ -68,25 +68,25 @@ const requiredFiles = [
 ];
 requiredFiles.forEach(read);
 
-const firestore = read('functions/_lib/firestore.js');
-const requirements = read('functions/_lib/requisitos-firebase.js');
-const titles = read('functions/_lib/titulos-firebase.js');
-const ai = read('functions/_lib/ia-firebase.js');
-const claves = read('functions/_lib/claves.js');
-const http = read('functions/_lib/http.js');
-const titlesApi = read('functions/api/titulos.js');
-const investigatorApi = read('functions/api/investigadores.js');
-const workflowApi = read('functions/_lib/workflow-titulacion.js');
-const requirementsApi = read('functions/api/requisitos.js');
-const aiApi = read('functions/api/ia.js');
+const firestore = read('firebase-backend/functions/_lib/firestore.js');
+const requirements = read('firebase-backend/functions/_lib/requisitos-firebase.js');
+const titles = read('firebase-backend/functions/_lib/titulos-firebase.js');
+const ai = read('firebase-backend/functions/_lib/ia-firebase.js');
+const claves = read('firebase-backend/functions/_lib/claves.js');
+const http = read('firebase-backend/functions/_lib/http.js');
+const titlesApi = read('firebase-backend/functions/api/titulos.js');
+const investigatorApi = read('firebase-backend/functions/api/investigadores.js');
+const workflowApi = read('firebase-backend/functions/_lib/workflow-titulacion.js');
+const requirementsApi = read('firebase-backend/functions/api/requisitos.js');
+const aiApi = read('firebase-backend/functions/api/ia.js');
 const adminApi = read('administrador/ad-js/ad-api.service.js');
 const adminApp = read('administrador/ad-js/ad-google-sheets.app.js');
 
 assert(/titulos-ec2fa/.test(firestore), 'No está configurado Firebase Títulos titulos-ec2fa.');
 assert(/utet-4387a/.test(firestore), 'No está configurado Firebase UTET utet-4387a.');
-assert(/apiKey/.test(firestore) && /publicApiUrl/.test(firestore), 'La prueba local no contempla las configuraciones web de Firebase.');
-assert(/serviceAccount/.test(firestore) && /oauth2\.googleapis\.com\/token/.test(firestore), 'No existe autenticación opcional por cuenta de servicio para producción.');
-assert(/if \(token\)[^\n]+Authorization/.test(firestore), 'Firestore no usa autorización Bearer cuando existe cuenta de servicio.');
+assert(/GoogleAuth/.test(firestore) && /Application Default Credentials|ADC/.test(firestore), 'Firestore debe usar la identidad de ejecución de Firebase mediante ADC.');
+assert(/Authorization/.test(firestore) && /Bearer/.test(firestore), 'Firestore debe autenticar las llamadas de servidor con Bearer ADC.');
+assert(!/apiKey/.test(firestore) && !/serviceAccount/.test(firestore), 'El backend no debe depender de API keys web ni llaves JSON de cuenta de servicio.');
 assert(/Estudiantes/.test(requirements), 'La consulta UTET no usa la colección Estudiantes.');
 assert(/EstudiantesPeriodo/.test(requirements), 'La consulta UTET no contempla EstudiantesPeriodo.');
 assert(/numeroIdentificacion/.test(requirements) && /Nombres/.test(requirements) && /NombreCarrera/.test(requirements), 'La consulta UTET no normaliza cédula, nombre y carrera.');
@@ -98,7 +98,8 @@ assert(/ADMIN_ELIMINAR_TITULOS/.test(titles), 'Títulos no implementa la elimina
 assert(/listProviders/.test(ai) && /generateWithProvider/.test(ai), 'IA no está conectada a Firebase Títulos.');
 assert(/executeTitulosAction/.test(claves) && /pullRequisitos/.test(claves), 'La fachada no enruta hacia las dos Firebase.');
 assert(!/CLAVES_APPS_SCRIPT_URL|script\.google\.com/.test(claves + titles + requirements + ai), 'La capa activa todavía depende de Apps Script.');
-assert(/requestHost/.test(http) && /titulos-administrador\.pages\.dev/.test(http) && /titulos-investigadores\.pages\.dev/.test(http), 'Los roles no se determinan por el host de cada proyecto.');
+assert(/https:\/\/jeffer91\.github\.io/.test(http), 'GitHub Pages debe ser el origen web permitido.');
+assert(!/pages\.dev|workers\.dev|api\.cloudflare\.com/i.test(http), 'El backend vigente no debe contener hosts de Cloudflare.');
 assert(/runService\s*\(\s*env\s*,\s*['"]TITULOS['"]/.test(titlesApi), 'La API de Títulos no usa la fachada Firebase.');
 assert(/ADMIN_ELIMINAR_TITULOS/.test(titlesApi), 'La API no reserva la eliminación para Administrador.');
 assert(/PENDIENTE_INVESTIGADOR/.test(workflowApi) && /APROBADO_FINAL/.test(workflowApi), 'No existe una máquina de estados compartida para Investigación.');
@@ -118,5 +119,5 @@ if (errors.length) {
 }
 
 console.log('[Arquitectura] Correcta: UTET=datos mínimos; Títulos=envíos, Coordinación, Investigación, administración e IA.');
-console.log('[Arquitectura] Local usa configuración web; producción puede usar OAuth con cuenta de servicio.');
+console.log('[Arquitectura] Firebase Functions usa ADC; el navegador no recibe credenciales del backend.');
 console.log('[Arquitectura] La eliminación completa de títulos está disponible solo para Administrador.');

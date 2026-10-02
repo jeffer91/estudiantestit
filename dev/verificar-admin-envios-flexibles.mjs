@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import { buildAdminGlobalList } from '../functions/_lib/admin-global-v8.js';
-import { enrichAdminPeriodPayload } from '../functions/_lib/estadisticas-admin.js';
+import { buildAdminGlobalList } from '../firebase-backend/functions/_lib/admin-global-v8.js';
+import { enrichAdminPeriodPayload } from '../firebase-backend/functions/_lib/estadisticas-admin.js';
 
 const originalFetch = globalThis.fetch;
 const calls = [];
+const testEnv = { FIRESTORE_ACCESS_TOKEN: 'test-only-token' };
 
 function responseJson(value, status = 200) {
   return new Response(JSON.stringify(value), {
@@ -143,7 +144,7 @@ try {
   const result = await buildAdminGlobalList({
     periodoId: '2026-02__2026-08',
     periodoLabel: 'Febrero 2026 a Agosto 2026'
-  }, {});
+  }, testEnv);
 
   assert.equal(result.total, 1);
   assert.equal(result.registros[0].cedula, '1717094096');

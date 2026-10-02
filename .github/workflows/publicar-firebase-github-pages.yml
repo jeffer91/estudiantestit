@@ -20,8 +20,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  verificar-configuracion:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verificar Workload Identity Federation
+        env:
+          GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          GCP_SERVICE_ACCOUNT: ${{ vars.GCP_SERVICE_ACCOUNT }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${GCP_WORKLOAD_IDENTITY_PROVIDER}" || -z "${GCP_SERVICE_ACCOUNT}" ]]; then
+            echo "::error::Faltan las variables GCP_WORKLOAD_IDENTITY_PROVIDER y/o GCP_SERVICE_ACCOUNT del repositorio."
+            exit 1
+          fi
+
   deploy:
-    if: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && vars.GCP_SERVICE_ACCOUNT != '' }}
+    needs: verificar-configuracion
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -45,8 +61,8 @@ jobs:
       - name: Validar importación
         run: node -e "import('./firebase-backend/functions/index.js').then(() => console.log('Backend Firebase OK'))"
 
-      - name: Publicar Functions
-        run: npx --yes firebase-tools deploy --only functions --project titulos-ec2fa --config firebase.json
+      - name: Publicar Functions y reglas Firestore
+        run: npx --yes firebase-tools deploy --only functions,firestore:rules --project titulos-ec2fa --config firebase.json
 
       - name: Comprobar health
         shell: bash

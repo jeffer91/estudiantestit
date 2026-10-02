@@ -13,15 +13,15 @@ function expect(condition, message) {
   if (!condition) errors.push(message);
 }
 
-const titles = read('functions/api/titulos.js');
-const titlesFirebase = read('functions/_lib/titulos-firebase.js');
-const titlesFirebaseV8 = read('functions/_lib/titulos-firebase-v8.js');
-const titlesFirebaseV11 = read('functions/_lib/titulos-firebase-v11.js');
-const requirementsFast = read('functions/_lib/requisitos-firebase-fast.js');
-const work = read('functions/api/trabajo-titulacion.js');
-const history = read('functions/api/historial-titulos.js');
-const historyLib = read('functions/_lib/titulos-historial.js');
-const investigator = read('functions/api/investigadores.js');
+const titles = read('firebase-backend/functions/api/titulos.js');
+const titlesFirebase = read('firebase-backend/functions/_lib/titulos-firebase.js');
+const titlesFirebaseV8 = read('firebase-backend/functions/_lib/titulos-firebase-v8.js');
+const titlesFirebaseV11 = read('firebase-backend/functions/_lib/titulos-firebase-v11.js');
+const requirementsFast = read('firebase-backend/functions/_lib/requisitos-firebase-fast.js');
+const work = read('firebase-backend/functions/api/trabajo-titulacion.js');
+const history = read('firebase-backend/functions/api/historial-titulos.js');
+const historyLib = read('firebase-backend/functions/_lib/titulos-historial.js');
+const investigator = read('firebase-backend/functions/api/investigadores.js');
 const coordinatorHtml = read('coordinadores-mvp/coordinador.html');
 const coordinatorState = read('coordinadores-mvp/js/coordinador.state.js');
 const coordinatorModal = read('coordinadores-mvp/js/coordinador.modal.js');
@@ -37,7 +37,7 @@ const adminJs = read('administrador/ad-js/ad-google-sheets.app.js');
 const adminGlobalUi = read('administrador/ad-js/ad-administracion-global.js');
 const adminStats = read('administrador/ad-js/ad-estadisticas-dashboard.patch.js');
 const adminTitles = read('administrador/ad-js/ad-titulos-admin.patch.js');
-const adminWorkApi = read('functions/api/admin-trabajo-titulacion.js');
+const adminWorkApi = read('firebase-backend/functions/api/admin-trabajo-titulacion.js');
 const adminWorkUi = read('administrador/ad-js/ad-trabajo-titulacion-admin.patch.js');
 
 expect(/PENDIENTE_INVESTIGADOR/.test(titles) && /registerCoordinatorValidation/.test(titles),

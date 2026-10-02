@@ -21,7 +21,7 @@ fs.cpSync(source, output, { recursive: true, force: true });
 
 function actualizarVersionHtml(file) {
   let html = fs.readFileSync(file, 'utf8');
-  html = html.replace(/\?v=\d+\.\d+\.\d+(?:&r=[^"'&\\s]+)?/g, `?v=${VERSION_ADMIN}&r=github-firebase-direct-3`);
+  html = html.replace(/\?v=\d+\.\d+\.\d+(?:&r=[^"'&\\s]+)?/g, `?v=${VERSION_ADMIN}&r=github-firebase-api`);
   html = html.replace(/>v\d+\.\d+\.\d+</g, `>v${VERSION_ADMIN}<`);
   html = html.replace(/Versión \d+\.\d+\.\d+/g, `Versión ${VERSION_ADMIN}`);
   fs.writeFileSync(file, html, 'utf8');
@@ -66,7 +66,6 @@ for (const required of [
   path.join(output, 'index.html'),
   path.join(output, 'ad-css', 'ad-admin.css'),
   path.join(output, 'ad-css', 'ad-titulos-estadisticas.css'),
-  path.join(output, 'ad-js', 'ad-firebase-direct.js'),
   path.join(output, 'ad-js', 'ad-api.service.js'),
   path.join(output, 'ad-js', 'ad-google-sheets.app.js'),
   path.join(output, 'ad-js', 'ad-servicios.app.js'),

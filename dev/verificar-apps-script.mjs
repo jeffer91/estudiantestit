@@ -30,10 +30,9 @@ if (/ensureAllSheets_|handlePullBL2_/.test(fastSource)) {
 }
 
 const firebaseFiles = [
-  'functions/_lib/firestore.js',
-  'functions/_lib/requisitos-firebase-fast.js',
-  'functions/_lib/requisitos-sheets-fallback.js',
-  'functions/_lib/titulos-firebase-v7.js'
+  'firebase-backend/functions/_lib/firestore.js',
+  'firebase-backend/functions/_lib/requisitos-firebase-fast.js',
+  'firebase-backend/functions/_lib/titulos-firebase-v7.js'
 ];
 
 for (const file of firebaseFiles) {

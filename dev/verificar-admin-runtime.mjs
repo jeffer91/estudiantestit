@@ -10,8 +10,8 @@ const services = read('administrador/ad-js/ad-servicios.app.js');
 const performance = read('administrador/ad-js/ad-performance.patch.js');
 const workAdmin = read('administrador/ad-js/ad-trabajo-titulacion-admin.patch.js');
 const titleAdmin = read('administrador/ad-js/ad-titulos-admin.patch.js');
-const resolutionCore = read('functions/_lib/titulos-firebase-v7-core.js');
-const report = read('functions/_lib/firebase-titulos-report.js');
+const resolutionCore = read('firebase-backend/functions/_lib/titulos-firebase-v7-core.js');
+const report = read('firebase-backend/functions/_lib/firebase-titulos-report.js');
 const build = read('dev/preparar-pages-administrador.mjs');
 const electron = read('electron/administrador/main.cjs');
 

@@ -2,11 +2,12 @@ import assert from 'node:assert/strict';
 import {
   batchGetDocuments,
   queryIn
-} from '../functions/_lib/firestore.js';
-import { buildAdminGlobalList } from '../functions/_lib/admin-global-v6.js';
+} from '../firebase-backend/functions/_lib/firestore.js';
+import { buildAdminGlobalList } from '../firebase-backend/functions/_lib/admin-global-v6.js';
 
 const originalFetch = globalThis.fetch;
 const calls = [];
+const testEnv = { FIRESTORE_ACCESS_TOKEN: 'test-only-token' };
 let scenario = 'helpers';
 
 function firestoreDocument(name) {
@@ -94,7 +95,7 @@ try {
     collectionName: 'Estudiante',
     documentId: String(index).padStart(10, '0')
   }));
-  const documents = await batchGetDocuments('UTET', references, {});
+  const documents = await batchGetDocuments('UTET', references, testEnv);
   const batchCalls = calls.filter((call) => call.target.includes('documents:batchGet'));
 
   assert.equal(batchCalls.length, 2, '501 documentos deben resolverse en dos subpeticiones agrupadas.');
@@ -109,7 +110,7 @@ try {
     'periodoId',
     ['2026-02__2026-08', 'Febrero 2026 a Agosto 2026'],
     1000,
-    {}
+    testEnv
   );
   const queryCalls = calls.filter((call) => call.target.includes('documents:runQuery'));
 
@@ -126,7 +127,7 @@ try {
   const global = await buildAdminGlobalList({
     periodoId: '2026-02__2026-08',
     periodo: 'Febrero 2026 a Agosto 2026'
-  }, {});
+  }, testEnv);
 
   assert.equal(global.total, 300);
   assert.equal(global.faltantes.length, 299);

@@ -24,17 +24,17 @@ const coordinatorBootstrap = read('coordinadores-mvp/js/coordinador.bootstrap.in
 const coordinator = read('coordinadores-mvp/js/coordinador.app.js');
 const coordinatorApi = read('coordinadores-mvp/js/coordinador.sheets.primary.js');
 const coordinatorWrapper = read('coordinadores-mvp/js/coordinador.envios.carreras.js');
-const titlesV6 = read('functions/_lib/titulos-firebase-v6.js');
-const titlesV7 = read('functions/_lib/titulos-firebase-v7.js');
-const titlesV12 = read('functions/_lib/titulos-firebase-v12.js');
-const history = read('functions/_lib/titulos-historial.js');
-const historyApi = read('functions/api/historial-titulos.js');
-const workApi = read('functions/api/trabajo-titulacion.js');
+const titlesV6 = read('firebase-backend/functions/_lib/titulos-firebase-v6.js');
+const titlesV7 = read('firebase-backend/functions/_lib/titulos-firebase-v7.js');
+const titlesV12 = read('firebase-backend/functions/_lib/titulos-firebase-v12.js');
+const history = read('firebase-backend/functions/_lib/titulos-historial.js');
+const historyApi = read('firebase-backend/functions/api/historial-titulos.js');
+const workApi = read('firebase-backend/functions/api/trabajo-titulacion.js');
 const localBuilder = read('dev/preparar-pages-local.mjs');
-const adminGlobalV5 = read('functions/_lib/admin-global-v5.js');
-const adminGlobalV6 = read('functions/_lib/admin-global-v6.js');
-const unifiedWork = read('functions/_lib/trabajo-titulacion-unificado.js');
-const requisitos = read('functions/_lib/requisitos-firebase-fixed.js');
+const adminGlobalV5 = read('firebase-backend/functions/_lib/admin-global-v5.js');
+const adminGlobalV6 = read('firebase-backend/functions/_lib/admin-global-v6.js');
+const unifiedWork = read('firebase-backend/functions/_lib/trabajo-titulacion-unificado.js');
+const requisitos = read('firebase-backend/functions/_lib/requisitos-firebase-fixed.js');
 
 assert(
   !/listarTitulos\(\{\s*carreras:\s*['"]['"]\s*,\s*carrera:\s*['"]['"]\s*,\s*estado:\s*['"]['"]\s*,\s*periodo:\s*['"]['"]\s*\}\)/.test(admin),

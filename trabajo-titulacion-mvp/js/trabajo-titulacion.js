@@ -7,26 +7,9 @@
   function text(value){return String(value===null||value===undefined?'':value).replace(/\s+/g,' ').trim();}
   function cedula(value){var digits=String(value||'').replace(/\D/g,'');return digits.length===10?digits:'';}
   function normal(value){return text(value).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();}
-  function esGitHubPages(){var h=text(window.location&&window.location.hostname).toLowerCase();return h==='github.io'||/\.github\.io$/.test(h);}
-  function firebaseDirecto(){return window.TitulosFirebaseDirectPublic||null;}
   function apiBase(){var forced=text(window.TITULOS_API_BASE||'');var origin=text(window.location&&window.location.origin);if(forced)return forced.replace(/\/$/,'');if(['http://localhost:5500','http://127.0.0.1:5500'].indexOf(origin)>=0)return'http://127.0.0.1:8788';return origin&&origin!=='null'?origin:'';}
   function request(path,action,data){
-    var directo=firebaseDirecto();
     data=data||{};
-    if(esGitHubPages()&&directo){
-      if(action==='CONSULTAR_ESTUDIANTE_TITULACION'){
-        return directo.getStudent(data.cedula||data.numeroIdentificacion).then(function(student){
-          return{ok:true,encontrado:true,existe:true,estudiante:student,registro:student};
-        });
-      }
-      if(action==='CONSULTAR_ENVIO_TRABAJO_TITULACION'){
-        return directo.getWorkEnvio(data.cedula||data.numeroIdentificacion,data.periodoId||data.periodoLabel||data.periodo).then(function(envio){
-          return envio?{ok:true,encontrado:true,existe:true,estado:directo.state(envio),envio:envio,registro:envio}:{ok:true,encontrado:false,existe:false};
-        });
-      }
-      if(action==='ENVIO_TRABAJO_TITULACION')return directo.saveWorkEnvio(data);
-      return Promise.reject(new Error('Esta operacion no esta disponible en el modo Firebase gratuito.'));
-    }
     return fetch(apiBase()+path,{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json','X-Titulos-App':'estudiantes'},body:JSON.stringify({accion:action,metodo:'POST',datos:data||{}})}).then(function(response){
       return response.text().then(function(body){var json={};try{json=body?JSON.parse(body):{};}catch(error){throw new Error('El sistema respondió en un formato no válido.');}if(!response.ok||json.ok===false)throw new Error(json.mensaje||json.error||('Error HTTP '+response.status));return json;});
     });

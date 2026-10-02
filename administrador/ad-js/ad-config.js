@@ -28,7 +28,7 @@ Función:
     },
 
     firebaseConfig: {
-      apiKey: "AIzaSyCaHf1C0BB0X_H3BDZ1o-UDAsPmLTjsZLA",
+      apiKey: "",
       authDomain: "utet-4387a.firebaseapp.com",
       projectId: "utet-4387a",
       storageBucket: "utet-4387a.firebasestorage.app",

@@ -80,16 +80,10 @@ copyDir(path.join(root, '.pages-estudiantes', 'trabajo-titulacion'), path.join(o
 copyDir(path.join(root, '.pages-coordinadores'), path.join(output, 'coordinadores'));
 copyDir(path.join(root, '.pages-investigadores'), path.join(output, 'investigadores'));
 copyDir(path.join(root, '.pages-administrador'), path.join(output, 'administrador'));
-fs.copyFileSync(path.join(root, 'github-pages', 'firebase-direct-public.js'), path.join(output, 'firebase-direct-public.js'));
 fs.copyFileSync(path.join(root, 'github-pages', 'runtime-config.js'), path.join(output, 'runtime-config.js'));
 fs.copyFileSync(path.join(root, 'github-pages', 'firebase-auth-client.js'), path.join(output, 'firebase-auth-client.js'));
 
-// Estudiantes: en GitHub Pages la consulta y el envío público usan Firestore directamente.
-let directStudentHtml = read('estudiantes/estudiante.html');
-if (!directStudentHtml.includes('firebase-direct-public.js')) {
-  directStudentHtml = directStudentHtml.replace('</head>', '  <script src="../firebase-direct-public.js?v=github-' + buildId + '"></script>\n</head>');
-  write('estudiantes/estudiante.html', directStudentHtml);
-}
+// Estudiantes: GitHub Pages es estático; los datos pasan por Firebase Functions.
 let studentRoute = read('estudiantes/js/estudiante.trabajo-titulacion.route.js');
 studentRoute = studentRoute.replace("window.location.assign('/trabajo-titulacion/?cedula='", "window.location.assign('../trabajo-titulacion/?cedula='");
 write('estudiantes/js/estudiante.trabajo-titulacion.route.js', studentRoute);
@@ -107,16 +101,12 @@ cacheBustLocalAssets('estudiantes/estudiante.html');
 injectRuntime('estudiantes/estudiante.html');
 fs.copyFileSync(path.join(output, 'estudiantes', 'estudiante.html'), path.join(output, 'estudiantes', 'index.html'));
 
-// Trabajo de Titulación: Firestore directo + rutas relativas compatibles con project pages.
+// Trabajo de Titulación: Firebase Functions + rutas relativas compatibles con Project Pages.
 let workHtml = read('trabajo-titulacion/index.html');
 workHtml = workHtml.replaceAll('\"/estudiantes/', '\"../estudiantes/').replaceAll("'/estudiantes/", "'../estudiantes/");
 write('trabajo-titulacion/index.html', workHtml);
-let directWorkHtml = read('trabajo-titulacion/index.html');
-if (!directWorkHtml.includes('firebase-direct-public.js')) {
-  directWorkHtml = directWorkHtml.replace('</head>', '  <script src="../firebase-direct-public.js?v=github-' + buildId + '"></script>\n</head>');
-  write('trabajo-titulacion/index.html', directWorkHtml);
-}
 cacheBustLocalAssets('trabajo-titulacion/index.html');
+injectRuntime('trabajo-titulacion/index.html');
 // GitHub Pages publica toda la interfaz. Las operaciones que necesitan secretos
 // o permisos elevados pasan por Firebase Functions.
 injectRuntime('estudiantes/estudiante.html');
@@ -223,14 +213,14 @@ if (!studentBuilt.includes('estudiante.trabajo-titulacion.route.js')) {
 if (read('estudiantes/js/estudiante.trabajo-titulacion.route.js').includes("window.location.assign('/trabajo-titulacion/")) {
   throw new Error('GitHub Pages: Estudiantes conserva una ruta absoluta incompatible con Project Pages.');
 }
-if (!studentBuilt.includes('firebase-direct-public.js')) {
-  throw new Error('GitHub Pages: falta Firebase directo para Estudiantes.');
-}
 if (!studentBuilt.includes('runtime-config.js')) {
   throw new Error('GitHub Pages: Estudiantes no carga la configuración del backend Firebase.');
 }
-if (!workBuilt.includes('firebase-direct-public.js')) {
-  throw new Error('GitHub Pages: falta Firebase directo para Trabajo de Titulación.');
+if (!workBuilt.includes('runtime-config.js')) {
+  throw new Error('GitHub Pages: Trabajo de Titulación no carga la configuración del backend Firebase.');
+}
+if (studentBuilt.includes('firebase-direct-public.js') || workBuilt.includes('firebase-direct-public.js')) {
+  throw new Error('GitHub Pages: el navegador no debe acceder a Firestore directamente.');
 }
 if (!studentBuilt.includes('estudiante.app.js?v=github-' + buildId)) {
   throw new Error('GitHub Pages: Estudiantes no invalida la caché de sus scripts por despliegue.');
@@ -269,6 +259,9 @@ for (const directory of ['estudiantes', 'trabajo-titulacion', 'coordinadores', '
     if (/pages\.dev|workers\.dev/i.test(content)) {
       throw new Error('GitHub Pages: dependencia de hosting alternativo detectada en ' + relative + '.');
     }
+    if (/firestore\.googleapis\.com\/v1\/projects/i.test(content)) {
+      throw new Error('GitHub Pages: acceso REST directo a Firestore detectado en ' + relative + '.');
+    }
   }
 }
 
@@ -278,6 +271,6 @@ if (!read('runtime-config.js').includes('https://us-central1-titulos-ec2fa.cloud
 
 console.log('[GitHub Pages] Sitio preparado en .pages-github.');
 console.log('[GitHub Pages] Rutas: /estudiantes/, /trabajo-titulacion/, /coordinadores/, /investigadores/, /administrador/.');
-console.log('[GitHub Pages] Frontend: GitHub Pages. Datos públicos: Firebase directo. IA y operaciones protegidas: Firebase Functions.');
+console.log('[GitHub Pages] Frontend: GitHub Pages. Datos, IA y operaciones protegidas: Firebase Functions.');
 console.log('[GitHub Pages] Hosting alternativo: sin dependencias en el artefacto publicado.');
 console.log('[GitHub Pages] Smoke checks de las cinco páginas: OK.');

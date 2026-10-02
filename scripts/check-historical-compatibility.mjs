@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
-import { coincidePeriodoTrabajo, esTrabajoTitulacion } from '../functions/_lib/trabajo-titulacion-unificado.js';
+import { coincidePeriodoTrabajo, esTrabajoTitulacion } from '../firebase-backend/functions/_lib/trabajo-titulacion-unificado.js';
 
 const root = process.cwd();
 const errors = [];
@@ -114,7 +114,7 @@ assert(
   'Jessica, un artículo histórico con devolución, está siendo convertida en Trabajo de Titulación.'
 );
 
-const historyBackend = read('functions/_lib/titulos-historial.js');
+const historyBackend = read('firebase-backend/functions/_lib/titulos-historial.js');
 assert(
   /coordinador:\s*coordinator/.test(historyBackend),
   'El historial conserva el ReferenceError coordinador is not defined.'
@@ -128,7 +128,7 @@ assert(
   'El historial no usa la compatibilidad de períodos históricos.'
 );
 
-const historyEndpoint = read('functions/api/historial-titulos.js');
+const historyEndpoint = read('firebase-backend/functions/api/historial-titulos.js');
 assert(
   /historialDisponible:\s*false/.test(historyEndpoint),
   'El historial informativo vuelve a responder con error fatal en lugar de degradarse.'
@@ -144,7 +144,7 @@ assert(
   'El MutationObserver puede volver a disparar reintentos infinitos después de un error.'
 );
 
-const titlesApi = read('functions/api/titulos.js');
+const titlesApi = read('firebase-backend/functions/api/titulos.js');
 assert(
   !/if\s*\(action\s*===\s*['"]ENVIO_ESTUDIANTE['"]\)\s*\{\s*const previous = await lookupEnvio/.test(titlesApi),
   'El proxy de Títulos vuelve a hacer una consulta previa obligatoria antes de escribir.'
@@ -156,7 +156,7 @@ assert(
   'El frontend vuelve a bloquear el envío cuando la consulta previa falla.'
 );
 
-const titlesV8 = read('functions/_lib/titulos-firebase-v8.js');
+const titlesV8 = read('firebase-backend/functions/_lib/titulos-firebase-v8.js');
 assert(
   /normalized === 'ENVIO_ESTUDIANTE'/.test(titlesV8) && /saveCompatibleStudentSubmission/.test(titlesV8),
   'El reenvío de Artículo Académico no usa la ruta compatible.'
@@ -170,7 +170,7 @@ assert(
   'Los nuevos artículos no quedan tipificados explícitamente.'
 );
 
-const workEndpoint = read('functions/api/trabajo-titulacion.js');
+const workEndpoint = read('firebase-backend/functions/api/trabajo-titulacion.js');
 assert(
   /reutilizoEnvioHistorico/.test(workEndpoint),
   'Trabajo de Titulación no conserva explícitamente el registro histórico al reenviar.'

@@ -48,7 +48,10 @@
   }
 
   function extraerCampo(bloque,nombre,respaldo){
-    var patron=new RegExp('^- '+nombre+':\\s*(.+)$','mi');
+    // El prompt histórico usa "- Campo: valor" y el flujo robusto de
+    // producción usa "Campo: valor". El motor interno debe entender ambos.
+    var nombreSeguro=String(nombre||'').replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    var patron=new RegExp('^\\s*(?:-\\s*)?'+nombreSeguro+':\\s*(.+)$','mi');
     var match=String(bloque||'').match(patron);
     var valor=texto(match&&match[1]);
     if(!valor||/^no especificado$/i.test(valor))return respaldo;
