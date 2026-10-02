@@ -43,6 +43,15 @@ function injectApiBase(relativePath, apiBase) {
     write(relativePath, html);
   }
 }
+function injectStudentIaProxy(relativePath, proxyUrl) {
+  let html = read(relativePath);
+  const marker = 'window.ESTUDIANTE_IA_PROXY_URL=' + JSON.stringify(proxyUrl);
+  if (!html.includes(marker)) {
+    if (!html.includes('</head>')) throw new Error('No se encontró </head> en ' + relativePath);
+    html = html.replace('</head>', '  <script>' + marker + ';</script>\n</head>');
+    write(relativePath, html);
+  }
+}
 function cacheBustLocalAssets(relativePath) {
   let html = read(relativePath);
   html = html.replace(
@@ -136,6 +145,11 @@ if (!directWorkHtml.includes('firebase-direct-public.js')) {
 cacheBustLocalAssets('trabajo-titulacion/index.html');
 removePublicCloudflareFallbacks('estudiantes');
 removePublicCloudflareFallbacks('trabajo-titulacion');
+// GitHub Pages no puede servir /api/ia porque es hosting estático. La IA usa
+// exclusivamente el proxy seguro, sin cambiar el acceso directo a Firebase que
+// usan Estudiantes y Trabajo de Titulación para sus datos académicos.
+injectStudentIaProxy('estudiantes/estudiante.html', 'https://titulos.pages.dev/api/ia');
+fs.copyFileSync(path.join(output, 'estudiantes', 'estudiante.html'), path.join(output, 'estudiantes', 'index.html'));
 
 // Coordinadores conserva temporalmente su backend existente mientras se migra
 // la escritura privilegiada a reglas de Firestore compatibles con Spark.
@@ -248,6 +262,9 @@ if (read('estudiantes/js/estudiante.trabajo-titulacion.route.js').includes("wind
 if (!studentBuilt.includes('firebase-direct-public.js')) {
   throw new Error('GitHub Pages: falta Firebase directo para Estudiantes.');
 }
+if (!studentBuilt.includes('window.ESTUDIANTE_IA_PROXY_URL="https://titulos.pages.dev/api/ia"')) {
+  throw new Error('GitHub Pages: falta el proxy seguro de IA para Estudiantes.');
+}
 if (!workBuilt.includes('firebase-direct-public.js')) {
   throw new Error('GitHub Pages: falta Firebase directo para Trabajo de Titulación.');
 }
@@ -285,7 +302,10 @@ for (const directory of ['estudiantes', 'trabajo-titulacion']) {
     }
     if (!/\.(?:html|js|css|md|json|txt)$/i.test(relative)) continue;
     const content = read(relative);
-    if (/pages\.dev|workers\.dev|cloudfunctions\.net/i.test(content)) {
+    const checkedContent = directory === 'estudiantes'
+      ? content.replaceAll('https://titulos.pages.dev/api/ia', '')
+      : content;
+    if (/pages\.dev|workers\.dev|cloudfunctions\.net/i.test(checkedContent)) {
       throw new Error('GitHub Pages: dependencia de backend externo detectada en ' + relative + '.');
     }
   }
