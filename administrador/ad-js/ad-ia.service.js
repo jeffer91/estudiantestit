@@ -1,4 +1,4 @@
-/* Proveedores IA administrados mediante la función segura de Cloudflare. */
+/* Proveedores IA administrados mediante el backend seguro de Firebase. */
 (function(window){
   'use strict';
   var CATALOGO=[
@@ -7,7 +7,6 @@
     {id:'mistral',nombre:'Mistral AI',tipo:'openai-compatible',prioridad:3,endpoint:'https://api.mistral.ai/v1/chat/completions',modelo:'mistral-small-latest'},
     {id:'gemini',nombre:'Gemini',tipo:'gemini',prioridad:4,modelo:'gemini-3.5-flash'},
     {id:'cohere',nombre:'Cohere',tipo:'openai-compatible',prioridad:5,endpoint:'https://api.cohere.ai/compatibility/v1/chat/completions',modelo:'command-a-plus-05-2026'},
-    {id:'cloudflare',nombre:'Cloudflare Workers AI',tipo:'openai-compatible',prioridad:6,modelo:'@cf/meta/llama-3.2-3b-instruct'},
     {id:'scaleway',nombre:'Scaleway Generative APIs',tipo:'openai-compatible',prioridad:7,endpoint:'https://api.scaleway.ai/v1/chat/completions',modelo:'gpt-oss-120b'},
     {id:'openrouter',nombre:'OpenRouter',tipo:'openai-compatible',prioridad:8,endpoint:'https://openrouter.ai/api/v1/chat/completions',modelo:'openrouter/free'},
     {id:'nvidia',nombre:'NVIDIA NIM',tipo:'openai-compatible',prioridad:9,endpoint:'https://integrate.api.nvidia.com/v1/chat/completions',modelo:'meta/llama-3.3-70b-instruct'},
