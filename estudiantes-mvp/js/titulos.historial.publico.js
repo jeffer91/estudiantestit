@@ -19,7 +19,7 @@
     var host=text(window.location&&window.location.hostname).toLowerCase();
     if(forced)return forced.replace(/\/$/,'');
     if(['localhost','127.0.0.1','0.0.0.0','::1','[::1]'].indexOf(host)>=0)return'http://127.0.0.1:8788';
-    return origin&&origin!=='null'?origin.replace(/\/$/,''):'https://titulos.pages.dev';
+    return texto(window.TITULOS_API_BASE||'').replace(/\/$/,'')||(origin&&origin!=='null'?origin.replace(/\/$/,''):'');
   }
   function dateLabel(value){
     var raw=text(value),date;

@@ -52,11 +52,11 @@
     var origin;
     if (forced) return forced.replace(/\/$/, '');
     if (esLocal()) return 'http://127.0.0.1:8788';
-    if (esArchivo()) return 'https://titulos.pages.dev';
+    if (esArchivo()) return texto(window.TITULOS_API_BASE || '').replace(/\/$/, '');
     origin = texto(window.location && window.location.origin);
     return origin && origin !== 'null'
       ? origin.replace(/\/$/, '')
-      : 'https://titulos.pages.dev';
+      : texto(window.TITULOS_API_BASE || '').replace(/\/$/, '');
   }
   function proxyUrl() { return apiBase() + '/api/titulos'; }
   function enviarProxy(action, data, method) {

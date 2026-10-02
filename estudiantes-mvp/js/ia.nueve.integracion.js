@@ -210,6 +210,7 @@
     var opciones = resultado && Array.isArray(resultado.opcionesFinales) ? resultado.opcionesFinales : [];
     var cantidad;
     var mensaje;
+    var aprendizaje = window.EstudianteMVPIAAprendizaje || null;
 
     opciones = opciones.filter(function (item) {
       return item && String(item.titulo || '').trim();
@@ -230,6 +231,7 @@
 
     ui.mostrarEstado('#p' + numeroPropuesta + 'EstadoIA', mensaje, 'success');
     guardarAvance(numeroPropuesta);
+    if (aprendizaje && typeof aprendizaje.registrarGeneracion === 'function') aprendizaje.registrarGeneracion({numeroPropuesta:numeroPropuesta,estudiante:state.obtenerEstudiante(),opciones:opciones});
 
     if (recomendacion && typeof recomendacion.cerrarProgreso === 'function') recomendacion.cerrarProgreso();
     if (recomendacion && typeof recomendacion.mostrarResultado === 'function') {

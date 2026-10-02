@@ -496,6 +496,8 @@
     var graves = [];
     var menores = [];
     var relevancia = 0;
+    var linguistica = window.EstudianteMVPIALinguistica;
+    var evaluacionLinguistica;
 
     relevancia += coincidencia(titulo, p.temaGeneral, 24);
     relevancia += coincidencia(titulo, p.problemaNecesidad, 20);
@@ -526,6 +528,13 @@
     if (relevancia < 7) {
       menores.push('Debe relacionarse con mayor claridad con los datos ingresados.');
       puntaje -= 10;
+    }
+
+    if (linguistica && typeof linguistica.evaluar === 'function') {
+      evaluacionLinguistica = linguistica.evaluar(titulo, { etapa: etapa.codigo });
+      puntaje += Number(evaluacionLinguistica.puntajeAjuste || 0);
+      (evaluacionLinguistica.erroresGraves || []).forEach(function (mensaje) { if (graves.indexOf(mensaje) < 0) graves.push(mensaje); });
+      (evaluacionLinguistica.erroresMenores || []).forEach(function (mensaje) { if (menores.indexOf(mensaje) < 0) menores.push(mensaje); });
     }
 
     return { puntaje: puntaje, graves: graves, menores: menores };

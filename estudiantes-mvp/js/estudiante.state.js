@@ -268,6 +268,8 @@
     propuesta.etapaIA = 'sugerencia_aplicada';
     propuesta.tituloDefinidoConfirmado = false;
 
+    try { document.dispatchEvent(new CustomEvent('ia-titulacion:sugerencia-seleccionada',{detail:{numeroPropuesta:Number(numeroPropuesta||0),numeroSugerencia:numeroSugerencia,titulo:propuesta.tituloFinal}})); } catch (_error) {}
+
     return clonar(propuesta);
   }
 

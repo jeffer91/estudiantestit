@@ -172,9 +172,12 @@
   window.EstudianteMVPIAProviders=Object.freeze({generarTexto:generarTexto,normalizarProveedorRuntime:normalizarMotor,proxyUrl:proxyUrl});
 
   asegurarBase();
+  cargar('js/ia.biblioteca.academica.js?v=1.0.0');
+  cargar('js/ia.linguistica.service.js?v=1.0.0');
+  cargar('js/ia.aprendizaje.service.js?v=1.0.0');
   cargar('js/ia.diagnostico.service.js?v=4.1.0');
   cargar('js/ia.indicadores.motores.patch.js?v=2.0.0');
-  cargar('js/ia.nueve.core.js?v=2.0.0');
+  cargar('js/ia.nueve.core.js?v=2.1.0');
   cargar('js/ia.nueve.sanitizador.js?v=1.1.0');
   cargar('js/ia.nueve.ajustes.js?v=1.1.0');
   cargar('js/ia.titulacion.robusto.service.js?v=6.0.0');

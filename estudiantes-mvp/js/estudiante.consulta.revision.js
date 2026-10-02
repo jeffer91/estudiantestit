@@ -87,8 +87,8 @@
     if (['localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]'].indexOf(host) >= 0) {
       return 'http://127.0.0.1:8788';
     }
-    if (protocolo === 'file:') return 'https://titulos.pages.dev';
-    return origen && origen !== 'null' ? origen.replace(/\/$/, '') : 'https://titulos.pages.dev';
+    if (protocolo === 'file:') return texto(window.TITULOS_API_BASE || '').replace(/\/$/, '');
+    return texto(window.TITULOS_API_BASE || '').replace(/\/$/, '') || (origen && origen !== 'null' ? origen.replace(/\/$/, '') : '');
   }
 
   var FIREBASE_UTET_PUBLICO = Object.freeze({
