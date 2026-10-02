@@ -61,7 +61,7 @@ export function corsHeaders(request) {
   const origin = requestOrigin(request);
   const headers = {
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Titulos-App',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Titulos-App, X-Admin-Session',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin'
   };

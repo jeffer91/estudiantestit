@@ -39,6 +39,10 @@ const INVESTIGADORES = Object.freeze([
   { cedula: '0401135306', nombre: 'Jefferson Villarreal' }
 ]);
 
+/* La cédula autorizada no es una credencial. El permiso administrativo solo
+   se concede después de verificar el PIN y una sesión aleatoria en Firestore. */
+const ADMIN_CEDULAS = new Set(['0401135306']);
+
 const LOCK_MS = 2 * 60 * 1000;
 const SESSION_MS = 8 * 60 * 60 * 1000;
 const LOGIN_MAX_ATTEMPTS = 5;
@@ -250,6 +254,22 @@ async function validarSesion(token, env) {
   const investigador = await investigadorActivo(sesion.cedula, env);
   if (!investigador) throw new Error('El investigador está inactivo.');
   return investigador;
+}
+
+export async function adminSessionContext(token, env) {
+  const investigador = await validarSesion(token, env);
+  if (!ADMIN_CEDULAS.has(cedula(investigador.cedula))) {
+    throw new Error('La sesión no tiene permisos de Administración.');
+  }
+  return {
+    uid: 'admin:' + investigador.cedula,
+    email: '',
+    nombre: text(investigador.nombre) || 'Administrador',
+    coordinadorId: '',
+    carreras: [],
+    role: 'admin',
+    cedula: investigador.cedula
+  };
 }
 
 async function consultarAcceso(payload, env) {

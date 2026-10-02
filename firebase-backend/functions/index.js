@@ -61,7 +61,7 @@ function cors(req, extra = {}) {
   return {
     ...(origin && ALLOWED_ORIGINS.has(origin) ? { 'Access-Control-Allow-Origin': origin } : {}),
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Titulos-App',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Titulos-App, X-Admin-Session',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin',
     ...extra
@@ -82,6 +82,11 @@ function runtimeEnv() {
 }
 
 async function authContext(req) {
+  const adminSession = text(req.headers['x-admin-session']);
+  if (adminSession) {
+    const user = await investigadores.adminSessionContext(adminSession, runtimeEnv());
+    return { role: 'admin', authenticated: true, user };
+  }
   const raw = text(req.headers.authorization);
   if (!raw) return { role: 'student', authenticated: false, user: null };
   const match = raw.match(/^Bearer\s+(.+)$/i);

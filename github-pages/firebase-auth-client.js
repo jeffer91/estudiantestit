@@ -19,15 +19,12 @@
   var gateResolve;
   var gate=new Promise(function(resolve){gateResolve=resolve;});
   var currentUser=null;
+  var adminSession='';
   var currentRole='';
   var ready=false;
   var authReady=Promise.resolve();
 
   function text(value){return String(value===null||value===undefined?'':value).trim();}
-  function adminEmail(cedula){
-    var normalized=text(cedula).replace(/\D/g,'');
-    return /^\d{10}$/.test(normalized)?normalized+'@admin.titulos.invalid':'';
-  }
   function allowed(role){return required==='admin'?role==='admin':(role==='coordinator'||role==='admin');}
   function apiUrl(input){
     try{
@@ -42,6 +39,10 @@
     return gate.then(function(){
       init=Object.assign({},init||{});
       var headers=new Headers(init.headers||(input instanceof Request?input.headers:undefined)||{});
+      if(required==='admin'&&adminSession){
+        headers.set('X-Admin-Session',adminSession);
+        return nativeFetch(input,Object.assign({},init,{headers:headers}));
+      }
       if(!currentUser)return nativeFetch(input,Object.assign({},init,{headers:headers}));
       return currentUser.getIdToken().then(function(token){
         headers.set('Authorization','Bearer '+token);
@@ -79,20 +80,24 @@
       var email='';
       var password='';
       if(required==='admin'){
-        email=adminEmail(document.getElementById('titulos-auth-cedula').value);
+        var cedula=text(document.getElementById('titulos-auth-cedula').value).replace(/\D/g,'');
         password=document.getElementById('titulos-auth-pin').value;
-        if(!email){setMessage('Ingresa un usuario válido de 10 dígitos.');return;}
+        if(!/^\d{10}$/.test(cedula)){setMessage('Ingresa un usuario válido de 10 dígitos.');return;}
         if(!/^\d{4,8}$/.test(password)){setMessage('Ingresa una contraseña válida.');return;}
       }else{
         email=text(document.getElementById('titulos-auth-email').value);
         password=document.getElementById('titulos-auth-password').value;
       }
       setMessage('Verificando acceso...');
-      authReady.then(function(){
-        return window.firebase.auth().signInWithEmailAndPassword(email,password);
-      }).catch(function(error){
-        setMessage(loginErrorMessage(error));
-      });
+      if(required==='admin'){
+        loginAdmin(cedula,password).catch(function(error){setMessage(loginErrorMessage(error));});
+      }else{
+        authReady.then(function(){
+          return window.firebase.auth().signInWithEmailAndPassword(email,password);
+        }).catch(function(error){
+          setMessage(loginErrorMessage(error));
+        });
+      }
     });
     return root;
   }
@@ -107,6 +112,9 @@
     var message=text(error&&error.message).toUpperCase();
     if(code.indexOf('configuration-not-found')>=0||message.indexOf('CONFIGURATION_NOT_FOUND')>=0){
       return 'Firebase Authentication aún no está habilitado en el proyecto Títulos.';
+    }
+    if(required==='admin'&&(message.indexOf('HTTP 404')>=0||message.indexOf('NOT FOUND')>=0)){
+      return 'El backend de Firebase aún no está desplegado. El acceso administrador ya no depende de Firebase Authentication.';
     }
     if(required==='admin')return 'Usuario o contraseña incorrectos.';
     return error&&error.message?error.message:'No se pudo iniciar sesión.';
@@ -127,10 +135,57 @@
       button.type='button';
       button.textContent='Cerrar sesión';
       button.addEventListener('click',function(){
+        if(required==='admin'){
+          var token=adminSession;
+          adminSession='';
+          currentRole='';
+          var request=token?nativeFetch(apiBase+'/api/investigadores',{
+            method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({action:'LOGOUT',accion:'LOGOUT',datos:{sesion:token}})
+          }):Promise.resolve();
+          Promise.resolve(request).catch(function(){}).then(function(){window.location.reload();});
+          return;
+        }
         window.firebase.auth().signOut().then(function(){window.location.reload();});
       });
       document.body.appendChild(button);
     }
+  }
+
+  function readJsonResponse(response,label){
+    return response.text().then(function(body){
+      var data={};
+      try{data=body?JSON.parse(body):{};}catch(_error){throw new Error((label||'El servicio')+' respondió en un formato no válido.');}
+      if(!response.ok||data.ok===false)throw new Error(data.mensaje||data.message||('HTTP '+response.status));
+      return data;
+    });
+  }
+
+  function verifyAdminSession(token){
+    return nativeFetch(apiBase+'/api/session',{
+      method:'GET',cache:'no-store',headers:{'X-Admin-Session':token}
+    }).then(function(response){return readJsonResponse(response,'La sesión');}).then(function(data){
+      var role=text(data.role||data.usuario&&data.usuario.role).toLowerCase();
+      if(role!=='admin')throw new Error('La sesión no tiene permisos de Administración.');
+      adminSession=token;
+      currentRole='admin';
+      hideLogin();
+      if(!ready){ready=true;gateResolve();}
+      window.TITULOS_AUTH={user:data.usuario||{},role:'admin'};
+      return data;
+    });
+  }
+
+  function loginAdmin(cedula,password){
+    if(!apiBase)return Promise.reject(new Error('El backend de Firebase no está configurado.'));
+    return nativeFetch(apiBase+'/api/investigadores',{
+      method:'POST',cache:'no-store',headers:{'Content-Type':'application/json','X-Titulos-App':'administrador'},
+      body:JSON.stringify({action:'LOGIN',accion:'LOGIN',datos:{cedula:cedula,pin:password}})
+    }).then(function(response){return readJsonResponse(response,'El acceso');}).then(function(data){
+      var token=text(data.sesion);
+      if(!token)throw new Error('El servidor no devolvió una sesión válida.');
+      return verifyAdminSession(token);
+    });
   }
 
   function verify(user){
@@ -156,6 +211,10 @@
 
   function init(){
     ensureUi();
+    if(required==='admin'){
+      showLogin('');
+      return;
+    }
     var config=window.TITULOS_FIREBASE_CONFIG||{};
     if(!window.firebase||!window.firebase.initializeApp){
       showLogin('No se pudo cargar Firebase Authentication.');

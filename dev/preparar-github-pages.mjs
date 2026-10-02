@@ -63,8 +63,10 @@ function injectRuntime(relativePath, options = {}) {
     scripts.push('  <script src="' + runtimeSrc + '"></script>');
   }
   if (options.auth === true && !html.includes('firebase-auth-client.js')) {
-    scripts.push('  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>');
-    scripts.push('  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>');
+    if (options.firebaseSdk !== false) {
+      scripts.push('  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>');
+      scripts.push('  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>');
+    }
     scripts.push('  <script src="' + authSrc + '"></script>');
   }
   if (!scripts.length) return;
@@ -121,7 +123,7 @@ adminHtml = adminHtml
   .replace(/<script>\s*window\.TITULOS_API_BASE=[\s\S]*?<\/script>\s*/gi, '')
   .replace(/([?&]r=)[^"'&\\s]+/g, '$1github-pages-' + buildId);
 write('administrador/ad-index.html', adminHtml);
-injectRuntime('administrador/ad-index.html', { auth: true });
+injectRuntime('administrador/ad-index.html', { auth: true, firebaseSdk: false });
 fs.copyFileSync(
   path.join(output, 'administrador', 'ad-index.html'),
   path.join(output, 'administrador', 'index.html')
@@ -231,11 +233,17 @@ if (!workBuilt.includes('trabajo-titulacion.js?v=github-' + buildId)) {
 if (!coordinatorBuilt.includes('runtime-config.js') || !coordinatorBuilt.includes('firebase-auth-client.js')) {
   throw new Error('GitHub Pages: Coordinadores no carga Firebase Functions y Authentication.');
 }
+if (!coordinatorBuilt.includes('firebase-auth-compat.js')) {
+  throw new Error('GitHub Pages: Coordinadores necesita el SDK de Firebase Authentication.');
+}
 if (!read('investigadores/index.html').includes('runtime-config.js')) {
   throw new Error('GitHub Pages: Investigación no carga la configuración del backend Firebase.');
 }
 if (!adminBuilt.includes('runtime-config.js') || !adminBuilt.includes('firebase-auth-client.js')) {
-  throw new Error('GitHub Pages: Administrador no carga Firebase Functions y Authentication.');
+  throw new Error('GitHub Pages: Administrador no carga su sesión protegida de Firebase Functions.');
+}
+if (adminBuilt.includes('firebase-auth-compat.js')) {
+  throw new Error('GitHub Pages: Administrador no debe depender del SDK de Firebase Authentication.');
 }
 if (!read('coordinadores/404.html').includes(projectBase + '/coordinadores/')) {
   throw new Error('GitHub Pages: 404 de Coordinadores fuera del Project Page.');
