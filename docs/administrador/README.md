@@ -8,14 +8,12 @@ La aplicación del administrador se mantiene en una sola carpeta independiente:
 administrador/
 ├── index.html
 ├── ad-index.html
-├── _redirects
 ├── ad-css/
 └── ad-js/
 ```
 
-- `index.html`: entrada pública del proyecto Cloudflare Pages.
+- `index.html`: entrada pública del Administrador en GitHub Pages.
 - `ad-index.html`: panel completo del administrador.
-- `_redirects`: redirige las antiguas páginas de prueba al panel principal.
 - `ad-css/`: estilos del administrador.
 - `ad-js/`: servicios y controladores del administrador.
 
@@ -26,13 +24,13 @@ Las páginas antiguas `ad-index-b6.html`, `ad-index-b7.html`, `ad-index-b8.html`
 El proyecto se publica en:
 
 ```text
-https://titulos-administrador.pages.dev/
+https://jeffer91.github.io/estudiantestit/administrador/
 ```
 
 Desde la raíz del repositorio:
 
 ```powershell
-.\publicar-cloudflare.ps1 -Aplicacion administrador
+npm run build:github-pages
 ```
 
-El script valida `administrador/index.html`, `administrador/ad-index.html` y el CSS principal antes de desplegar.
+El script construye y valida la salida completa antes de que el workflow publique GitHub Pages desde `main`.
