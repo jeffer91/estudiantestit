@@ -4,7 +4,7 @@
   function texto(v){return String(v===null||v===undefined?'':v).trim();}
   function numero(v,f){var n=Number(v);return Number.isFinite(n)?n:Number(f||0);}
   function esLocal(){var h=texto(window.location&&window.location.hostname).toLowerCase();return ['localhost','127.0.0.1','0.0.0.0','::1','[::1]'].indexOf(h)>=0;}
-  function apiBase(){var f=texto(window.TITULOS_API_BASE||'');if(f)return f.replace(/\/$/,'');if(esLocal())return 'http://127.0.0.1:8787';return 'https://titulos.pages.dev';}
+  function apiBase(){var f=texto(window.TITULOS_API_BASE||'');if(f)return f.replace(/\/$/,'');if(esLocal())return 'http://127.0.0.1:8787';return '';}
   function proxyUrl(){return apiBase()+'/api/sheets';}
   function mensajeError(v){if(v&&v.message)return v.message;if(typeof v==='string')return v;return 'Error de Google Sheets.';}
   function solicitar(accion,payload,metodo){return fetch(proxyUrl(),{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json','X-Titulos-App':'administrador'},body:JSON.stringify({accion:accion,metodo:metodo||'POST',datos:payload||{}})}).then(function(resp){return resp.text().then(function(body){var json={};try{json=body?JSON.parse(body):{};}catch(e){throw new Error('El servicio de Google Sheets respondió en un formato no válido.');}if(!resp.ok||json.ok===false)throw new Error(json.mensaje||json.message||json.error||('Error HTTP '+resp.status));return json;});});}

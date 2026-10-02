@@ -8,7 +8,7 @@
       if(intentos<120)window.setTimeout(instalar,100);
       return;
     }
-    window.AD_IA_PROXY_URL='https://titulos.pages.dev/api/ia';
+    window.AD_IA_PROXY_URL=String(window.TITULOS_API_BASE||'').replace(/\/$/,'')+'/api/ia';
     window.ADIAService.__proxyProduccionInstalado=true;
   }
   instalar();

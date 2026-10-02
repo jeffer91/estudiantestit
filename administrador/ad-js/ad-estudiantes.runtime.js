@@ -11,7 +11,7 @@ Función:
 (function(window,document){
   "use strict";
 
-  var URL_ESTUDIANTES = "https://titulos.pages.dev/estudiantes/estudiante";
+  var URL_ESTUDIANTES = "https://jeffer91.github.io/estudiantestit/estudiantes/";
   var periodos = [];
   var estudiantesTodos = [];
   var estudiantesFiltrados = [];

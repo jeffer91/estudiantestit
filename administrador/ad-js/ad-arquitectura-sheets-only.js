@@ -40,7 +40,7 @@
     return Object.assign({},original,{listarTitulosBasico:titulos,detectarCarrerasDesdeTitulos:carreras});
   });
   interceptar('ADIAService',function(original){
-    function api(action,payload){return fetch((window.TITULOS_API_BASE||'https://titulos.pages.dev')+'/api/ia',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({action:action},payload||{}))}).then(function(r){return r.json().then(function(j){if(!r.ok||j.ok===false)throw new Error(j.error||j.mensaje||'Error IA');return j;});});}
+    function api(action,payload){return fetch(String(window.TITULOS_API_BASE||'').replace(/\/$/,'')+'/api/ia',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({action:action},payload||{}))}).then(function(r){return r.json().then(function(j){if(!r.ok||j.ok===false)throw new Error(j.error||j.mensaje||'Error IA');return j;});});}
     return Object.assign({},original,{listar:function(){return api('admin-list',{}).then(function(r){return r.proveedores||[];});},leer:function(id){return api('admin-read',{providerId:id}).then(function(r){return r.proveedor||null;});},guardar:function(d){return api('admin-save',{provider:d}).then(function(r){return{ok:true,proveedor:r.proveedor};});},cambiarEstado:function(id,a){return api('admin-toggle',{providerId:id,activo:a});},sembrarCatalogo:function(){return api('admin-seed',{});},probar:function(id){return api('admin-test',{providerId:id,prompt:'Responde únicamente JSON válido. Genera exactamente tres títulos académicos sobre mejora del aprendizaje mediante tecnología.'}).then(function(r){return{ok:true,proveedor:id,nombre:id,latenciaMs:r.latencyMs,texto:r.text};});}});
   });
   window.ADArquitecturaSheetsOnly=Object.freeze({version:'2.0.0'});
