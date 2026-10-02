@@ -5,6 +5,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { createHash } from 'node:crypto';
 
 import * as accesoEstudiante from './api/acceso-estudiante.js';
+import * as aprendizaje from './api/aprendizaje.js';
 import * as adminFlujo from './api/admin-flujo.js';
 import * as adminTrabajo from './api/admin-trabajo-titulacion.js';
 import * as claves from './api/claves.js';
@@ -21,6 +22,7 @@ if (!getApps().length) initializeApp();
 
 const ROUTES = new Map([
   ['acceso-estudiante', accesoEstudiante],
+  ['aprendizaje', aprendizaje],
   ['admin-flujo', adminFlujo],
   ['admin-trabajo-titulacion', adminTrabajo],
   ['claves', claves],
