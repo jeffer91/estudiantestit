@@ -23,6 +23,7 @@ import {
   rejectUnknownOrigin,
   role
 } from '../_lib/http.js';
+import { recordFeedback } from '../_lib/neon-learning.js';
 
 const INVESTIGADORES = Object.freeze([
   { cedula: '1723704191', nombre: 'Carla Thalia Rivera Ávalos' },
@@ -627,6 +628,10 @@ async function resolver(payload, actual, env) {
       updateTime: lock._updateTime
     }
   ], env);
+
+  if (estado === 'APROBADO_FINAL' && despues) {
+    try { await recordFeedback({titulo:despues,outcome:accion==='CORREGIR_APROBAR'?'final_corrected':'final_approved',carrera:carreraEnvio(envio),source:'investigacion'}); } catch (_error) {}
+  }
 
   return {
     ok: true,

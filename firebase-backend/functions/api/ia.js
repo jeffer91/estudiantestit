@@ -1,5 +1,6 @@
 import { generateAi, listAiProviders, saveAiProvider, toggleAiProvider } from '../_lib/claves.js';
 import { corsHeaders, jsonReply, originAllowed, requestOrigin, role, text } from '../_lib/http.js';
+import { learningHints, learningProfile } from '../_lib/neon-learning.js';
 
 const PROVIDERS_CACHE_MS = 30000;
 let providersCache = [];
@@ -242,8 +243,9 @@ async function generatePublic(env, data) {
 
   const index = motorIndex(data, providers.length);
   const provider = providers[index];
-  const prompt = text(data.prompt);
+  let prompt = text(data.prompt);
   if (!prompt) throw new Error('No se recibió el contenido de la solicitud.');
+  try { const m=prompt.match(/Relaciona los títulos con la carrera:\s*([^\n.]+)/i);const profile=await learningProfile(m?text(m[1]):'');const hints=learningHints(profile);if(hints)prompt+='\n\n'+hints; } catch (_error) {}
 
   try {
     const result = await generateAi(

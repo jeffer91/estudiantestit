@@ -1,5 +1,6 @@
 import { commitDocuments, getDocument, nowIso } from '../_lib/firestore-fixed.js';
 import { corsHeaders, jsonReply, normalizeAction, readJson, rejectUnknownOrigin, role, text } from '../_lib/http.js';
+import { recordFeedback } from '../_lib/neon-learning.js';
 
 const ACTIONS = new Set([
   'PING',
@@ -150,6 +151,7 @@ async function returnToCoordinator(payload, env) {
   ];
   await appendLockRelease(operations, envioId, fecha, env);
   await commitDocuments('TITULOS', operations, env);
+  try { await recordFeedback({titulo:selected.title,outcome:'final_approved',carrera:text(envio.carrera||envio.nombreCarrera||envio.NombreCarrera),source:'administracion'}); } catch (_error) {}
   return {
     ok: true,
     estado: 'PENDIENTE_COORDINADOR',
